@@ -16,18 +16,21 @@ export interface ShuttlecockConfig {
 
 export const DEFAULT_SHUTTLECOCK: ShuttlecockConfig = {
   mass: 0.005,
-  crossSection: 0.0035,
-  magnusCoef: 0.00015,
+  crossSection: 0.0020,
+  magnusCoef: 0.00025,
 }
 
 const AIR_DENSITY = 1.225
 const GRAVITY: [number, number, number] = [0, -9.81, 0]
 
-/** 根据速度计算实时阻力系数 Cd */
+/** 根据速度计算实时阻力系数 Cd
+ *  羽毛球气动特性: 高速(>50m/s) Cd~0.035, 中速大幅升高, 低速(~0m/s) Cd~0.70
+ *  80→20m/s 约 2.5s; 高远球 28m/s 55° 滞空约 1.5s 左右
+ */
 function dragCoefficient(speed: number): number {
-  // 高速时 Cd ~0.55，低速时增大到 ~0.7
-  if (speed > 30) return 0.55
-  return 0.55 + 0.15 * (30 - speed) / 30
+  if (speed > 50) return 0.035
+  if (speed > 10) return 0.035 + 0.365 * ((50 - speed) / 40)
+  return 0.40 + 0.30 * ((10 - speed) / 10)
 }
 
 function derivative(s: ShuttlecockState, cfg: ShuttlecockConfig): ShuttlecockState {

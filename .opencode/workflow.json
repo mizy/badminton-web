@@ -1,0 +1,109 @@
+{
+  "name": "羽毛球游戏 Phase 1 — 球物理 + 基础场景可交互",
+  "description": "完成 badminton-web Phase 1: 球物理已验证基础上,新增测试、拆分渲染管线、固定游戏相机、键盘交互发球、调参使轨迹像真实羽毛球",
+  "templateId": "feature_delivery",
+  "templateRefs": ["feature_delivery"],
+  "templateReason": "标准功能开发流程:先由架构师确定技术方案与实现边界,再分步实现、审查质量、回归验证",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start"
+    },
+    {
+      "id": "architect_plan",
+      "type": "task",
+      "name": "技术方案与边界确认",
+      "task": {
+        "agent": "Architect",
+        "prompt": "基于需求制定技术方案计划:\n\n范围: ~/projects/badminton-web/\n\n任务:\n1. 审阅 src/physics/shuttlecock.ts 现有气动积分实现,确认接口与行为\n2. 设计 shuttlecock.test.ts 测试方案(自由落体 vs 理论值、杀球~80→20m/s衰减、高远球~55°滞空~1.3s)\n3. 设计 racket.test.ts 测试方案(正面碰撞、切向摩擦)\n4. 设计从 main.ts 拆分 render/court.ts 和 render/shuttlecockMesh.ts 的接口\n5. 设计固定游戏相机(后上方45°俯视球场,追踪球或玩家-AI中间点)\n6. 设计键盘事件(空格=发球/重置)与 Game Loop 集成方案\n7. 明确调参策略:Cd曲线和Magnus系数使轨迹像羽毛球\n\n关键约束:\n- pure logic 模块(physics/)不得依赖 Three.js\n- 每次修改必须 pnpm typecheck 通过\n- vitest 单元测试,跑 pnpm test 全绿\n\n输出:各模块的接口定义、实施步骤(从安全到高风险)、风险点和验证方式"
+      }
+    },
+    {
+      "id": "implement_tests",
+      "type": "task",
+      "name": "物理测试实现",
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "实现物理模块单元测试:\n\n目录: ~/projects/badmouth-web/\n\n1. 新增 src/physics/shuttlecock.test.ts — 3+ 测试:\n   - 自由落体 vs 理论值(验证气动积分基础正确性)\n   - 杀球速度衰减:初速~80m/s,2-3秒内减速到~20m/s\n   - 高远球轨迹:仰角~55°,滞空时间~1.3s\n2. 新增 src/physics/racket.test.ts — 2+ 测试:\n   - 正面碰撞(速度反向后衰减)\n   - 切向摩擦(速度分量变化)\n\n关键: physics/ 目录不得依赖 Three.js;使用 vitest;跑 pnpm test 确保通过"
+      }
+    },
+    {
+      "id": "implement_render_split",
+      "type": "task",
+      "name": "渲染管线拆分",
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "从 main.ts 拆分渲染模块:\n\n目录: ~/projects/badminton-web/\n\n1. 新增 src/render/court.ts — 球场3D场景(场地、网、边界线)\n2. 新增 src/render/shuttlecockMesh.ts — 羽毛球Mesh(模型/几何体)\n3. 重构 src/main.ts:导入 render/court 和 render/shuttlecockMesh,仅保留场景组装、灯管和游戏循环\n\n关键: 确保 pnpm typecheck 通过"
+      }
+    },
+    {
+      "id": "implement_camera_input",
+      "type": "task",
+      "name": "固定相机与键盘交互",
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "实现固定游戏相机和键盘交互:\n\n目录: ~/projects/badminton-web/\n\n1. 替换 OrbitControls 为固定游戏视角相机\n   - 后上方45°俯视球场\n   - 相机追踪球或玩家-AI中间点\n2. 键盘事件处理:\n   - 空格=发球/重置\n   - 集成到 requestAnimationFrame Game Loop\n3. 羽毛球从发球位置飞出并沿真实轨迹下落\n\n关键: pnpm typecheck 通过;pnpm dev 可交互"
+      }
+    },
+    {
+      "id": "implement_tuning",
+      "type": "task",
+      "name": "调参与集成联调",
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "调参使轨迹\"像羽毛球\":\n\n目录: ~/projects/badminton-web/\n\n1. 调整 Cd 曲线(空气阻力系数)\n2. 调整 Magnus 系数(旋转升力)\n3. 验证:\n   - 杀球初速~80m/s,2-3秒减速到~20m/s\n   - 高远球仰角~55°,滞空~1.3s\n   - 视觉上轨迹自然\n\n关键: pnpm typecheck 通过;pnpm dev 可见真实羽毛球轨迹"
+      }
+    },
+    {
+      "id": "review",
+      "type": "task",
+      "name": "代码审查",
+      "task": {
+        "agent": "Reviewer",
+        "prompt": "审查所有实现结果:\n\n检查点:\n1. physics/ 目录是否零依赖 Three.js\n2. 测试覆盖是否充分(5+ 测试)\n3. 渲染管线拆分是否合理(court.ts/shuttlecockMesh.ts)\n4. 相机视角是否合适(后上方45°)\n5. 键盘交互是否可靠(空格发球/重置)\n6. 代码风格是否符合项目规范\n\nreview 节点必须明确且只输出一个最终状态: APPROVED 或 REJECTED。最终输出格式必须是 JSON `{\"status\":\"APPROVED|REJECTED\",\"summary\":\"...\"}`。review 只负责审查实现质量、方案合理性和风险,不承担最终回归验证。若结论是不通过,直接输出 REJECTED,并让 workflow 走既定的负分支。"
+      }
+    },
+    {
+      "id": "verify",
+      "type": "task",
+      "name": "回归验证",
+      "task": {
+        "agent": "Tester",
+        "prompt": "在 review 已通过后执行验证:\n\n1. pnpm typecheck 通过\n2. pnpm test 全绿(5+ 测试)\n3. pnpm dev 打开浏览器可见:3D球场 + 羽毛球,空格发球球沿物理轨迹飞行\n\nverify 节点必须明确且只输出一个最终状态: APPROVED 或 REJECTED。最终输出格式必须是 JSON `{\"status\":\"APPROVED|REJECTED\",\"summary\":\"...\"}`。若当前改动验证通过就输出 APPROVED;只要当前改动未通过或需要继续修复,统一输出 REJECTED。"
+      }
+    },
+    {
+      "id": "fix",
+      "type": "task",
+      "name": "修复收口",
+      "inputSources": {
+        "mode": "specified",
+        "sources": [
+          { "nodeId": "review", "alias": "review" },
+          { "nodeId": "verify", "alias": "verify" }
+        ]
+      },
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "根据 review 或 verify 反馈修复问题,准备重新提交审查。"
+      }
+    },
+    {
+      "id": "end",
+      "type": "end"
+    }
+  ],
+  "edges": [
+    { "id": "e_start_architect_plan", "from": "start", "to": "architect_plan" },
+    { "id": "e_architect_plan_implement_tests", "from": "architect_plan", "to": "implement_tests" },
+    { "id": "e_implement_tests_implement_render_split", "from": "implement_tests", "to": "implement_render_split" },
+    { "id": "e_implement_render_split_implement_camera_input", "from": "implement_render_split", "to": "implement_camera_input" },
+    { "id": "e_implement_camera_input_implement_tuning", "from": "implement_camera_input", "to": "implement_tuning" },
+    { "id": "e_implement_tuning_review", "from": "implement_tuning", "to": "review" },
+    { "id": "e_review_verify_approved", "from": "review", "to": "verify", "condition": "outputs.review.status == 'APPROVED'" },
+    { "id": "e_review_fix", "from": "review", "to": "fix", "condition": "outputs.review.status == 'REJECTED'" },
+    { "id": "e_verify_end_approved", "from": "verify", "to": "end", "condition": "outputs.verify.status == 'APPROVED'" },
+    { "id": "e_verify_fix", "from": "verify", "to": "fix", "condition": "outputs.verify.status == 'REJECTED'" },
+    { "id": "e_fix_review", "from": "fix", "to": "review" }
+  ]
+}

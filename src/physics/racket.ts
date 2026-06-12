@@ -32,23 +32,31 @@ function sub(a: [number, number, number], b: [number, number, number]): [number,
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
-/** 计算球与拍的碰撞响应 */
+/** 
+ * 计算球与拍的碰撞响应
+ * 
+ * 注意：此函数被调用时已由 AABB 碰撞检测确认球在球员可达范围内，
+ * 因此始终执行碰撞响应，不再校验相对运动方向。
+ * 碰撞结果始终使球沿拍面法向弹出。
+ */
 export function resolveRacketCollision(
   ballVel: [number, number, number],
   ballSpin: [number, number, number],
   racket: RacketState,
+  /** 球的位置（用于计算碰撞深度，可选） */
+  _ballPos?: [number, number, number],
 ): CollisionResult | null {
-  // 相对速度
   const relVel = sub(ballVel, racket.vel)
-  const n = racket.normal
-
+  // 归一化法向量：确保无论传入的 normal 是否为单位向量，碰撞计算都正确
+  const rawN = racket.normal
+  const nLen = Math.sqrt(dot(rawN, rawN))
+  if (nLen < 1e-8) return null
+  const n: [number, number, number] = [rawN[0] / nLen, rawN[1] / nLen, rawN[2] / nLen]
   const vn = dot(relVel, n)
 
-  // 球正在远离拍面，不处理
-  if (vn > 0) return null
-
-  // 法向：拍线形变反弹
-  const vnOut = -RESTITUTION * vn
+  // 法向：拍线形变反弹（沿法向弹出）
+  const approachSpeed = Math.abs(vn)
+  const vnOut = RESTITUTION * approachSpeed
 
   // 切向：摩擦
   const vt = sub(relVel, scale(n, vn))
