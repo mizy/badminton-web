@@ -1,5 +1,6 @@
 /** AI 战术选择 — 评估场上局势，选择球路 */
 
+import { predictLandingPoint } from '../physics/shuttlecock'
 import type { ShuttlecockState } from '../physics/shuttlecock'
 import type { PlayerState } from '../character/types'
 import type { ShotType } from '../character/shotSynthesis'
@@ -26,9 +27,10 @@ export function decideTactical(
   let moveZ: number
 
   if (!canReach) {
-    // 无法够到球 → 往自己半场防守位置移动
-    moveX = clampToHalf(sx, side)
-    moveZ = clamp(sz, -3.05, 3.05)
+    // 无法够到球 → 往预测落点方向防守移动
+    const landing = predictLandingPoint(shuttle)
+    moveX = clampToHalf(landing[0], side)
+    moveZ = clamp(landing[2], -3.05, 3.05)
     return {
       moveTarget: [moveX, 0, moveZ],
       shotType: null,

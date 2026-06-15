@@ -1,0 +1,106 @@
+{
+  "name": "羽毛球项目优化：比例缩小+连贯对打+C键切换视角",
+  "description": "三项优化：1)球员比例缩小(playerMesh.ts身体半径1.6→0.35,光环1.8→0.6); 2)连贯对打修复(tickService.ts移除简单反弹fallback,碰撞盒±0.6x/±0.4z,y:0.3~2.5,AI目标改预测落点); 3)C键切换俯瞰/第三人称视角(render/camera.ts+game/camera.ts); 最终pnpm typecheck + pnpm build + 录屏验证",
+  "templateId": "feature_delivery",
+  "templateRefs": ["feature_delivery"],
+  "templateReason": "三项独立优化/新功能开发,需要架构师先定方案再实现,review把关质量,verify做回归验证",
+  "variables": {},
+  "inputs": {},
+  "outputs": {},
+  "settings": {},
+  "nodes": [
+    { "id": "start", "type": "start" },
+    {
+      "id": "architect_plan",
+      "type": "task",
+      "name": "技术方案计划",
+      "task": {
+        "agent": "Architect",
+        "prompt": "分析羽毛球项目三项优化的技术方案：\n\n【任务1-球员比例缩小】src/render/playerMesh.ts：body cylinder radius 1.6→0.35, aura ring radius 1.8→0.6。需确认body与aura在render中如何创建,调整后相机视野与球场比例是否协调。\n\n【任务2-连贯对打修复】src/game/tickService.ts：(a)移除简单反弹fallback逻辑;(b)碰撞盒缩小到x:±0.6,z:±0.4,y:0.3~2.5;(c)AI移动目标从球当前位置改为预测落点。需理解tickService现有碰撞检测和AI移动逻辑。\n\n【任务3-C键视角切换】src/game/camera.ts + src/render/camera.ts：实现C键从俯瞰(俯视)视角切换到第三人称(平视)视角。需理解现有camera模块的数据流和渲染结构。\n\n请输出：\n1. 每项任务涉及的文件清单及相关行范围\n2. 实现边界与关键约束(physics/层不导入three.js等)\n3. 变更之间的依赖关系(有无先后顺序或共享状态)\n4. 实施步骤建议\n5. 验证方式(重点说明pnpm typecheck和build通过标准,录屏验证的操作路径)"
+      }
+    },
+    {
+      "id": "implement_scale",
+      "type": "task",
+      "name": "实现-球员比例缩小",
+      "inputSources": { "mode": "specified", "sources": [{ "nodeId": "architect_plan", "alias": "plan" }] },
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "根据方案实现球员比例缩小：\n\n文件：src/render/playerMesh.ts\n- body cylinder radius从1.6改为0.35\n- aura ring radius从1.8改为0.6\n- 保留其他几何参数不变\n- 确认调整后视觉效果比例协调\n\n完成后运行pnpm typecheck确保无类型错误。只输出实现摘要。"
+      }
+    },
+    {
+      "id": "implement_rally",
+      "type": "task",
+      "name": "实现-连贯对打修复",
+      "inputSources": { "mode": "specified", "sources": [{ "nodeId": "architect_plan", "alias": "plan" }] },
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "根据方案实现连贯对打修复：\n\n文件：src/game/tickService.ts\n1. 移除简单反弹fallback逻辑(找到类似simpleBounce或直接反转速度的fallback代码,改为纯碰撞检测)\n2. 碰撞盒缩小到x:±0.6,z:±0.4,y范围0.3~2.5(找到碰撞盒边界常量进行修改)\n3. AI移动目标从球当前位置改为预测落点(找到AI移动目标更新处,改为使用shuttlecock预测落地位置)\n\n注意：tickService属于game/层，不能导入three.js。\n\n完成后运行pnpm typecheck确保无类型错误。只输出实现摘要。"
+      }
+    },
+    {
+      "id": "implement_camera",
+      "type": "task",
+      "name": "实现-C键视角切换",
+      "inputSources": { "mode": "specified", "sources": [{ "nodeId": "architect_plan", "alias": "plan" }] },
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "根据方案实现C键切换俯瞰/第三人称视角：\n\n文件：src/game/camera.ts + src/render/camera.ts\n- src/render/camera.ts：负责Three.js camera对象的实际位置/朝向更新,需支持两种视角模式(俯瞰overhead和第三人称thirdPerson)\n- src/game/camera.ts：负责响应C键输入事件,切换视角模式,通知render层更新\n- 俯瞰视角：从球场正上方俯视,能看到全场\n- 第三人称视角：在球员后方偏上位置,跟随球员移动\n- C键输入事件应通过Input system(参考src/input/types.ts)传递\n- game/camera.ts不导入three.js\n\n完成后运行pnpm typecheck确保无类型错误。只输出实现摘要。"
+      }
+    },
+    {
+      "id": "review",
+      "type": "task",
+      "name": "代码审查",
+      "inputSources": { "mode": "specified", "sources": [
+        { "nodeId": "implement_scale", "alias": "scale" },
+        { "nodeId": "implement_rally", "alias": "rally" },
+        { "nodeId": "implement_camera", "alias": "camera" }
+      ]},
+      "task": {
+        "agent": "Reviewer",
+        "prompt": "审查三项优化实现的代码质量：\n1. 球员比例缩小(src/render/playerMesh.ts)：比例是否合理,是否影响其他渲染逻辑\n2. 连贯对打修复(src/game/tickService.ts)：fallback移除是否安全,碰撞盒新边界是否合理,AI预测落点实现是否正确\n3. C键视角切换(src/game/camera.ts + src/render/camera.ts)：视角切换逻辑是否完整,game/层是否未导入three.js,渲染是否合理\n\n检查重点：类型安全、架构约束(game层不导入three.js)、边界条件、是否有遗漏影响。\n\n请输出JSON格式结论：{\"status\":\"APPROVED|REJECTED\",\"summary\":\"...\"}"
+      }
+    },
+    {
+      "id": "verify",
+      "type": "task",
+      "name": "回归验证",
+      "inputSources": { "mode": "specified", "sources": [{ "nodeId": "review", "alias": "review" }] },
+      "task": {
+        "agent": "Tester",
+        "prompt": "对三项优化改动执行回归验证：\n1. 运行 pnpm typecheck 确认无类型错误\n2. 运行 pnpm build 确认构建成功\n3. 启动开发服务器(pnpm dev),在浏览器中验证：\n   - 球员模型比例缩小是否正常渲染\n   - 对打时碰撞是否正常(尤其是移除fallback后)\n   - 按C键是否能在俯瞰和第三人称视角间切换\n4. 使用录屏脚本(capture.mjs)录制验证过程：pnpm run capture\n\n请输出JSON格式结论：{\"status\":\"FIXED|STILL_FAILING|BLOCKED\",\"summary\":\"...\"}"
+      }
+    },
+    {
+      "id": "fix",
+      "type": "task",
+      "name": "修复收口",
+      "inputSources": { "mode": "specified", "sources": [
+        { "nodeId": "review", "alias": "review" },
+        { "nodeId": "verify", "alias": "verify" }
+      ]},
+      "task": {
+        "agent": "Pragmatist",
+        "prompt": "根据review或verify的反馈修复问题：\n- 如果是review的REJECTED意见,逐条修复代码质量问题\n- 如果是verify的STILL_FAILING意见,修复导致类型检查/构建/行为验证不通过的问题\n- 如果是verify的BLOCKED意见,协调解决阻塞项\n\n修复后确保pnpm typecheck通过。只输出修复摘要。"
+      }
+    },
+    { "id": "end", "type": "end" }
+  ],
+  "edges": [
+    { "id": "e_start_architect", "from": "start", "to": "architect_plan" },
+    { "id": "e_architect_scale", "from": "architect_plan", "to": "implement_scale" },
+    { "id": "e_architect_rally", "from": "architect_plan", "to": "implement_rally" },
+    { "id": "e_architect_camera", "from": "architect_plan", "to": "implement_camera" },
+    { "id": "e_scale_to_review", "from": "implement_scale", "to": "review" },
+    { "id": "e_rally_to_review", "from": "implement_rally", "to": "review" },
+    { "id": "e_camera_to_review", "from": "implement_camera", "to": "review" },
+    { "id": "e_review_verify", "from": "review", "to": "verify", "condition": "outputs.review.status == 'APPROVED'" },
+    { "id": "e_review_fix", "from": "review", "to": "fix", "maxLoops": 5, "condition": "outputs.review.status == 'REJECTED'" },
+    { "id": "e_verify_end", "from": "verify", "to": "end", "condition": "outputs.verify.status == 'FIXED'" },
+    { "id": "e_verify_fix", "from": "verify", "to": "fix", "maxLoops": 5, "condition": "outputs.verify.status == 'STILL_FAILING'" },
+    { "id": "e_verify_blocked", "from": "verify", "to": "end", "condition": "outputs.verify.status == 'BLOCKED'" },
+    { "id": "e_fix_review", "from": "fix", "to": "review" }
+  ]
+}

@@ -17,8 +17,8 @@ import { synthesizeShot } from '../character/shotSynthesis'
 import { checkPoint } from './match'
 
 export interface TickAIConfigs {
-  home: AIConfig
-  away: AIConfig
+  home?: AIConfig
+  away?: AIConfig
 }
 
 /**
@@ -43,8 +43,8 @@ export function processGameTick(
   // 2. 步进羽毛球物理
   let shuttle = stepShuttlecock(state.shuttle, dt, DEFAULT_SHUTTLECOCK, 8)
 
-  // 3. 落地检测 → 计分
-  if (shuttle.pos[1] <= 0) {
+  // 3. 落地 / 出界检测 → 计分
+  if (shuttle.pos[1] <= 0 || Math.abs(shuttle.pos[0]) > 6.7 || Math.abs(shuttle.pos[2]) > 3.05) {
     const scored = checkPoint({ ...state, players, shuttle })
     if (scored.phase === 'set_end' || scored.phase === 'match_end') return scored
     // 回到 idle 等待下一发球
@@ -75,7 +75,7 @@ function checkPlayerCollision(
     const hit = sphereAABBIntersect(
       shuttle.pos,
       0.15,
-      { min: [px - 2.0, 0, pz - 1.2], max: [px + 2.0, 3.5, pz + 1.2] },
+      { min: [px - 0.6, 0.3, pz - 0.4], max: [px + 0.6, 2.5, pz + 0.4] },
     )
     if (!hit) continue
 
@@ -126,12 +126,54 @@ function checkPlayerCollision(
       }
     }
 
-    // 无 AI / 无法击球 → 简单反弹
-    const dir = i === 0 ? 1 : -1
-    return {
-      ...shuttle,
-      vel: [dir * 20, 12, shuttle.vel[2] * 0.3],
+    // Human 玩家击球（wantsToSwing 标志，无 AI config）
+    if (player.wantsToSwing && opponent) {
+      // 清除击球标志
+      players[i] = { ...player, wantsToSwing: false }
+
+      // 根据球高度选择球路
+      const humanShotType: ShotType = shuttle.pos[1] > 1.5 ? 'CLEAR' : 'DRIVE'
+      const humanTarget: [number, number, number] = [opponent.pos[0], 0, opponent.pos[2]]
+      const timing = computeTimingWindow(player, shuttle)
+
+      if (timing) {
+        const shotResult = synthesizeShot(
+          { type: humanShotType, power: 0.7, target: humanTarget },
+          player,
+          shuttle,
+          timing,
+        )
+        const speed = Math.sqrt(
+          shotResult.collision.outgoingVel[0] ** 2 +
+            shotResult.collision.outgoingVel[1] ** 2 +
+            shotResult.collision.outgoingVel[2] ** 2,
+        )
+        const desiredVel = computeShotVelocity(player.pos, humanTarget, speed, humanShotType)
+        const racketForCollision: RacketState = {
+          ...player.racket,
+          vel: [
+            desiredVel[0] * 0.6,
+            Math.max(desiredVel[1] * 0.4, 2),
+            desiredVel[2] * 0.6,
+          ],
+        }
+        const collisionResult = resolveRacketCollision(shuttle.vel, shuttle.spin, racketForCollision, shuttle.pos)
+        if (collisionResult) {
+          return {
+            ...shuttle,
+            vel: collisionResult.outgoingVel,
+            spin: collisionResult.outgoingSpin,
+          }
+        }
+        return {
+          ...shuttle,
+          vel: desiredVel,
+          spin: shotResult.collision.outgoingSpin,
+        }
+      }
     }
+
+
   }
 
   return shuttle

@@ -7,14 +7,15 @@
 import * as THREE from 'three'
 import { createCourt } from './render/court'
 import { createShuttlecockMesh } from './render/shuttlecockMesh'
-import { createGameCamera, updateCamera } from './render/camera'
+import { createGameCamera, updateCamera, toggleCameraMode } from './render/camera'
 import { createTrailSystem } from './render/trajectory'
 import { createPlayerMesh, updatePlayerMesh, createGroundMarker } from './render/playerMesh'
 import { gameReducer } from './game/reducer'
 import type { GameAction } from './game/reducer'
 import { createFullGameState } from './game/types'
 import { createPlayer } from './game/playerFactory'
-import { DemoController } from './demo/demoController'
+import { decideTactical } from './ai/tactical'
+import type { AIConfig } from './ai/types'
 import { getAIConfig } from './ai/difficulty'
 import { Recorder } from './recording/recorder'
 import { createScoreHUD } from './render/scoreHUD'
@@ -79,12 +80,11 @@ let gameState = createFullGameState()
 // 注入双方球员
 gameState = gameReducer(gameState, { type: 'SET_PLAYERS', players: [createPlayer(0), createPlayer(1)] })
 
-const cameraTarget = new THREE.Vector3(0, 1, 0)
 
-// --- Demo Controller (auto-start for AI vs AI demo) ---
-const demoController = new DemoController(getAIConfig('medium'), getAIConfig('medium'))
-demoController.toggle() // auto-activate demo mode on load
-console.log('[demo] AI vs AI demo started')
+// --- AI configs for both players ---
+const homeConfig: AIConfig = getAIConfig('medium')
+const awayConfig: AIConfig = getAIConfig('medium')
+console.log('[game] Demo mode - both players AI')
 
 // --- Recorder ---
 const recorder = new Recorder()
@@ -128,10 +128,10 @@ scene.add(scoreHUD.mesh)
   sctx.font = 'bold 36px monospace'
   sctx.textAlign = 'center'
   sctx.textBaseline = 'middle'
-  sctx.fillText('🤖 AI DEMO — 自动对战', 256, 52)
+  sctx.fillText('Human vs AI  -  WASD + J + Space', 256, 52)
   sctx.fillStyle = '#aaaaaa'
   sctx.font = '20px monospace'
-  sctx.fillText('SPACE:发球  D:停止AI  R:录像', 256, 96)
+  sctx.fillText('SPACE:发球  J:击球  WASD:移动  R:录像  C:视角', 256, 96)
   const statusTexture = new THREE.CanvasTexture(statusCanvas)
   const statusMat = new THREE.MeshBasicMaterial({
     map: statusTexture,
@@ -187,26 +187,46 @@ statusEl.style.cssText = [
   'color:#aaa', 'font:14px monospace', 'text-shadow:0 1px 4px rgba(0,0,0,0.8)',
   'z-index:10', 'text-align:center', 'pointer-events:none', 'user-select:none',
 ].join(';')
-statusEl.textContent = '🤖 AI 自动对战 (D: 关闭)'
+statusEl.textContent = '🧑 Human vs 🤖 AI  -  WASD + J + Space'
 document.body.appendChild(statusEl)
 
-// --- Keyboard ---
+// --- Keyboard (Player 0 controls) ---
+// Track pressed keys for continuous movement
+const pressedKeys = new Set<string>()
+
+function updateMovementFromKeys(): void {
+  if (gameState.phase !== 'playing') return
+  let x = 0, z = 0
+  if (pressedKeys.has('KeyW')) z -= 1
+  if (pressedKeys.has('KeyS')) z += 1
+  if (pressedKeys.has('KeyA')) x -= 1
+  if (pressedKeys.has('KeyD')) x += 1
+  if (x === 0 && z === 0) {
+    gameState = gameReducer(gameState, { type: 'STOP_MOVE', playerIndex: 0 })
+  } else {
+    const len = Math.sqrt(x * x + z * z)
+    gameState = gameReducer(gameState, { type: 'MOVE', playerIndex: 0, dir: { x: x / len, z: z / len } })
+  }
+}
+
 window.addEventListener('keydown', (e: KeyboardEvent) => {
+  pressedKeys.add(e.code)
+
   if (e.code === 'Space') {
     e.preventDefault()
     if (!gameState.shuttle) {
       trail.reset()
+      rallyHits = 0
       const server = gameState.match?.server ?? 0
       gameState = gameReducer(gameState, { type: 'SERVE', playerIndex: server })
     }
   }
-  if (e.code === 'KeyD') {
+
+  if (e.code === 'KeyJ') {
     e.preventDefault()
-    const active = demoController.toggle()
-    statusEl.textContent = active
-      ? '🤖 AI 自动对战 (D: 关闭)'
-      : 'SPACE: 发球 ｜ D: 自动对战 ｜ R: 录像'
+    gameState = gameReducer(gameState, { type: 'SWING_START', playerIndex: 0 })
   }
+
   if (e.code === 'KeyR') {
     e.preventDefault()
     if (recorder.isRecording()) {
@@ -217,29 +237,52 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
         a.download = `badminton-${Date.now()}.webm`
         a.click()
         URL.revokeObjectURL(url)
-        statusEl.textContent = '✅ 录像已保存'
+        statusEl.textContent = '\u2705 \u5f55\u50cf\u5df2\u4fdd\u5b58'
         setTimeout(() => {
-          statusEl.textContent = 'SPACE: 发球 ｜ D: 自动对战 ｜ R: 录像'
+          statusEl.textContent = '\uD83E\uDDD1 Human vs \uD83E\uDD16 AI  -  WASD + J + Space'
         }, 2500)
       })
     } else {
       recorder.start(renderer.domElement)
       recordingStartTime = performance.now()
-      statusEl.textContent = '🔴 录像中... (R: 停止)'
+      statusEl.textContent = '\uD83D\uDD34 \u5f55\u50cf\u4e2d... (R: \u505c\u6b62)'
     }
+  }
+
+  if (e.code === 'KeyC') {
+    e.preventDefault()
+    toggleCameraMode()
+  }
+
+  // Immediately update movement on keydown for WASD
+  if (['KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
+    updateMovementFromKeys()
   }
 })
 
+window.addEventListener('keyup', (e: KeyboardEvent) => {
+  pressedKeys.delete(e.code)
+
+  if (e.code === 'KeyJ') {
+    e.preventDefault()
+    gameState = gameReducer(gameState, { type: 'SWING_RELEASE', playerIndex: 0 })
+  }
+
+  // Immediately update movement on keyup for WASD
+  if (['KeyW', 'KeyS', 'KeyA', 'KeyD'].includes(e.code)) {
+    updateMovementFromKeys()
+  }
+})
 // --- Auto-serve when demo mode and shuttle is null ---
 function autoServe(): void {
-  if (demoController.isActive() && gameState.phase === 'idle' && !gameState.shuttle) {
+  if (gameState.phase === 'idle' && !gameState.shuttle) {
     const server = gameState.match?.server ?? 0
     const st = gameReducer(gameState, { type: 'SERVE', playerIndex: server })
     if (st.shuttle) {
       trail.reset()
       rallyHits = 0
       gameState = st
-      console.log(`[game] serve #${++phaseChangeCount} — server=${server}, shuttle=(${st.shuttle.pos[0].toFixed(1)}, ${st.shuttle.pos[1].toFixed(1)}, ${st.shuttle.pos[2].toFixed(1)}) vel=(${st.shuttle.vel[0].toFixed(1)}, ${st.shuttle.vel[1].toFixed(1)}, ${st.shuttle.vel[2].toFixed(1)})`)
+      console.log(`[game] serve #${++phaseChangeCount} - server=${server}, shuttle=(${st.shuttle.pos[0].toFixed(1)}, ${st.shuttle.pos[1].toFixed(1)}, ${st.shuttle.pos[2].toFixed(1)}) vel=(${st.shuttle.vel[0].toFixed(1)}, ${st.shuttle.vel[1].toFixed(1)}, ${st.shuttle.vel[2].toFixed(1)})`)
     }
   }
   // Signal game ready after first serve attempt (even if it failed, the loop is running)
@@ -323,19 +366,37 @@ function animate(): void {
     }
   }
 
-  // Demo AI: generate MOVE actions
-  if (demoController.isActive()) {
-    const actions = demoController.getActions(gameState)
-    for (const action of actions) {
-      gameState = gameReducer(gameState, action)
+  // AI player 0 (home): generate MOVE actions via tactical decision
+  if (gameState.phase === 'playing' && gameState.shuttle && gameState.players[0] && gameState.players[1]) {
+    const decision = decideTactical(gameState.players[0], gameState.players[1], gameState.shuttle, homeConfig)
+    const dx = decision.moveTarget[0] - gameState.players[0].pos[0]
+    const dz = decision.moveTarget[2] - gameState.players[0].pos[2]
+    const dist = Math.sqrt(dx * dx + dz * dz)
+    if (dist > 0.2) {
+      gameState = gameReducer(gameState, { type: 'MOVE', playerIndex: 0, dir: { x: dx / dist, z: dz / dist } })
+    } else {
+      gameState = gameReducer(gameState, { type: 'STOP_MOVE', playerIndex: 0 })
+    }
+  }
+
+  // AI player 1 (away): generate MOVE actions via tactical decision
+  if (gameState.phase === 'playing' && gameState.shuttle && gameState.players[1] && gameState.players[0]) {
+    const decision = decideTactical(gameState.players[1], gameState.players[0], gameState.shuttle, awayConfig)
+    const dx = decision.moveTarget[0] - gameState.players[1].pos[0]
+    const dz = decision.moveTarget[2] - gameState.players[1].pos[2]
+    const dist = Math.sqrt(dx * dx + dz * dz)
+    if (dist > 0.2) {
+      gameState = gameReducer(gameState, { type: 'MOVE', playerIndex: 1, dir: { x: dx / dist, z: dz / dist } })
+    } else {
+      gameState = gameReducer(gameState, { type: 'STOP_MOVE', playerIndex: 1 })
     }
   }
 
   // Auto-serve when ball is dead
   autoServe()
 
-  // Safety: force serve if demo is stuck in idle without shuttle for >3s
-  if (demoController.isActive() && gameState.phase === 'idle' && !gameState.shuttle) {
+  // Safety: force serve if stuck in idle without shuttle for >3s
+  if (gameState.phase === 'idle' && !gameState.shuttle) {
     if (performance.now() - idleSince > 3000) {
       const server = gameState.match?.server ?? 0
       const st = gameReducer(gameState, { type: 'SERVE', playerIndex: server })
@@ -352,10 +413,11 @@ function animate(): void {
   }
 
   // Game tick (physics + collision + scoring)
+  // Player 1 (away) gets AI config for swing decisions; player 0 uses wantsToSwing
   const tickAction: GameAction & { type: 'TICK' } = {
     type: 'TICK',
     dt,
-    aiConfigs: demoController.isActive() ? demoController.getAIConfigs() : undefined,
+    aiConfigs: { home: homeConfig, away: awayConfig },
   }
   const prevShuttle = gameState.shuttle
   gameState = gameReducer(gameState, tickAction)
@@ -399,7 +461,7 @@ function animate(): void {
         reader.readAsDataURL(blob)
         statusEl.textContent = '✅ 录像已保存'
         setTimeout(() => {
-          statusEl.textContent = 'SPACE: 发球  |  D: 自动对战  |  R: 录像'
+          statusEl.textContent = '🧑 Human vs 🤖 AI  -  WASD + J + Space'
         }, 2500)
       })
     }
@@ -449,8 +511,9 @@ function animate(): void {
   }
   scoreHUD.syncPosition(camera)
 
-  // Camera: fixed overview (no ball follow) — see camera.ts
-  updateCamera(camera, cameraTarget)
+  // Camera: overview or third-person follow — see camera.ts
+  const cameraTargetPlayer = gameState.players[0]
+  updateCamera(camera, cameraTargetPlayer?.pos)
 
   // Visual effects
   updateEffects(performance.now(), scene)

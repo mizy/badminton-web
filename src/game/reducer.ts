@@ -19,7 +19,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // 球在空中时不能发球
       if (state.shuttle !== null) return state
       const server = state.match?.server ?? 0
-      const originX = server === 0 ? -4 : 4
+      const originX = server === 0 ? -0.5 : 0.5
       const heading = server === 0 ? 90 : -90
       return {
         ...state,
@@ -48,6 +48,29 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         players: state.players.map((p, i) =>
           i === action.playerIndex && p
             ? { ...p, movement: { ...p.movement, targetDir: { x: 0, z: 0 } } }
+            : p,
+        ) as [typeof state.players[0], typeof state.players[1]],
+      }
+
+    case 'SWING_START':
+      if (state.phase !== 'playing') return state
+      if (!state.players[action.playerIndex]) return state
+      return {
+        ...state,
+        players: state.players.map((p, i) =>
+          i === action.playerIndex && p
+            ? { ...p, wantsToSwing: true }
+            : p,
+        ) as [typeof state.players[0], typeof state.players[1]],
+      }
+
+    case 'SWING_RELEASE':
+      if (!state.players[action.playerIndex]) return state
+      return {
+        ...state,
+        players: state.players.map((p, i) =>
+          i === action.playerIndex && p
+            ? { ...p, wantsToSwing: false }
             : p,
         ) as [typeof state.players[0], typeof state.players[1]],
       }

@@ -129,43 +129,43 @@ graph LR
 
 ---
 
-## 规划蓝图
+## 规划蓝图（Phase 7 → 8）
 
-以下模块**已实现但尚未接入运行态**，按 Phase 顺序集成。
+以下模块**已规划但尚未实现**，按 Phase 顺序开发。
 
 ### 总览
 
 ```mermaid
 graph TD
-    subgraph Blueprint["已实现·待接入"]
-        INP[input/*]
+    subgraph Existing["当前运行态（P1-P6 已集成）"]
+        PHY[physics/*]
         CHAR[character/*]
         AI[ai/*]
-        GAME_NEW[game/reducer<br/>game/match<br/>game/shotLegality<br/>game/stamina]
-        RENDER_NEW[render/playerMesh<br/>render/effects]
-    end
-
-    subgraph Existing["Phase 1 已有"]
-        PHY[physics/*]
-        RENDER_OLD[render/court<br/>render/shuttlecockMesh<br/>render/camera]
-        GS_OLD[game/gameState.ts]
+        INP[input/*]
+        GAME[game/reducer<br/>game/match<br/>game/shotLegality<br/>game/stamina]
+        RENDER[render/*]
         MAIN[main.ts]
+        DEMO[demo/demoController]
     end
 
-    INP -->|InputAction| GAME_NEW
-    GAME_NEW -->|调用| PHY
-    GAME_NEW -->|调用| CHAR
-    GAME_NEW -->|产出 GameState| RENDER_NEW
-    GAME_NEW -->|产出 GameState| RENDER_OLD
-    MAIN -->|接入| INP
-    MAIN -->|替换| GS_OLD
-    MAIN -->|使用| GAME_NEW
+    subgraph Future["待开发"]
+        EQ[equipment/*<br/>装备系统]
+        GRIP[character/grip.ts<br/>握拍系统]
+        FW[character/footwork.ts<br/>步法细化]
+        STYLE[ai/styles.ts<br/>打法风格]
+    end
 
-    style Blueprint fill:#e67e22,color:#fff
+    EQ -->|装备参数| GAME
+    EQ -->|装备参数| CHAR
+    GRIP -->|握拍类型| CHAR
+    FW -->|步法选择| CHAR
+    STYLE -->|打法人格| AI
+
     style Existing fill:#4a90d9,color:#fff
+    style Future fill:#2ecc71,color:#fff
 ```
 
-### 模块接口（蓝图）
+### 模块接口（近期集成）
 
 #### `input/types.ts` — 输入抽象
 
@@ -181,12 +181,12 @@ type InputAction =
   | { type: 'PAUSE' }
   | { type: 'RESET' }
 
-type InputSource = 'keyboard' | 'gamepad' | 'touch' | 'network'
+type InputSource = 'keyboard' | 'gamepad' | 'touch'
 interface InputEvent { action, source, timestamp, playerIndex }
 interface InputAdapter { connect(listener): void; disconnect(): void }
 ```
 
-✅ 纯 JSON 可序列化，联机模式可直接传输。
+✅ 纯 JSON 可序列化。
 
 #### `input/keyboard.ts` — 键盘适配器
 
@@ -405,14 +405,6 @@ graph LR
 
 ---
 
-## 联机扩展点
-
-1. **InputAction → 可序列化**：所有 `InputAction` 是纯 JSON，可直接 `JSON.stringify`
-2. **GameState → 可快照**：`GameState` 是纯数据结构，可作为权威状态下发
-3. **InputAdapter**：`network.ts` 实现 `InputAdapter` 接口，接收远程玩家的 `InputEvent`
-4. **gameReducer 确定性**：相同输入序列 → 相同 GameState（RK4 substeps 需固定）
-
----
 
 ## Phase 实施路线
 
@@ -424,8 +416,9 @@ graph TD
     P3 --> P4
     P4 --> P5["P5: AI对手"]
     P4 --> P6["P6: 比赛规则"]
-    P5 --> P7["P7: 联机模式"]
+    P5 --> P7["P7: 装备系统\n（全新）"]
     P6 --> P7
+    P7 --> P8["P8: 技战术深度\n（步法细化+握拍+打法风格）"]
 
     style P1 fill:#4a90d9,color:#fff
     style P2 fill:#e67e22,color:#fff
@@ -434,16 +427,18 @@ graph TD
     style P5 fill:#e74c3c,color:#fff
     style P6 fill:#1abc9c,color:#fff
     style P7 fill:#f39c12,color:#fff
+    style P8 fill:#2ecc71,color:#fff
 ```
 
 | Phase | 依赖 | 集成内容 | 关键动作 |
 |-------|------|---------|---------|
 | **P1** | — | physics/shuttlecock, render/*, game/gameState.ts | ✅ 已完成 |
-| **P2** | P1 | physics/racket + collision 接入 game loop | `stepGameTick` 内调用碰撞检测 |
-| **P3** | P1 | input/*, character/movement, render/playerMesh | main.ts 改用 inputAdapter + reducer |
-| **P4** | P2+P3 | shotSynthesis, timing, shotLegality | 击球动作 → 球路合成 → 合法性检查 |
-| **P5** | P3+P4 | ai/* | AI 每帧决策 + 动作注入 |
-| **P6** | P4 | match, stamina | BWF 计分 + 体力管理 |
-| **P7** | P5+P6 | network/* | WebSocket 联机同步 |
+| **P2** | P1 | physics/racket + collision 接入 game loop | ✅ 已集成 |
+| **P3** | P1 | input/*, character/movement, render/playerMesh | ✅ 已集成 |
+| **P4** | P2+P3 | shotSynthesis, timing, shotLegality | ✅ 已集成 |
+| **P5** | P3+P4 | ai/* | ✅ 已集成 |
+| **P6** | P4 | match, stamina | ✅ 已集成 |
+| **P7** | P5+P6 | equipment/* | 装备参数系统，影响物理和击球合成 |
+| **P8** | P7 | character/grip, character/footwork, ai/styles | 握拍/步法细化 + 打法风格 |
 
 > 详细技术决策见 [ADR 记录](adr/)。

@@ -33,7 +33,7 @@ const OUT_FILE = process.argv.includes('--out')
 
 const CHROME_PATH = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const PREVIEW_BASE = `http://localhost:${PORT}`
-const RECORD_TIMEOUT_MS = 60_000
+const RECORD_TIMEOUT_MS = 90_000
 
 // ── Step 0: Build project if needed ─────────────────────────────
 function ensureBuild() {
@@ -124,6 +124,17 @@ async function capture() {
 
     const page = await browser.newPage()
     await page.setViewport({ width: 1280, height: 720 })
+
+    // Capture browser console for game diagnostics
+    page.on('console', msg => {
+      const text = msg.text()
+      if (text.includes('[game]') || text.includes('[status]') || text.includes('[safety]') || text.includes('[recorder]') || text.includes('[tick]')) {
+        console.log('[BROWSER]', text)
+      }
+    })
+    page.on('pageerror', err => {
+      console.log('[BROWSER_ERROR]', err.message)
+    })
 
     console.log(`\n📺 Opening ${PREVIEW_BASE}...`)
     await page.goto(PREVIEW_BASE, { waitUntil: 'networkidle2', timeout: 30_000 })

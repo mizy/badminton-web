@@ -1,23 +1,23 @@
 /**
- * 计分 HUD — 使用 PlaneGeometry Mesh + Canvas Texture 渲染到 3D 场景
+ * 计分 HUD — 使用 Sprite + Canvas Texture 渲染到 3D 场景
  * 避免 HTML 覆盖层无法被 canvas.captureStream() 捕获的问题
  *
- * 改用 Mesh 替代 Sprite 以提升 SwiftShader headless 环境兼容性，
- * 每帧主动面向相机（billboard 效果）。
+ * 使用 Sprite 替代 Mesh，确保在 SwiftShader headless 环境下可见
+ * (Sprite 始终面向相机，无需每帧 lookAt)
  */
 
 import * as THREE from 'three'
 
 export interface ScoreHUD {
-  mesh: THREE.Mesh
+  mesh: THREE.Sprite
   update: (home: number, away: number, setStr: string, rally: number, isDeuce: boolean) => void
   syncPosition: (camera: THREE.Camera) => void
 }
 
 const CANVAS_W = 800
 const CANVAS_H = 300
-const PLANE_W = 16
-const PLANE_H = 6
+const SPRITE_W = 16
+const SPRITE_H = 6
 
 /** 纯文本缓存 key，避免每帧重绘 */
 function cacheKey(home: number, away: number, setStr: string, rally: number, isDeuce: boolean): string {
@@ -34,15 +34,14 @@ export function createScoreHUD(): ScoreHUD {
   texture.minFilter = THREE.LinearFilter
   texture.magFilter = THREE.LinearFilter
 
-  const material = new THREE.MeshBasicMaterial({
+  const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
     depthWrite: false,
     depthTest: false,
-    side: THREE.DoubleSide,
   })
-  const geometry = new THREE.PlaneGeometry(PLANE_W, PLANE_H)
-  const mesh = new THREE.Mesh(geometry, material)
+  const mesh = new THREE.Sprite(material)
+  mesh.scale.set(SPRITE_W, SPRITE_H, 1)
   mesh.renderOrder = 999 // render on top
 
   let lastKey = ''
@@ -99,12 +98,11 @@ export function createScoreHUD(): ScoreHUD {
   return {
     mesh,
     update: draw,
-    syncPosition(camera: THREE.Camera) {
+    syncPosition(_camera: THREE.Camera) {
       // Place HUD above net center at a fixed world position
       // This is reliably visible from the broadcast camera angle
+      // Sprite automatically faces camera
       mesh.position.set(0, 3.2, 0)
-      // Billboard: always face the camera
-      mesh.lookAt(camera.position)
     },
   }
 }

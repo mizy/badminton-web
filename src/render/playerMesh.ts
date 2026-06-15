@@ -49,7 +49,7 @@ function createLabelSprite(text: string, bgColor: string): THREE.Sprite {
     depthWrite: false,
   })
   const sprite = new THREE.Sprite(mat)
-  sprite.scale.set(5.0, 5.0, 1)
+  sprite.scale.set(2.5, 2.5, 1)
   sprite.position.y = 4.5
   return sprite
 }
@@ -66,7 +66,7 @@ export function createGroundMarker(color: number): THREE.Group {
     side: THREE.DoubleSide,
     depthWrite: false,
   })
-  const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.8, 32), ringMat)
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.6, 32), ringMat)
   ring.rotation.x = -Math.PI / 2
   ring.position.y = 0.02
   group.add(ring)
@@ -79,7 +79,7 @@ export function createGroundMarker(color: number): THREE.Group {
     side: THREE.DoubleSide,
     depthWrite: false,
   })
-  const fill = new THREE.Mesh(new THREE.CircleGeometry(1.0, 32), fillMat)
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(0.35, 32), fillMat)
   fill.rotation.x = -Math.PI / 2
   fill.position.y = 0.01
   group.add(fill)
@@ -94,7 +94,7 @@ export function createPlayerMesh(
   const group = new THREE.Group()
 
   // Body (torso) — wider/taller for video visibility
-  const bodyGeo = new THREE.CylinderGeometry(1.6, 1.8, 2.8, 12)
+  const bodyGeo = new THREE.CylinderGeometry(0.35, 0.5, 2.8, 12)
   const bodyMat = new THREE.MeshBasicMaterial({ color: colors.body })
   const body = new THREE.Mesh(bodyGeo, bodyMat)
   body.position.y = 1.4
@@ -102,29 +102,29 @@ export function createPlayerMesh(
   group.add(body)
 
   // Head (sphere) — bigger for video visibility
-  const headGeo = new THREE.SphereGeometry(0.75, 16, 12)
+  const headGeo = new THREE.SphereGeometry(0.35, 16, 12)
   const headMat = new THREE.MeshBasicMaterial({ color: colors.head })
   const head = new THREE.Mesh(headGeo, headMat)
   head.position.y = 2.8
   group.add(head)
 
-  // Racket handle
-  const racketGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6)
+  // Racket handle — scaled with body radius (0.35 vs original 1.6)
+  const racketGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.6, 6)
   const racketMat = new THREE.MeshBasicMaterial({ color: colors.racket })
   const racket = new THREE.Mesh(racketGeo, racketMat)
-  racket.position.set(0.9, 1.5, 0)
+  racket.position.set(0.3, 1.5, 0)
   racket.rotation.z = -Math.PI / 4
   group.add(racket)
 
   // Racket head (ring)
-  const ringGeo = new THREE.TorusGeometry(0.32, 0.06, 8, 14)
+  const ringGeo = new THREE.TorusGeometry(0.15, 0.03, 8, 14)
   const ringMat = new THREE.MeshBasicMaterial({ color: colors.racket })
   const ring = new THREE.Mesh(ringGeo, ringMat)
-  ring.position.set(1.4, 2.5, 0)
+  ring.position.set(0.65, 1.95, 0)
   group.add(ring)
 
   // 头顶标记环（大尺寸 + 高饱和，用于视频中远距离区分阵营）
-  const markerGeo = new THREE.TorusGeometry(1.8, 0.25, 12, 20)
+  const markerGeo = new THREE.TorusGeometry(0.6, 0.1, 12, 20)
   const markerMat = new THREE.MeshBasicMaterial({
     color: colors.marker,
     transparent: true,
@@ -157,7 +157,7 @@ export function createPlayerMesh(
     depthWrite: false,
   })
   const glow = new THREE.Sprite(glowMat)
-  glow.scale.set(12.0, 12.0, 1)
+  glow.scale.set(5.0, 5.0, 1)
   glow.position.y = 3.5
   group.add(glow)
 

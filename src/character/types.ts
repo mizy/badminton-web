@@ -27,5 +27,6 @@ export interface PlayerState {
   isCharging: boolean
   chargeStartTime: number
   lastSwingTime: number
+  wantsToSwing: boolean
   side: 0 | 1
 }

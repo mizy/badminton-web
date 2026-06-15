@@ -28,6 +28,7 @@ export function createPlayer(side: 0 | 1): PlayerState {
     isCharging: false,
     chargeStartTime: 0,
     lastSwingTime: 0,
+    wantsToSwing: false,
     side,
   }
 }

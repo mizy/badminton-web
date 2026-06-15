@@ -95,6 +95,21 @@ export function stepShuttlecock(
   return s
 }
 
+/** 预测羽毛球落点（模拟步进直到球落地） */
+export function predictLandingPoint(
+  shuttle: ShuttlecockState,
+  cfg: ShuttlecockConfig = DEFAULT_SHUTTLECOCK,
+  maxSteps: number = 600,
+): [number, number, number] {
+  const dt = 1 / 60
+  let s = shuttle
+  for (let i = 0; i < maxSteps; i++) {
+    if (s.pos[1] <= 0) break
+    s = stepShuttlecock(s, dt, cfg, 4)
+  }
+  return [s.pos[0], 0, s.pos[2]]
+}
+
 /** 发射羽毛球 */
 export function launchShuttlecock(
   origin: [number, number, number],
