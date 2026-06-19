@@ -24,9 +24,6 @@ export interface PlayerState {
   racket: RacketState
   stamina: number
   maxStamina: number
-  isCharging: boolean
-  chargeStartTime: number
-  lastSwingTime: number
   wantsToSwing: boolean
   side: 0 | 1
 }

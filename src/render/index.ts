@@ -1,7 +1,7 @@
 /** 渲染层 — 统一入口 */
 
 export { createCourt } from './court'
-export { createShuttlecockMesh } from './shuttlecockMesh'
+export { createShuttlecockMesh, syncShuttlecockMesh } from './shuttlecockMesh'
 
 export { createPlayerMesh, updatePlayerMesh, createGroundMarker } from './playerMesh'
 export type { PlayerMeshColors } from './playerMesh'

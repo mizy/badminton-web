@@ -14,13 +14,15 @@ const meta: Meta = {
     container.style.position = 'relative'
 
     const ctx = mountScene(container)
+    ctx.camera.position.set(-11.5, 6.4, 8.2)
+    ctx.camera.lookAt(0, 0.8, 0)
 
     // Build court
     createCourt(ctx.scene)
 
     // Place shuttle at center
     const shuttleGroup = createShuttlecockMesh()
-    shuttleGroup.position.set(0, 1.5, 0)
+    shuttleGroup.position.set(-2.4, 1.5, -1.1)
     ctx.scene.add(shuttleGroup)
 
     // Add some reference markers

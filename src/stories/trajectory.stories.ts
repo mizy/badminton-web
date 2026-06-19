@@ -1,7 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/html'
 import * as THREE from 'three'
 import { createCourt } from '../render/court'
-import { createShuttlecockMesh } from '../render/shuttlecockMesh'
+import {
+  createShuttlecockMesh,
+  getShuttlecockHeadCenter,
+  hasShuttlecockHeadLanded,
+  placeShuttlecockHeadOnGround,
+  syncShuttlecockMesh,
+} from '../render/shuttlecockMesh'
 import { createTrailSystem } from '../render/trajectory'
 import { mountScene } from './threeHelper'
 import { launchShuttlecock, stepShuttlecock, DEFAULT_SHUTTLECOCK } from '../physics/shuttlecock'
@@ -71,19 +77,27 @@ const meta: Meta<TrajectoryArgs> = {
         trail.update(shuttle.pos)
 
         if (shuttleGroup) {
-          shuttleGroup.position.set(shuttle.pos[0], shuttle.pos[1], shuttle.pos[2])
+          syncShuttlecockMesh(shuttleGroup, shuttle.pos, shuttle.vel)
           shuttleGroup.visible = true
         }
 
-        if (shuttle.pos[1] <= 0) {
+        if (hasShuttlecockHeadLanded(shuttle.pos, shuttle.vel)) {
           landed = true
+          shuttle = {
+            ...shuttle,
+            pos: placeShuttlecockHeadOnGround(shuttle.pos, shuttle.vel),
+          }
+          if (shuttleGroup) {
+            syncShuttlecockMesh(shuttleGroup, shuttle.pos, shuttle.vel)
+          }
           // Mark landing point
           const landMat = new THREE.PointsMaterial({ color: 0xff4444, size: 0.12, sizeAttenuation: true })
           const landGeo = new THREE.BufferGeometry()
+          const headCenter = getShuttlecockHeadCenter(shuttle.pos, shuttle.vel)
           const landPos = new Float32Array([
-            Math.max(-6.7, Math.min(6.7, shuttle.pos[0])),
+            Math.max(-6.7, Math.min(6.7, headCenter[0])),
             0.02,
-            Math.max(-3.05, Math.min(3.05, shuttle.pos[2])),
+            Math.max(-3.05, Math.min(3.05, headCenter[2])),
           ])
           landGeo.setAttribute('position', new THREE.BufferAttribute(landPos, 3))
           const landDot = new THREE.Points(landGeo, landMat)
@@ -116,11 +130,11 @@ export default meta
 type Story = StoryObj<TrajectoryArgs>
 
 export const HighServe: Story = {
-  args: { speed: 18, angle: 45, heading: 90, trailOnly: false },
+  args: { speed: 16, angle: 34, heading: 90, trailOnly: false },
 }
 
 export const FastDrive: Story = {
-  args: { speed: 28, angle: 12, heading: 90, trailOnly: false },
+  args: { speed: 18, angle: 12, heading: 90, trailOnly: false },
 }
 
 export const TrailOnly: Story = {
@@ -128,5 +142,5 @@ export const TrailOnly: Story = {
 }
 
 export const CrossCourt: Story = {
-  args: { speed: 14, angle: 20, heading: 60, trailOnly: false },
+  args: { speed: 14, angle: 20, heading: 70, trailOnly: false },
 }

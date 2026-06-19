@@ -1,6 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/html'
 import * as THREE from 'three'
 import { createCourt } from '../render/court'
+import {
+  getShuttlecockHeadCenter,
+  hasShuttlecockHeadLanded,
+  placeShuttlecockHeadOnGround,
+} from '../render/shuttlecockMesh'
 import { mountScene } from './threeHelper'
 import { launchShuttlecock, stepShuttlecock, DEFAULT_SHUTTLECOCK } from '../physics/shuttlecock'
 
@@ -66,17 +71,21 @@ const meta: Meta<MultiArgs> = {
         const s = states[i]
         const next = stepShuttlecock(s, 1 / 60, DEFAULT_SHUTTLECOCK, 8)
         states[i] = next
+        const headLanded = hasShuttlecockHeadLanded(next.pos, next.vel)
 
-        if (next.pos[1] > 0) {
+        if (!headLanded) {
           trajPositions[i].push([next.pos[0], next.pos[1], next.pos[2]])
         }
 
-        if (next.pos[1] <= 0 || trajPositions[i].length >= 250) {
+        if (headLanded || trajPositions[i].length >= 250) {
           finished.add(i)
           // Mark landing
           const landMat = new THREE.PointsMaterial({ color: colors[i], size: 0.1 })
           const landGeo = new THREE.BufferGeometry()
-          const p = trajPositions[i][trajPositions[i].length - 1]
+          const landedPos = headLanded ? placeShuttlecockHeadOnGround(next.pos, next.vel) : next.pos
+          const p = headLanded
+            ? getShuttlecockHeadCenter(landedPos, next.vel)
+            : trajPositions[i][trajPositions[i].length - 1]
           landGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([p[0], 0.02, p[2]]), 3))
           const dot = new THREE.Points(landGeo, landMat)
           ctx.scene.add(dot)

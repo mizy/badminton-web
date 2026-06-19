@@ -3,7 +3,7 @@
 import type { ShuttlecockState } from '../physics/shuttlecock'
 import type { PlayerState } from '../character/types'
 
-export type GamePhase = 'idle' | 'playing' | 'point_scored' | 'set_end' | 'match_end'
+export type GamePhase = 'idle' | 'playing' | 'paused' | 'point_scored' | 'set_end' | 'match_end'
 
 export interface SetScore {
   home: number
@@ -29,24 +29,24 @@ export interface GameState {
 }
 
 export function createDefaultMatchState(): MatchState {
-    return {
-      server: 0,
-      currentSet: 0,
-      sets: [{ home: 0, away: 0 }, { home: 0, away: 0 }, { home: 0, away: 0 }],
-      points: [0, 0],
-      isDeuce: false,
-      serviceSide: 'right',
-    }
+  return {
+    server: 0,
+    currentSet: 0,
+    sets: [{ home: 0, away: 0 }, { home: 0, away: 0 }, { home: 0, away: 0 }],
+    points: [0, 0],
+    isDeuce: false,
+    serviceSide: 'right',
   }
+}
 
-  /** 创建完整游戏初始状态 */
-  export function createFullGameState(): GameState {
-    return {
-      phase: 'idle',
-      shuttle: null,
-      players: [null, null],
-      match: createDefaultMatchState(),
-      currentPlayer: 0,
-      elapsed: 0,
-    }
+/** 创建完整游戏初始状态 */
+export function createFullGameState(): GameState {
+  return {
+    phase: 'idle',
+    shuttle: null,
+    players: [null, null],
+    match: createDefaultMatchState(),
+    currentPlayer: 0,
+    elapsed: 0,
   }
+}

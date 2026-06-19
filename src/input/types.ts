@@ -7,9 +7,7 @@ export type InputAction =
   | { type: 'MOVE'; dir: MoveDirection }
   | { type: 'STOP_MOVE' }
   | { type: 'SWING_START' }
-  | { type: 'SWING_CHARGE'; power: number; elapsed: number }
   | { type: 'SWING_RELEASE' }
-  | { type: 'AIM'; horizontal: number; vertical: number }
   | { type: 'PAUSE' }
   | { type: 'RESET' }
 

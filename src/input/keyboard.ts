@@ -29,18 +29,40 @@ export function createKeyboardAdapter(
   let listener: InputListener | null = null
   let connected = false
   const pressed = new Set<string>()
+  const movementKeys = new Set([
+    keymap.moveUp,
+    keymap.moveDown,
+    keymap.moveLeft,
+    keymap.moveRight,
+  ])
 
   function handleKeyDown(e: KeyboardEvent) {
     if (!listener) return
     pressed.add(e.code)
-    const evt: InputEvent = { action: { type: 'SERVE' }, source: 'keyboard', timestamp: performance.now(), playerIndex }
+    if (movementKeys.has(e.code)) {
+      e.preventDefault()
+      emitMovement()
+      return
+    }
+
+    const evt: InputEvent = {
+      action: { type: 'SERVE' },
+      source: 'keyboard',
+      timestamp: performance.now(),
+      playerIndex,
+    }
 
     if (e.code === keymap.serve) {
+      e.preventDefault()
       evt.action = { type: 'SERVE' }
     } else if (e.code === keymap.swing) {
+      e.preventDefault()
       evt.action = { type: 'SWING_START' }
     } else if (e.code === keymap.pause) {
+      e.preventDefault()
       evt.action = { type: 'PAUSE' }
+    } else {
+      return
     }
 
     listener(evt)
@@ -49,7 +71,13 @@ export function createKeyboardAdapter(
   function handleKeyUp(e: KeyboardEvent) {
     if (!listener) return
     pressed.delete(e.code)
+    if (movementKeys.has(e.code)) {
+      e.preventDefault()
+      emitMovement()
+      return
+    }
     if (e.code === keymap.swing) {
+      e.preventDefault()
       listener({ action: { type: 'SWING_RELEASE' }, source: 'keyboard', timestamp: performance.now(), playerIndex })
     }
   }
@@ -65,18 +93,22 @@ export function createKeyboardAdapter(
     return { x: x / len, z: z / len }
   }
 
+  function emitMovement() {
+    if (!listener) return
+    const dir = computeMoveDirection()
+    if (dir) {
+      listener({ action: { type: 'MOVE', dir }, source: 'keyboard', timestamp: performance.now(), playerIndex })
+      return
+    }
+    listener({ action: { type: 'STOP_MOVE' }, source: 'keyboard', timestamp: performance.now(), playerIndex })
+  }
+
   let moveInterval: ReturnType<typeof setInterval> | null = null
 
   function startMoveLoop() {
     stopMoveLoop()
     moveInterval = setInterval(() => {
-      if (!listener) return
-      const dir = computeMoveDirection()
-      if (dir) {
-        listener({ action: { type: 'MOVE', dir }, source: 'keyboard', timestamp: performance.now(), playerIndex })
-      } else {
-        listener({ action: { type: 'STOP_MOVE' }, source: 'keyboard', timestamp: performance.now(), playerIndex })
-      }
+      emitMovement()
     }, 1000 / 60)
   }
 

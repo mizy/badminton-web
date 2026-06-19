@@ -14,7 +14,7 @@ pnpm test:watch   # vitest
 
 | Phase | 内容 | 关键文件 | 验证 |
 |-------|------|---------|------|
-| P1 | 球物理 + 场景 | `physics/*`, `render/*`, `game/gameState.ts` | `pnpm test` |
+| P1 | 球物理 + 场景 | `physics/*`, `render/*`, `play/*`, `game/reducer.ts` | `pnpm test` |
 | P2 | 碰撞集成 | `game/reducer.ts` 新增碰撞步骤 | 集成测试 |
 | P3 | 角色+输入+步法 | `input/*`, `character/*`, `render/playerMesh.ts` | 移动测试 |
 | P4 | 击球合成 | `character/shotSynthesis.ts`, `game/shotLegality.ts` | 6球路测试 |

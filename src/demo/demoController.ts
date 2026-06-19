@@ -8,11 +8,12 @@ import { decideTactical } from '../ai/tactical'
 export class DemoController {
   private homeConfig: AIConfig
   private awayConfig: AIConfig
-  private active = false
+  private active: boolean
 
-  constructor(homeConfig: AIConfig, awayConfig: AIConfig) {
+  constructor(homeConfig: AIConfig, awayConfig: AIConfig, active: boolean = false) {
     this.homeConfig = homeConfig
     this.awayConfig = awayConfig
+    this.active = active
   }
 
   toggle(): boolean {

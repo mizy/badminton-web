@@ -44,9 +44,7 @@ type InputAction =
   | { type: 'MOVE'; dir: MoveDirection }
   | { type: 'STOP_MOVE' }
   | { type: 'SWING_START' }
-  | { type: 'SWING_CHARGE'; power: number; elapsed: number }
   | { type: 'SWING_RELEASE' }
-  | { type: 'AIM'; horizontal: number; vertical: number }
   | { type: 'PAUSE' }
   | { type: 'RESET' }
 
@@ -68,7 +66,7 @@ interface InputAdapter {
 | 适配器 | 文件 | 平台绑定 | 特殊处理 |
 |--------|------|---------|---------|
 | 键盘 | `input/keyboard.ts` | `keydown`/`keyup` DOM 事件 | 轮询循环（60fps）检测 WASD 持续按下 → MOVE 事件 |
-| 手柄 | `input/gamepad.ts` *未来* | `Gamepad API` | 轮询摇杆/扳机 → MOVE/SWING_CHARGE 映射 |
+| 手柄 | `input/gamepad.ts` *未来* | `Gamepad API` | 轮询摇杆/按键 → MOVE/SWING 映射 |
 | 触屏 | `input/touch.ts` *未来* | `Touch` DOM 事件 | 虚拟摇杆 + 点击/滑动 → MOVE/SWING 映射 |
 | 网络 | `input/network.ts` *未来* | `WebSocket` | 反序列化远端 `InputEvent`，注入本地 playerIndex |
 

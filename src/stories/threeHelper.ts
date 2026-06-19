@@ -12,18 +12,29 @@ export interface StoryScene {
   dispose: () => void
 }
 
+function getContainerSize(container: HTMLElement): { width: number; height: number } {
+  const rect = container.getBoundingClientRect()
+  return {
+    width: Math.max(Math.round(rect.width || container.clientWidth || 800), 1),
+    height: Math.max(Math.round(rect.height || container.clientHeight || 600), 1),
+  }
+}
+
 /** 创建 Three.js 场景挂载到容器中 */
 export function mountScene(container: HTMLElement): StoryScene {
+  const initialSize = getContainerSize(container)
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(0x1a1a2e)
 
-  const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100)
+  const camera = new THREE.PerspectiveCamera(45, initialSize.width / initialSize.height, 0.1, 100)
   camera.position.set(-8, 10, 0)
   camera.lookAt(0, 1, 0)
 
   const renderer = new THREE.WebGLRenderer({ antialias: true })
-  renderer.setSize(container.clientWidth, container.clientHeight)
+  renderer.setSize(initialSize.width, initialSize.height, false)
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.domElement.style.width = '100%'
+  renderer.domElement.style.height = '100%'
   renderer.shadowMap.enabled = true
   container.appendChild(renderer.domElement)
 
@@ -62,20 +73,27 @@ export function mountScene(container: HTMLElement): StoryScene {
   }
   animate()
 
-  // Resize
-  const onResize = () => {
-    const w = container.clientWidth
-    const h = container.clientHeight
+  const syncSize = () => {
+    const { width, height } = getContainerSize(container)
+    const w = Math.max(width, 1)
+    const h = Math.max(height, 1)
     camera.aspect = w / h
     camera.updateProjectionMatrix()
-    renderer.setSize(w, h)
+    renderer.setSize(w, h, false)
   }
-  window.addEventListener('resize', onResize)
-  // Override dispose to also remove listener
+  requestAnimationFrame(syncSize)
+  window.addEventListener('resize', syncSize)
+
+  const resizeObserver = typeof ResizeObserver === 'undefined'
+    ? null
+    : new ResizeObserver(syncSize)
+  resizeObserver?.observe(container)
+
   const origDispose = ctx.dispose
   ctx.dispose = () => {
     origDispose()
-    window.removeEventListener('resize', onResize)
+    window.removeEventListener('resize', syncSize)
+    resizeObserver?.disconnect()
   }
 
   return ctx

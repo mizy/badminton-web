@@ -14,11 +14,14 @@ export interface ShuttlecockConfig {
   magnusCoef: number
 }
 
-export const DEFAULT_SHUTTLECOCK: ShuttlecockConfig = {
+/** 77 速羽球基准配置。77 是球速等级，不是 77m/s 初速。 */
+export const SPEED_77_SHUTTLECOCK: ShuttlecockConfig = {
   mass: 0.005,
   crossSection: 0.0020,
   magnusCoef: 0.00025,
 }
+
+export const DEFAULT_SHUTTLECOCK: ShuttlecockConfig = SPEED_77_SHUTTLECOCK
 
 const AIR_DENSITY = 1.225
 const GRAVITY: [number, number, number] = [0, -9.81, 0]

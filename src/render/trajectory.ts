@@ -1,9 +1,10 @@
-/** 羽球轨迹示踪 — 飞行路径线 + 间隔点 */
+/** 羽球轨迹示踪 — 头亮尾淡的彗星状飞行路径 */
 
 import * as THREE from 'three'
 
-const MAX_POINTS = 400
-const DOT_INTERVAL = 10
+const MAX_POINTS = 100
+const PARTICLE_INTERVAL = 2
+const TRAIL_COLOR = [0.0, 1.0, 0.82] as const
 
 export interface TrailSystem {
   update: (pos: [number, number, number]) => void
@@ -15,59 +16,95 @@ export interface TrailSystem {
 export function createTrailSystem(scene: THREE.Scene): TrailSystem {
   const positions: number[] = []
 
-  // --- Trajectory line ---
   const lineMat = new THREE.LineBasicMaterial({
-    color: 0x00ffcc,
+    blending: THREE.AdditiveBlending,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.82,
+    vertexColors: true,
   })
   const lineGeo = new THREE.BufferGeometry()
   const line = new THREE.Line(lineGeo, lineMat)
   scene.add(line)
 
-  // --- Dots at intervals ---
-  const dotMat = new THREE.PointsMaterial({
-    color: 0x00ffcc,
-    size: 0.18,
-    transparent: true,
-    opacity: 0.8,
+  const particleMat = new THREE.PointsMaterial({
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    opacity: 0.7,
+    size: 0.14,
     sizeAttenuation: true,
+    transparent: true,
+    vertexColors: true,
   })
-  const dotGeo = new THREE.BufferGeometry()
-  const dots = new THREE.Points(dotGeo, dotMat)
-  scene.add(dots)
+  const particleGeo = new THREE.BufferGeometry()
+  const particles = new THREE.Points(particleGeo, particleMat)
+  scene.add(particles)
 
-  // --- Glow dots (larger, more transparent) ---
-  const glowDotMat = new THREE.PointsMaterial({
-    color: 0x66eeff,
-    size: 0.35,
+  const headGlowCanvas = document.createElement('canvas')
+  headGlowCanvas.width = 128
+  headGlowCanvas.height = 128
+  const ctx = headGlowCanvas.getContext('2d')!
+  const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64)
+  gradient.addColorStop(0, 'rgba(255, 255, 210, 0.9)')
+  gradient.addColorStop(0.22, 'rgba(0, 255, 210, 0.55)')
+  gradient.addColorStop(0.52, 'rgba(0, 180, 255, 0.18)')
+  gradient.addColorStop(1, 'rgba(0, 180, 255, 0)')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, 128, 128)
+
+  const headGlowTexture = new THREE.CanvasTexture(headGlowCanvas)
+  const headGlowMat = new THREE.SpriteMaterial({
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    map: headGlowTexture,
+    opacity: 0.72,
     transparent: true,
-    opacity: 0.4,
-    sizeAttenuation: true,
   })
-  const glowDotGeo = new THREE.BufferGeometry()
-  const glowDots = new THREE.Points(glowDotGeo, glowDotMat)
-  scene.add(glowDots)
+  const headGlow = new THREE.Sprite(headGlowMat)
+  headGlow.scale.set(0.44, 0.44, 1)
+  headGlow.visible = false
+  scene.add(headGlow)
+
+  function writeCometColors(colors: number[], age01: number): void {
+    const intensity = 0.05 + 0.95 * Math.pow(age01, 2.2)
+    colors.push(
+      TRAIL_COLOR[0] * intensity,
+      TRAIL_COLOR[1] * intensity,
+      TRAIL_COLOR[2] * intensity,
+    )
+  }
 
   function updateGeometry() {
-    const floatArr = new Float32Array(positions)
-    line.geometry.setAttribute('position', new THREE.BufferAttribute(floatArr, 3))
-    line.geometry.setDrawRange(0, positions.length / 3)
+    const pointCount = positions.length / 3
+    const lineColors: number[] = []
+    const particlePositions: number[] = []
+    const particleColors: number[] = []
 
-    const dotPositions: number[] = []
-    const glowPositions: number[] = []
-    for (let i = 0; i < positions.length; i += 3) {
-      if ((i / 3) % DOT_INTERVAL === 0) {
-        dotPositions.push(positions[i], positions[i + 1], positions[i + 2])
-      }
-      if ((i / 3) % (DOT_INTERVAL * 3) === 0) {
-        glowPositions.push(positions[i], positions[i + 1], positions[i + 2])
+    for (let pointIndex = 0; pointIndex < pointCount; pointIndex++) {
+      const age01 = pointCount <= 1 ? 1 : pointIndex / (pointCount - 1)
+      writeCometColors(lineColors, age01)
+
+      if (pointIndex % PARTICLE_INTERVAL === 0 || pointIndex === pointCount - 1) {
+        const offset = pointIndex * 3
+        particlePositions.push(positions[offset], positions[offset + 1], positions[offset + 2])
+        writeCometColors(particleColors, age01)
       }
     }
-    dots.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(dotPositions), 3))
-    dots.geometry.setDrawRange(0, dotPositions.length / 3)
-    glowDots.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(glowPositions), 3))
-    glowDots.geometry.setDrawRange(0, glowPositions.length / 3)
+
+    lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3))
+    lineGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(lineColors), 3))
+    lineGeo.setDrawRange(0, pointCount)
+
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(particlePositions), 3))
+    particleGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(particleColors), 3))
+    particleGeo.setDrawRange(0, particlePositions.length / 3)
+
+    if (pointCount > 0) {
+      const last = positions.length - 3
+      headGlow.position.set(positions[last], positions[last + 1], positions[last + 2])
+      headGlow.visible = line.visible
+    } else {
+      headGlow.visible = false
+    }
   }
 
   return {
@@ -84,19 +121,19 @@ export function createTrailSystem(scene: THREE.Scene): TrailSystem {
     },
     setVisible(v: boolean) {
       line.visible = v
-      dots.visible = v
-      glowDots.visible = v
+      particles.visible = v
+      headGlow.visible = v && positions.length > 0
     },
     dispose() {
       scene.remove(line)
-      scene.remove(dots)
-      scene.remove(glowDots)
-      line.geometry.dispose()
+      scene.remove(particles)
+      scene.remove(headGlow)
+      lineGeo.dispose()
       lineMat.dispose()
-      dotGeo.dispose()
-      dotMat.dispose()
-      glowDotGeo.dispose()
-      glowDotMat.dispose()
+      particleGeo.dispose()
+      particleMat.dispose()
+      headGlowTexture.dispose()
+      headGlowMat.dispose()
     },
   }
 }

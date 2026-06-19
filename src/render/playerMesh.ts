@@ -1,4 +1,4 @@
-/** 球员 3D 网格 — 加大几何体 + 高饱和发光 + 头顶标记环 + 角色标签，便于视频可见 */
+/** 球员 3D 网格 — voxel 风格运动员，远景下优先保证轮廓和持拍方向可读 */
 
 import * as THREE from 'three'
 
@@ -6,7 +6,12 @@ export interface PlayerMeshColors {
   body: number
   head: number
   racket: number
-  marker: number   // 头顶标记色（高饱和发光）
+  marker: number   // 头顶标记色
+}
+
+export interface PlayerMeshOptions {
+  glowScale?: number
+  labelScale?: number
 }
 
 const DEFAULT_COLORS: PlayerMeshColors = {
@@ -16,28 +21,29 @@ const DEFAULT_COLORS: PlayerMeshColors = {
   marker: 0x44aaff,
 }
 
-/** 创建彩色标签精灵 (如 "A" / "B") — 加大尺寸确保视频可见 */
-function createLabelSprite(text: string, bgColor: string): THREE.Sprite {
+/** 创建彩色标签精灵 (如 "A" / "B") */
+function createLabelSprite(text: string, bgColor: string, scale: number): THREE.Sprite {
   const canvas = document.createElement('canvas')
-  canvas.width = 256
-  canvas.height = 256
+  canvas.width = 192
+  canvas.height = 192
   const ctx = canvas.getContext('2d')!
 
-  // Background circle
-  ctx.beginPath()
-  ctx.arc(128, 128, 110, 0, Math.PI * 2)
-  ctx.fillStyle = bgColor
-  ctx.fill()
-  ctx.strokeStyle = '#ffffff'
-  ctx.lineWidth = 8
-  ctx.stroke()
+  ctx.imageSmoothingEnabled = false
+  ctx.fillStyle = 'rgba(0, 0, 0, 0)'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-  // Text
+  // Pixel-style square badge.
+  ctx.fillStyle = bgColor
+  ctx.fillRect(28, 28, 136, 136)
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 10
+  ctx.strokeRect(28, 28, 136, 136)
+
   ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 128px monospace'
+  ctx.font = 'bold 104px monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(text, 128, 136)
+  ctx.fillText(text, 96, 102)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.minFilter = THREE.LinearFilter
@@ -49,9 +55,51 @@ function createLabelSprite(text: string, bgColor: string): THREE.Sprite {
     depthWrite: false,
   })
   const sprite = new THREE.Sprite(mat)
-  sprite.scale.set(2.5, 2.5, 1)
+  sprite.scale.set(scale, scale, 1)
   sprite.position.y = 4.5
   return sprite
+}
+
+function createMaterial(color: number, roughness = 0.8): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color,
+    flatShading: true,
+    metalness: 0.04,
+    roughness,
+  })
+}
+
+function addMesh(group: THREE.Group, mesh: THREE.Mesh): THREE.Mesh {
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  group.add(mesh)
+  return mesh
+}
+
+function createCylinder(
+  radiusTop: number,
+  radiusBottom: number,
+  height: number,
+  material: THREE.Material,
+  position: [number, number, number],
+  rotation: [number, number, number] = [0, 0, 0],
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, 12), material)
+  mesh.position.set(position[0], position[1], position[2])
+  mesh.rotation.set(rotation[0], rotation[1], rotation[2])
+  return mesh
+}
+
+function createBox(
+  size: [number, number, number],
+  material: THREE.Material,
+  position: [number, number, number],
+  rotation: [number, number, number] = [0, 0, 0],
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size[0], size[1], size[2]), material)
+  mesh.position.set(position[0], position[1], position[2])
+  mesh.rotation.set(rotation[0], rotation[1], rotation[2])
+  return mesh
 }
 
 /** 创建球员位置地面标记 (跟随球员移动的彩色光环) */
@@ -90,58 +138,100 @@ export function createGroundMarker(color: number): THREE.Group {
 export function createPlayerMesh(
   colors: PlayerMeshColors = DEFAULT_COLORS,
   label = 'P',
+  options: PlayerMeshOptions = {},
 ): THREE.Group {
+  const glowScale = options.glowScale ?? 0.7
+  const labelScale = options.labelScale ?? 0.45
   const group = new THREE.Group()
 
-  // Body (torso) — wider/taller for video visibility
-  const bodyGeo = new THREE.CylinderGeometry(0.35, 0.5, 2.8, 12)
-  const bodyMat = new THREE.MeshBasicMaterial({ color: colors.body })
-  const body = new THREE.Mesh(bodyGeo, bodyMat)
-  body.position.y = 1.4
-  body.castShadow = true
-  group.add(body)
+  const uniformMat = createMaterial(colors.body, 0.65)
+  const accentMat = createMaterial(colors.marker, 0.55)
+  const skinMat = createMaterial(colors.head, 0.9)
+  const darkMat = createMaterial(0x1f2633, 0.85)
+  const shoeMat = createMaterial(0xf2f4f7, 0.75)
+  const racketMat = createMaterial(colors.racket, 0.35)
 
-  // Head (sphere) — bigger for video visibility
-  const headGeo = new THREE.SphereGeometry(0.35, 16, 12)
-  const headMat = new THREE.MeshBasicMaterial({ color: colors.head })
-  const head = new THREE.Mesh(headGeo, headMat)
-  head.position.y = 2.8
-  group.add(head)
+  addVoxelBody(group, uniformMat, accentMat, skinMat, darkMat, shoeMat)
+  addRacket(group, racketMat)
+  addMarker(group, colors.marker, glowScale)
 
-  // Racket handle — scaled with body radius (0.35 vs original 1.6)
-  const racketGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.6, 6)
-  const racketMat = new THREE.MeshBasicMaterial({ color: colors.racket })
-  const racket = new THREE.Mesh(racketGeo, racketMat)
-  racket.position.set(0.3, 1.5, 0)
-  racket.rotation.z = -Math.PI / 4
-  group.add(racket)
+  if (labelScale > 0) {
+    const bgHex = '#' + colors.body.toString(16).padStart(6, '0')
+    const labelSprite = createLabelSprite(label, bgHex, labelScale)
+    labelSprite.position.y = 2.95
+    group.add(labelSprite)
+  }
 
-  // Racket head (ring)
-  const ringGeo = new THREE.TorusGeometry(0.15, 0.03, 8, 14)
-  const ringMat = new THREE.MeshBasicMaterial({ color: colors.racket })
-  const ring = new THREE.Mesh(ringGeo, ringMat)
-  ring.position.set(0.65, 1.95, 0)
-  group.add(ring)
+  return group
+}
 
-  // 头顶标记环（大尺寸 + 高饱和，用于视频中远距离区分阵营）
-  const markerGeo = new THREE.TorusGeometry(0.6, 0.1, 12, 20)
+function addVoxelBody(
+  group: THREE.Group,
+  uniformMat: THREE.Material,
+  accentMat: THREE.Material,
+  skinMat: THREE.Material,
+  darkMat: THREE.Material,
+  shoeMat: THREE.Material,
+): void {
+  addMesh(group, createBox([0.32, 0.12, 0.48], shoeMat, [-0.17, 0.06, 0.13], [0, 0.2, 0]))
+  addMesh(group, createBox([0.32, 0.12, 0.48], shoeMat, [0.17, 0.06, -0.13], [0, -0.2, 0]))
+
+  addMesh(group, createBox([0.2, 0.62, 0.2], darkMat, [-0.16, 0.43, 0.04], [0.08, 0, 0.06]))
+  addMesh(group, createBox([0.2, 0.62, 0.2], darkMat, [0.16, 0.43, -0.04], [-0.08, 0, -0.06]))
+  addMesh(group, createBox([0.58, 0.28, 0.36], darkMat, [0, 0.9, 0]))
+
+  addMesh(group, createBox([0.64, 0.76, 0.34], uniformMat, [0, 1.38, 0]))
+  addMesh(group, createBox([0.66, 0.14, 0.04], accentMat, [0, 1.58, 0.19]))
+  addMesh(group, createBox([0.18, 0.12, 0.16], skinMat, [0, 1.84, 0]))
+
+  addMesh(group, createBox([0.42, 0.42, 0.38], skinMat, [0, 2.12, 0]))
+  addMesh(group, createBox([0.44, 0.12, 0.4], darkMat, [0, 2.39, -0.01]))
+  addMesh(group, createBox([0.46, 0.22, 0.08], darkMat, [0, 2.27, -0.21]))
+
+  addMesh(group, createBox([0.18, 0.42, 0.18], skinMat, [-0.46, 1.54, 0.02], [0.02, 0, 0.35]))
+  addMesh(group, createBox([0.16, 0.38, 0.16], skinMat, [-0.58, 1.2, 0.04], [0.04, 0, 0.05]))
+  addMesh(group, createBox([0.17, 0.14, 0.17], skinMat, [-0.59, 0.94, 0.05]))
+
+  addMesh(group, createBox([0.18, 0.42, 0.18], skinMat, [0.47, 1.52, -0.02], [0.02, 0, -0.48]))
+  addMesh(group, createBox([0.16, 0.4, 0.16], skinMat, [0.73, 1.26, -0.04], [0.02, 0, -0.9]))
+  addMesh(group, createBox([0.17, 0.14, 0.17], skinMat, [0.9, 1.04, -0.05], [0, 0, -0.2]))
+}
+
+function addRacket(group: THREE.Group, racketMat: THREE.Material): void {
+  addMesh(group, createCylinder(0.018, 0.018, 0.78, racketMat, [1.02, 1.24, -0.07], [0.25, 0.2, -0.7]))
+
+  const head = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.018, 8, 24), racketMat)
+  head.position.set(1.25, 1.52, -0.14)
+  head.rotation.set(0.28, 0.25, -0.72)
+  addMesh(group, head)
+
+  const stringMat = new THREE.MeshBasicMaterial({ color: 0xe9eef5, transparent: true, opacity: 0.55 })
+  for (const offset of [-0.08, 0, 0.08]) {
+    addMesh(group, createCylinder(0.004, 0.004, 0.32, stringMat, [1.25 + offset, 1.52, -0.14], [0.28, 0.25, Math.PI / 2 - 0.72]))
+    addMesh(group, createCylinder(0.004, 0.004, 0.32, stringMat, [1.25, 1.52 + offset, -0.14], [0.28, 0.25, -0.72]))
+  }
+}
+
+function addMarker(group: THREE.Group, color: number, glowScale: number): void {
+  const markerGeo = new THREE.TorusGeometry(0.28, 0.025, 8, 14)
   const markerMat = new THREE.MeshBasicMaterial({
-    color: colors.marker,
+    color,
     transparent: true,
-    opacity: 1.0,
+    opacity: 0.4,
   })
   const marker = new THREE.Mesh(markerGeo, markerMat)
-  marker.position.y = 3.5
+  marker.position.y = 2.66
   marker.rotation.x = Math.PI / 2
   group.add(marker)
 
-  // 头顶标记光柱 (sprite glow) — much bigger and brighter
+  if (glowScale <= 0) return
+
   const glowCanvas = document.createElement('canvas')
   glowCanvas.width = 128
   glowCanvas.height = 128
   const ctx = glowCanvas.getContext('2d')!
   const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64)
-  const colorHex = '#' + colors.marker.toString(16).padStart(6, '0')
+  const colorHex = '#' + color.toString(16).padStart(6, '0')
   gradient.addColorStop(0, colorHex + 'ff')
   gradient.addColorStop(0.2, colorHex + 'aa')
   gradient.addColorStop(0.5, colorHex + '44')
@@ -157,16 +247,9 @@ export function createPlayerMesh(
     depthWrite: false,
   })
   const glow = new THREE.Sprite(glowMat)
-  glow.scale.set(5.0, 5.0, 1)
-  glow.position.y = 3.5
+  glow.scale.set(glowScale, glowScale, 1)
+  glow.position.y = 2.66
   group.add(glow)
-
-  // 标签精灵 (显示 A/B 字母, 确保视频中清晰可见)
-  const bgHex = '#' + colors.body.toString(16).padStart(6, '0')
-  const labelSprite = createLabelSprite(label, bgHex)
-  group.add(labelSprite)
-
-  return group
 }
 
 export function updatePlayerMesh(

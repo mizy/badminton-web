@@ -25,9 +25,6 @@ export function createPlayer(side: 0 | 1): PlayerState {
     racket,
     stamina: 100,
     maxStamina: 100,
-    isCharging: false,
-    chargeStartTime: 0,
-    lastSwingTime: 0,
     wantsToSwing: false,
     side,
   }

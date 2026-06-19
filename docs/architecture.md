@@ -7,36 +7,39 @@
 
 ## 当前现状
 
-Phase 1 实际运行的代码模块。只有以下代码被 `main.ts` 直接或间接使用。
+当前运行态已经从 Phase 1 的直筒原型切到 reducer 驱动，并新增了一个很薄的 `play/` 浏览器编排层。`main.ts` 现在只负责入口调用，运行时编排由 `play/start.ts` 和 `play/frame.ts` 承担。
 
 ### 运行态模块依赖图
 
 ```mermaid
 graph TD
-    subgraph Runtime["Phase 1 运行态"]
-        MAIN[main.ts<br/>编排入口] --> GS[game/gameState.ts]
-        MAIN --> CAM[render/camera.ts]
-        MAIN --> CT[render/court.ts]
-        MAIN --> SM[render/shuttlecockMesh.ts]
-        GS -->|stepShuttlecock| PHY[physics/shuttlecock.ts]
-    end
-
-    subgraph Orphan["已实现·未集成"]
-        RKT[physics/racket.ts]
-        COL[physics/collision.ts]
+    subgraph Runtime["当前运行态"]
+        MAIN[main.ts<br/>@entry] --> START[play/start.ts]
+        START --> INPUT[input/keyboard.ts]
+        START --> HOTKEYS[play/hotkeys.ts]
+        START --> HUD[render/hud.ts]
+        START --> DEMO[demo/demoController.ts]
+        START --> REC[recording/recorder.ts]
+        START --> FRAME[play/frame.ts]
+        FRAME --> REDUCER[game/reducer.ts]
+        INPUT --> REDUCER
+        DEMO --> REDUCER
+        REDUCER --> TICK[game/tickService.ts]
+        TICK --> PHY[physics/*]
+        TICK --> CHAR[character/*]
+        TICK --> AI[ai/*]
+        TICK --> MATCH[game/match.ts]
+        TICK --> STAMINA[game/stamina.ts]
     end
 
     subgraph Three["Three.js 依赖"]
         three[three]
     end
 
-    CAM -.-> three
-    CT -.-> three
-    SM -.-> three
+    RENDER -.-> three
     MAIN -.-> three
 
     style Runtime fill:#4a90d9,color:#fff
-    style Orphan fill:#555,color:#ccc
     style Three fill:#333,color:#aaa
 ```
 
@@ -54,22 +57,30 @@ function launchShuttlecock(origin, speed, angleDeg, headingDeg, spin?): Shuttlec
 
 ✅ **已测试**：`shuttlecock.test.ts` 包含数值稳定性测试。
 
-#### `game/gameState.ts`
+#### `game/types.ts` + `game/reducer.ts`
 
 ```typescript
-type GamePhase = 'idle' | 'playing'
-type GameState = {
-  phase: GamePhase
-  shuttle: ShuttlecockState | null
-  readonly players: [null, null]   // Phase 2 扩展预留
-}
+type GamePhase = 'idle' | 'playing' | 'paused' | 'point_scored' | 'set_end' | 'match_end'
+type GameAction =
+  | PlayerGameAction
+  | { type: 'TICK'; dt: number; aiConfigs?: TickAIConfigs }
+  | { type: 'POINT_DELAY_ELAPSED' }
+  | { type: 'RESOLVE_SET_END' }
+  | { type: 'RESTART_MATCH'; players: GameState['players'] }
 
-function createInitialState(): GameState
-function serveShuttle(): ShuttlecockState
-function stepGame(state, dt): GameState   // 物理步进 + 落地检测
+function createFullGameState(): GameState
+function gameReducer(state, action): GameState
 ```
 
-**当前实现**：ad-hoc 状态变更，直接赋值而非 reducer。发球参数硬编码。
+**当前实现**：所有 `GameState` 变更统一经过 reducer；比赛结算、回合延时和重开比赛也都通过显式 action 进入。
+
+#### `game/tickService.ts`
+
+```typescript
+function processGameTick(state, dt, aiConfigs?): GameState
+```
+
+负责一帧内的物理步进、碰撞检测、击球合成和计分判定。
 
 #### `render/camera.ts`
 
@@ -92,11 +103,39 @@ function createCourt(scene: THREE.Scene): void    // 球场 mesh + 网 + 支柱
 function createShuttlecockMesh(): THREE.Group      // 球头(半球) + 裙(锥体)
 ```
 
-#### `main.ts` — 编排入口
+#### `input/keyboard.ts`
 
-@entry 负责：场景组装 → 灯光 → 游戏循环(物理+同步+相机+渲染) → 键盘事件 → resize。
+```typescript
+type KeyMapping = { moveUp, moveDown, moveLeft, moveRight, serve, swing, pause: string }
+function createKeyboardAdapter(playerIndex?, keymap?): InputAdapter
+```
 
-当前职责过载，未使用 `input/` 抽象层。
+当前实现：WASD 方向轮询 + keydown/keyup 立即同步，主循环通过 `InputEvent -> GameAction` 接入 reducer。
+
+#### `demo/demoController.ts`
+
+```typescript
+function getActions(state): GameAction[]
+function getAIConfigs(): { home: AIConfig; away: AIConfig }
+```
+
+当前实现：演示模式只负责生成 AI MOVE/STOP_MOVE 动作，不直接改状态。
+
+#### `play/start.ts`
+
+负责：场景组装 → HUD/录像 bootstrap → 输入适配器连接 → 动画循环安装。
+
+#### `play/frame.ts`
+
+负责：单帧逻辑推进（计时、自动发球、回合延时、AI MOVE、tick、render sync）。
+
+#### `render/hud.ts`
+
+负责：3D 计分牌、状态板和 DOM overlay 的创建与更新。
+
+#### `main.ts` — 入口
+
+@entry 只负责调用 `startGame()`。
 
 ---
 
@@ -104,28 +143,29 @@ function createShuttlecockMesh(): THREE.Group      // 球头(半球) + 裙(锥�
 
 ```mermaid
 graph LR
-    subgraph Phase1["Phase 1 实际数据流"]
-        KB[keydown 事件] -->|Space| GS1[game/gameState]
-        GS1 -->|stepShuttlecock| S1[physics/shuttlecock]
-        GS1 -->|pos| M1[shuttlecockMesh]
-        M1 -->|render| R1[renderer]
-        CAM1[render/camera] --> R1
+    subgraph Runtime["当前实际数据流"]
+        KB[input/keyboard] --> IE[InputEvent]
+        IE --> GA[GameAction]
+        DEMO[demoController] --> GA
+        GA --> REDUCER[gameReducer]
+        REDUCER --> TICK[processGameTick]
+        TICK --> STATE[GameState]
+        STATE --> SYNC[render sync]
+        SYNC --> R1[renderer]
     end
 
-    style Phase1 fill:#4a90d9,color:#fff
+    style Runtime fill:#4a90d9,color:#fff
 ```
 
-**关键观察**：Phase 1 的数据流是"直筒式"，没有集中归约器，输入直接修改全局状态。
+**关键观察**：运行态已经收敛到单向数据流；当前剩余债务主要是 `play/start.ts` 仍同时拥有 scene bootstrap、录像和浏览器事件安装。
 
 ### 已知架构债务
 
 | # | 问题 | 位置 | 影响 |
 |---|------|------|------|
-| 1 | `game/` 旧 `GameState` 与新 `game/types.ts` 共存 | `gameState.ts` vs `game/types.ts` | P2 需统一 |
-| 2 | `main.ts` 直接处理键盘事件 | `main.ts:56-63` | 阻塞 input 抽象层集成 |
-| 3 | `physics/racket.ts`、`collision.ts` 无人调用 | 物理模块 | P2 集成前为孤儿代码 |
-| 4 | 发球参数硬编码 | `gameState.ts:27-30` | P4 击球合成需重构 |
-| 5 | `main.ts` 同步 Mesh + 相机 + render 混在一起 | `main.ts:68-97` | 阻碍渲染独立演化 |
+| 1 | `play/start.ts` 仍同时拥有场景 bootstrap、录像和浏览器事件安装 | `play/start.ts` | 编排层继续扩展时仍可能膨胀 |
+| 2 | 发球参数仍硬编码在 reducer | `game/reducer.ts` | 击球系统继续深化时需要抽到规则/配置层 |
+| 3 | 录像/HUD 计时器仍是运行时局部状态 | `play/viewState.ts` | 无法参与回放或纯逻辑测试 |
 
 ---
 
@@ -138,6 +178,7 @@ graph LR
 ```mermaid
 graph TD
     subgraph Existing["当前运行态（P1-P6 已集成）"]
+        PLAY[play/*]
         PHY[physics/*]
         CHAR[character/*]
         AI[ai/*]
@@ -175,9 +216,7 @@ type InputAction =
   | { type: 'MOVE'; dir: MoveDirection }
   | { type: 'STOP_MOVE' }
   | { type: 'SWING_START' }
-  | { type: 'SWING_CHARGE'; power: number; elapsed: number }
   | { type: 'SWING_RELEASE' }
-  | { type: 'AIM'; horizontal: number; vertical: number }
   | { type: 'PAUSE' }
   | { type: 'RESET' }
 
@@ -205,8 +244,7 @@ type MovementState = { targetDir, currentVel, gait, readiness: number }
 type PlayerState = {
   pos: [3]number; facing: number; movement: MovementState
   racket: RacketState; stamina: number; maxStamina: number
-  isCharging: boolean; chargeStartTime: number
-  lastSwingTime: number; side: 0 | 1
+  wantsToSwing: boolean; side: 0 | 1
 }
 ```
 
@@ -217,7 +255,7 @@ type MovementConfig = { maxSpeed, acceleration, deceleration, turnPenalty, sprin
 function updateMovement(player, dt, cfg?): PlayerState
 ```
 
-✅ 加速度/减速度模型、急转惩罚（角度 > 45° 减速）、到位度计算。已由 `game/reducer.ts` 调用（但 reducer 未接入主循环）。
+✅ 加速度/减速度模型、急转惩罚（角度 > 45° 减速）、到位度计算。已由 `game/reducer.ts` 经 `TICK` 主循环调用。
 
 #### `character/shotSynthesis.ts` — 击球合成
 
@@ -432,7 +470,7 @@ graph TD
 
 | Phase | 依赖 | 集成内容 | 关键动作 |
 |-------|------|---------|---------|
-| **P1** | — | physics/shuttlecock, render/*, game/gameState.ts | ✅ 已完成 |
+| **P1** | — | physics/shuttlecock, render/*, game/reducer + game/types, play/start | ✅ 已完成 |
 | **P2** | P1 | physics/racket + collision 接入 game loop | ✅ 已集成 |
 | **P3** | P1 | input/*, character/movement, render/playerMesh | ✅ 已集成 |
 | **P4** | P2+P3 | shotSynthesis, timing, shotLegality | ✅ 已集成 |
