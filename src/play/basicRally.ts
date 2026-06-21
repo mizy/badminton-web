@@ -1,11 +1,10 @@
 import { getAIConfig } from '../ai/difficulty'
-import { decideTactical } from '../ai/tactical'
 import type { AIConfig, AIDifficulty } from '../ai/types'
 import { createPlayer } from '../game/playerFactory'
 import { gameReducer } from '../game/reducer'
-import type { GameAction } from '../game/reducer'
 import { createFullGameState, type GameState } from '../game/types'
 import type { ShuttlecockState } from '../physics/shuttlecock'
+import { createAIMoveActions } from './aiMoveActions'
 
 const DEFAULT_AUTO_SERVE_DELAY_SECONDS = 0.15
 const DEFAULT_POINT_PAUSE_SECONDS = 0.8
@@ -177,39 +176,12 @@ function resolveSetEnd(game: GameState): GameState {
 }
 
 function dispatchAIMovement(game: GameState, homeAI: AIConfig, awayAI: AIConfig): GameState {
-  if (game.phase !== 'playing' || !game.shuttle) return game
-  if (!game.players[0] || !game.players[1]) return game
-
   let nextGame = game
-  for (const playerIndex of [0, 1] as const) {
-    const player = nextGame.players[playerIndex]
-    const opponent = nextGame.players[playerIndex === 0 ? 1 : 0]
-    if (!player || !opponent || !nextGame.shuttle) continue
-
-    const config = playerIndex === 0 ? homeAI : awayAI
-    const decision = decideTactical(player, opponent, nextGame.shuttle, config)
-    const targetX = clampToPlayerHalf(decision.moveTarget[0], playerIndex)
-    const dx = targetX - player.pos[0]
-    const dz = decision.moveTarget[2] - player.pos[2]
-    const distance = Math.sqrt(dx * dx + dz * dz)
-    const action: GameAction = distance > 0.2
-      ? {
-          type: 'MOVE',
-          playerIndex,
-          dir: { x: dx / distance, z: dz / distance },
-        }
-      : { type: 'STOP_MOVE', playerIndex }
-
+  for (const action of createAIMoveActions(game, { away: awayAI, home: homeAI })) {
     nextGame = gameReducer(nextGame, action)
   }
 
   return nextGame
-}
-
-function clampToPlayerHalf(x: number, playerIndex: 0 | 1): number {
-  return playerIndex === 0
-    ? Math.min(x, -1.1)
-    : Math.max(x, 1.1)
 }
 
 function didHitShuttle(

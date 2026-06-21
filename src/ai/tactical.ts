@@ -6,6 +6,12 @@ import type { PlayerState } from '../character/types'
 import type { ShotType } from '../character/shotSynthesis'
 import type { AIConfig, TacticalDecision } from './types'
 
+const COURT = {
+  halfLength: 6.7,
+  halfWidth: 3.05,
+  netGap: 0.1,
+} as const
+
 export function decideTactical(
   aiPlayer: PlayerState,
   opponent: PlayerState,
@@ -41,7 +47,7 @@ export function decideTactical(
   }
 
   const shotType = selectShotType(sy, distToShuttle, config)
-  const target = selectTarget(shotType, [ox, 0, oz], config)
+  const target = clampShotTarget(selectTarget(shotType, [ox, 0, oz], config), side)
   const power = selectPower(shotType, config)
 
   // 将 moveTarget 限制在球员自己的半场内
@@ -61,11 +67,20 @@ export function decideTactical(
 function clampToHalf(x: number, side: 0 | 1): number {
   if (side === 0) {
     // 左侧球员：x ≤ -0.1
-    return Math.min(Math.max(x, -6.7), -0.1)
+    return Math.min(Math.max(x, -COURT.halfLength), -COURT.netGap)
   } else {
     // 右侧球员：x ≥ 0.1
-    return Math.max(Math.min(x, 6.7), 0.1)
+    return Math.max(Math.min(x, COURT.halfLength), COURT.netGap)
   }
+}
+
+function clampShotTarget(target: [number, number, number], hitterSide: 0 | 1): [number, number, number] {
+  const opponentSide = hitterSide === 0 ? 1 : 0
+  return [
+    clampToHalf(target[0], opponentSide),
+    target[1],
+    clamp(target[2], -COURT.halfWidth, COURT.halfWidth),
+  ]
 }
 
 /** 数值限制在区间内 */

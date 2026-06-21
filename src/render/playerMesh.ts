@@ -14,6 +14,8 @@ export interface PlayerMeshOptions {
   labelScale?: number
 }
 
+const RACKET_GROUP_NAME = 'player-racket'
+
 const DEFAULT_COLORS: PlayerMeshColors = {
   body: 0x3366cc,
   head: 0xffcc99,
@@ -198,17 +200,21 @@ function addVoxelBody(
 }
 
 function addRacket(group: THREE.Group, racketMat: THREE.Material): void {
-  addMesh(group, createCylinder(0.018, 0.018, 0.78, racketMat, [1.02, 1.24, -0.07], [0.25, 0.2, -0.7]))
+  const racket = new THREE.Group()
+  racket.name = RACKET_GROUP_NAME
+  group.add(racket)
+
+  addMesh(racket, createCylinder(0.018, 0.018, 0.78, racketMat, [1.02, 1.24, -0.07], [0.25, 0.2, -0.7]))
 
   const head = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.018, 8, 24), racketMat)
   head.position.set(1.25, 1.52, -0.14)
   head.rotation.set(0.28, 0.25, -0.72)
-  addMesh(group, head)
+  addMesh(racket, head)
 
   const stringMat = new THREE.MeshBasicMaterial({ color: 0xe9eef5, transparent: true, opacity: 0.55 })
   for (const offset of [-0.08, 0, 0.08]) {
-    addMesh(group, createCylinder(0.004, 0.004, 0.32, stringMat, [1.25 + offset, 1.52, -0.14], [0.28, 0.25, Math.PI / 2 - 0.72]))
-    addMesh(group, createCylinder(0.004, 0.004, 0.32, stringMat, [1.25, 1.52 + offset, -0.14], [0.28, 0.25, -0.72]))
+    addMesh(racket, createCylinder(0.004, 0.004, 0.32, stringMat, [1.25 + offset, 1.52, -0.14], [0.28, 0.25, Math.PI / 2 - 0.72]))
+    addMesh(racket, createCylinder(0.004, 0.004, 0.32, stringMat, [1.25, 1.52 + offset, -0.14], [0.28, 0.25, -0.72]))
   }
 }
 
@@ -259,4 +265,14 @@ export function updatePlayerMesh(
 ): void {
   group.position.set(pos[0], 0, pos[2])
   group.rotation.y = _facing
+}
+
+export function updatePlayerRacketPose(group: THREE.Group, swing01: number): void {
+  const racket = group.getObjectByName(RACKET_GROUP_NAME)
+  if (!racket) return
+
+  const swing = THREE.MathUtils.clamp(swing01, 0, 1)
+  const arc = Math.sin(swing * Math.PI)
+  racket.position.set(0.05 * arc, 0.08 * arc, 0)
+  racket.rotation.set(-0.08 * arc, 0.18 * arc, -0.55 * arc)
 }
