@@ -53,13 +53,14 @@ function startPreview() {
     const proc = spawn('npx', ['vite', 'preview', '--port', String(PORT)], {
       cwd: process.cwd(),
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
+      detached: true,
     })
 
     let started = false
     const timeout = setTimeout(() => {
       if (!started) {
-        proc.kill()
+        try { process.kill(-proc.pid, 'SIGTERM') } catch {}
+        try { proc.kill('SIGTERM') } catch {}
         reject(new Error('vite preview did not start within 30s'))
       }
     }, 30_000)
@@ -199,7 +200,11 @@ async function capture() {
     return false
   } finally {
     if (browser) await browser.close()
-    previewProc.kill()
+    // Kill the entire process group (npx + vite preview) to avoid orphan processes.
+    // detached: true in spawn() puts the child in its own process group.
+    try { process.kill(-previewProc.pid, 'SIGTERM') } catch {}
+    // Fallback: also kill the direct child in case group kill failed
+    try { previewProc.kill('SIGTERM') } catch {}
     console.log('🧹 Cleanup done')
   }
 }

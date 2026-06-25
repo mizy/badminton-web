@@ -29,8 +29,9 @@ export function startGame(): void {
   scene.background = new THREE.Color(0x1a1a2e)
 
   const objects = createPlayObjects(scene)
-  const hud = createGameHUD(scene, STATUS_TEXT)
+  const hud = createGameHUD(STATUS_TEXT)
   const recorder = new Recorder()
+  const hudText = { scoreText: '', setText: '', rallyText: '', statusText: STATUS_TEXT, controlsText: '' }
   const viewState = createViewState()
   const homeConfig: AIConfig = getAIConfig('medium')
   const awayConfig: AIConfig = getAIConfig('medium')
@@ -79,6 +80,18 @@ export function startGame(): void {
     })
     syncFrameView(now, gameState, viewState, hud, objects)
     objects.renderer.render(scene, objects.camera)
+
+    // 从 DOM 叠层同步当前 HUD 文本，再合成到录制画布
+    const scoreEl = document.getElementById('score-overlay')
+    const setEl = document.getElementById('set-overlay')
+    const rallyEl = document.getElementById('rally-overlay')
+    const statusEl = document.getElementById('status')
+    hudText.scoreText = scoreEl?.textContent ?? ''
+    hudText.setText = setEl?.textContent ?? ''
+    hudText.rallyText = rallyEl?.textContent ?? ''
+    hudText.statusText = statusEl?.textContent ?? ''
+    recorder.updateHud(hudText)
+    recorder.composite(objects.renderer.domElement)
   }
 
   animate()

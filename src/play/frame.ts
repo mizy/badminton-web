@@ -89,7 +89,7 @@ export function syncFrameView(
     hud.resetScore()
   }
 
-  hud.sync(objects.camera)
+  hud.sync()
   updateCamera(objects.camera, gameState.players[0]?.pos)
   updateEffects(now, objects.scene)
 }
