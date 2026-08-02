@@ -1,7 +1,7 @@
 import * as THREE from 'three'
-import type { DemoController } from '../demo/demoController'
+import type { AIConfig } from '../ai/types'
 import { createPlayer } from '../game/playerFactory'
-import { gameReducer } from '../game/reducer'
+import { gameReducer, type GameAction } from '../game/reducer'
 import type { GameState } from '../game/types'
 import type { Recorder } from '../recording/recorder'
 import { updateCamera } from '../render/camera'
@@ -24,11 +24,16 @@ export interface PlaySceneObjects {
 }
 
 export interface PlayFrameDeps {
-  demo: DemoController
+  demo: PlayAutomation
   hud: GameHUD
   objects: PlaySceneObjects
   onAutoStopRecording: () => void
   recorder: Recorder
+}
+
+export interface PlayAutomation {
+  getActions: (state: GameState) => GameAction[]
+  getAIConfigs: () => { home: AIConfig; away: AIConfig }
 }
 
 export function stepFrame(
@@ -98,7 +103,7 @@ function createMatchPlayers(): GameState['players'] {
   return [createPlayer(0), createPlayer(1)]
 }
 
-function dispatchDemoActions(gameState: GameState, demo: DemoController): GameState {
+function dispatchDemoActions(gameState: GameState, demo: PlayAutomation): GameState {
   for (const action of demo.getActions(gameState)) {
     gameState = gameReducer(gameState, action)
   }

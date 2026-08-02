@@ -3,7 +3,8 @@ import { writeFileSync, mkdirSync, existsSync, statSync } from 'fs'
 import path from 'path'
 
 const CHROME_PATH = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-const STORYBOOK_BASE = 'http://localhost:6006'
+const STORYBOOK_PORT = 7608
+const STORYBOOK_BASE = `http://localhost:${STORYBOOK_PORT}`
 const STORY_ID = '游戏--完整比赛演示--mediumvsmedium'
 const OUT_FILE = '/tmp/badminton-storybook.mp4'
 

@@ -30,7 +30,7 @@ export function createTrailSystem(scene: THREE.Scene): TrailSystem {
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     opacity: 0.7,
-    size: 0.14,
+    size: 0.07,
     sizeAttenuation: true,
     transparent: true,
     vertexColors: true,
@@ -60,7 +60,7 @@ export function createTrailSystem(scene: THREE.Scene): TrailSystem {
     transparent: true,
   })
   const headGlow = new THREE.Sprite(headGlowMat)
-  headGlow.scale.set(0.44, 0.44, 1)
+  headGlow.scale.set(0.2, 0.2, 1)
   headGlow.visible = false
   scene.add(headGlow)
 

@@ -15,8 +15,8 @@ import { existsSync, mkdirSync, writeFileSync, statSync } from 'fs'
 import path from 'path'
 
 const STORYBOOK_PORT = process.argv.includes('--port')
-  ? parseInt(process.argv[process.argv.indexOf('--port') + 1], 10) || 6006
-  : 6006
+  ? parseInt(process.argv[process.argv.indexOf('--port') + 1], 10) || 7608
+  : 7608
 
 const STORY_ID = process.argv.includes('--story')
   ? process.argv[process.argv.indexOf('--story') + 1]

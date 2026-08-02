@@ -1,7 +1,4 @@
 import * as THREE from 'three'
-import { getAIConfig } from '../ai/difficulty'
-import type { AIConfig } from '../ai/types'
-import { DemoController } from '../demo/demoController'
 import { createPlayer } from '../game/playerFactory'
 import { gameReducer, type PlayerGameAction } from '../game/reducer'
 import { createFullGameState, type GameState } from '../game/types'
@@ -10,7 +7,7 @@ import { Recorder } from '../recording/recorder'
 import { createGameCamera } from '../render/camera'
 import { createCourt } from '../render/court'
 import { connectPlayHotkeys } from './hotkeys'
-import { stepFrame, syncFrameView, type PlaySceneObjects } from './frame'
+import { stepFrame, syncFrameView, type PlayAutomation, type PlaySceneObjects } from './frame'
 import { createGameHUD } from '../render/hud'
 import { createGroundMarker, createPlayerMesh } from '../render/playerMesh'
 import { createShuttlecockMesh } from '../render/shuttlecockMesh'
@@ -24,7 +21,7 @@ interface PlayStartObjects extends PlaySceneObjects {
   renderer: THREE.WebGLRenderer
 }
 
-export function startGame(): void {
+export function startGame(demo: PlayAutomation): void {
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(0x1a1a2e)
 
@@ -33,10 +30,6 @@ export function startGame(): void {
   const recorder = new Recorder()
   const hudText = { scoreText: '', setText: '', rallyText: '', statusText: STATUS_TEXT, controlsText: '' }
   const viewState = createViewState()
-  const homeConfig: AIConfig = getAIConfig('medium')
-  const awayConfig: AIConfig = getAIConfig('medium')
-  const demo = new DemoController(homeConfig, awayConfig, true)
-
   let gameState = createFullGameState()
   gameState = gameReducer(gameState, { type: 'SET_PLAYERS', players: createMatchPlayers() })
   ;(window as any).__badminton_game_ready__ = false

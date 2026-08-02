@@ -3,6 +3,8 @@
  * @entry
  */
 
+import { getAIConfig } from './ai/difficulty'
+import { DemoController } from './demo/demoController'
 import { startGame } from './play/start'
 
-startGame()
+startGame(new DemoController(getAIConfig('medium'), getAIConfig('medium'), true))

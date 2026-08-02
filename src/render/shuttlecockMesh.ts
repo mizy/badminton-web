@@ -1,10 +1,18 @@
 /** 羽毛球3D网格 — 球头 + 羽毛裙 + 柔和识别光晕 */
 
 import * as THREE from 'three'
+import {
+  SHUTTLE_CORK_RADIUS,
+  getShuttleCorkGroundClearance,
+  getShuttleCorkCenter as getDomainShuttleCorkCenter,
+  hasShuttleCorkLanded,
+  placeLandedShuttle,
+} from '../character/racketKinematics'
 
-const HEAD_RADIUS = 0.045
-const SKIRT_RADIUS = 0.12
-const SKIRT_LENGTH = 0.22
+export const SHUTTLECOCK_HEAD_RADIUS = SHUTTLE_CORK_RADIUS
+const HEAD_RADIUS = SHUTTLECOCK_HEAD_RADIUS
+const SKIRT_RADIUS = 0.045
+const SKIRT_LENGTH = 0.085
 const LOCAL_HEAD_DIRECTION = new THREE.Vector3(0, 1, 0)
 const tangentDirection = new THREE.Vector3()
 
@@ -52,7 +60,7 @@ export function createShuttlecockMesh(): THREE.Group {
     depthWrite: false,
   })
   const innerGlow = new THREE.Sprite(innerMat)
-  innerGlow.scale.set(0.42, 0.42, 1)
+  innerGlow.scale.set(0.16, 0.16, 1)
   innerGlow.position.y = 0.02
   group.add(innerGlow)
 
@@ -76,7 +84,7 @@ export function createShuttlecockMesh(): THREE.Group {
     depthWrite: false,
   })
   const outerGlow = new THREE.Sprite(outerMat)
-  outerGlow.scale.set(0.78, 0.78, 1)
+  outerGlow.scale.set(0.28, 0.28, 1)
   outerGlow.position.y = 0.02
   group.add(outerGlow)
 
@@ -101,16 +109,7 @@ export function getShuttlecockHeadCenter(
   pos: [number, number, number],
   velocity: [number, number, number],
 ): [number, number, number] {
-  const speed = Math.hypot(velocity[0], velocity[1], velocity[2])
-  if (speed < 0.000001) {
-    return [pos[0], pos[1] + HEAD_RADIUS, pos[2]]
-  }
-
-  return [
-    pos[0] + velocity[0] / speed * HEAD_RADIUS,
-    pos[1] + velocity[1] / speed * HEAD_RADIUS,
-    pos[2] + velocity[2] / speed * HEAD_RADIUS,
-  ]
+  return getDomainShuttleCorkCenter(pos, velocity)
 }
 
 export function getShuttlecockHeadGroundClearance(
@@ -118,8 +117,7 @@ export function getShuttlecockHeadGroundClearance(
   velocity: [number, number, number],
   groundY = 0,
 ): number {
-  const headCenter = getShuttlecockHeadCenter(pos, velocity)
-  return headCenter[1] - HEAD_RADIUS - groundY
+  return getShuttleCorkGroundClearance(pos, velocity, groundY)
 }
 
 export function hasShuttlecockHeadLanded(
@@ -127,7 +125,7 @@ export function hasShuttlecockHeadLanded(
   velocity: [number, number, number],
   groundY = 0,
 ): boolean {
-  return getShuttlecockHeadGroundClearance(pos, velocity, groundY) <= 0
+  return hasShuttleCorkLanded(pos, velocity, groundY)
 }
 
 export function placeShuttlecockHeadOnGround(
@@ -135,8 +133,7 @@ export function placeShuttlecockHeadOnGround(
   velocity: [number, number, number],
   groundY = 0,
 ): [number, number, number] {
-  const clearance = getShuttlecockHeadGroundClearance(pos, velocity, groundY)
-  return [pos[0], pos[1] - clearance, pos[2]]
+  return placeLandedShuttle(pos, velocity, groundY)
 }
 
 /** 羽球缩放比例 — 供外部参考调整尺寸 */

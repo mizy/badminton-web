@@ -5,16 +5,16 @@ import type { AIConfig } from '../ai/types'
 import type { ShuttlecockState } from '../physics/shuttlecock'
 import type { PlayerState } from '../character/types'
 import type { ShotType } from '../character/shotSynthesis'
-import type { RacketState } from '../physics/racket'
 import { stepShuttlecock, DEFAULT_SHUTTLECOCK } from '../physics/shuttlecock'
-import { sphereAABBIntersect } from '../physics/collision'
-import { resolveRacketCollision } from '../physics/racket'
 import { updateMovement } from '../character/movement'
 import { updateStamina } from './stamina'
-import { computeTimingWindow } from '../character/timing'
 import { decideTactical } from '../ai/tactical'
-import { synthesizeShot } from '../character/shotSynthesis'
 import { checkPoint } from './match'
+import { evaluateContact, getTechniqueRacketFaceDeg } from '../character/contact'
+import {
+  createReachableRacketPose,
+  getShuttleCorkCenter,
+} from '../character/racketKinematics'
 
 export interface TickAIConfigs {
   home?: AIConfig
@@ -57,7 +57,7 @@ export function processGameTick(
   return { ...state, players, shuttle, elapsed: state.elapsed + dt }
 }
 
-/** 检测球员是否可击球，合成击球结果 */
+/** 检测球员是否可击球，并使用与可视化相同的拍弦/球塞接触真相。 */
 function checkPlayerCollision(
   players: [PlayerState | null, PlayerState | null],
   shuttle: ShuttlecockState,
@@ -67,145 +67,93 @@ function checkPlayerCollision(
     const player = players[i]
     if (!player) continue
 
-    const px = player.pos[0]
-    const pz = player.pos[2]
-
-    // 碰撞盒大幅扩大（x: ±2.0, y: 0~3.5, z: ±1.2）让 AI 更容易拦截到球
-    // 确保在高球速下也能触发碰撞，形成多回合对打
-    const hit = sphereAABBIntersect(
-      shuttle.pos,
-      0.15,
-      { min: [px - 0.6, 0.3, pz - 0.4], max: [px + 0.6, 2.5, pz + 0.4] },
-    )
-    if (!hit) continue
-
     const opponent = players[i === 0 ? 1 : 0]
     const cfg = aiConfigs ? (i === 0 ? aiConfigs.home : aiConfigs.away) : undefined
+    if (!opponent) continue
 
-    if (cfg && opponent) {
+    if (cfg) {
       const decision = decideTactical(player, opponent, shuttle, cfg)
       if (decision.shotType) {
-        const timing = computeTimingWindow(player, shuttle)
-        if (timing) {
-          const shotResult = synthesizeShot(
-            { type: decision.shotType, power: decision.power, target: decision.target },
-            player,
-            shuttle,
-            timing,
-          )
-          const speed = Math.sqrt(
-            shotResult.collision.outgoingVel[0] ** 2 +
-              shotResult.collision.outgoingVel[1] ** 2 +
-              shotResult.collision.outgoingVel[2] ** 2,
-          )
-          const desiredVel = computeShotVelocity(player.pos, decision.target, speed, decision.shotType)
-          // Use racket physics collision model
-          const racketForCollision: RacketState = {
-            ...player.racket,
-            vel: [
-              desiredVel[0] * 0.6,
-              Math.max(desiredVel[1] * 0.4, 2),
-              desiredVel[2] * 0.6,
-            ],
-          }
-          const collisionResult = resolveRacketCollision(shuttle.vel, shuttle.spin, racketForCollision, shuttle.pos)
-          if (collisionResult) {
-            return {
-              ...shuttle,
-              vel: collisionResult.outgoingVel,
-              spin: collisionResult.outgoingSpin,
-            }
-          }
-          // Fallback: use desired velocity directly
-          return {
-            ...shuttle,
-            vel: desiredVel,
-            spin: shotResult.collision.outgoingSpin,
-          }
-        }
-      }
-    }
-
-    // Human 玩家击球（wantsToSwing 标志，无 AI config）
-    if (player.wantsToSwing && opponent) {
-      // 清除击球标志
-      players[i] = { ...player, wantsToSwing: false }
-
-      // 根据球高度选择球路
-      const humanShotType: ShotType = shuttle.pos[1] > 1.5 ? 'CLEAR' : 'DRIVE'
-      const humanTarget: [number, number, number] = [opponent.pos[0], 0, opponent.pos[2]]
-      const timing = computeTimingWindow(player, shuttle)
-
-      if (timing) {
-        const shotResult = synthesizeShot(
-          { type: humanShotType, power: 0.7, target: humanTarget },
+        const contacted = attemptPlayerContact(
           player,
           shuttle,
-          timing,
+          decision.shotType,
+          decision.power,
+          decision.target,
+          (1 - cfg.accuracy) * 100,
         )
-        const speed = Math.sqrt(
-          shotResult.collision.outgoingVel[0] ** 2 +
-            shotResult.collision.outgoingVel[1] ** 2 +
-            shotResult.collision.outgoingVel[2] ** 2,
-        )
-        const desiredVel = computeShotVelocity(player.pos, humanTarget, speed, humanShotType)
-        const racketForCollision: RacketState = {
-          ...player.racket,
-          vel: [
-            desiredVel[0] * 0.6,
-            Math.max(desiredVel[1] * 0.4, 2),
-            desiredVel[2] * 0.6,
-          ],
-        }
-        const collisionResult = resolveRacketCollision(shuttle.vel, shuttle.spin, racketForCollision, shuttle.pos)
-        if (collisionResult) {
-          return {
-            ...shuttle,
-            vel: collisionResult.outgoingVel,
-            spin: collisionResult.outgoingSpin,
-          }
-        }
-        return {
-          ...shuttle,
-          vel: desiredVel,
-          spin: shotResult.collision.outgoingSpin,
+        if (contacted) {
+          players[i] = contacted.player
+          return contacted.shuttle
         }
       }
     }
 
-
+    if (player.wantsToSwing && !cfg) {
+      const humanShotType: ShotType = shuttle.pos[1] > 1.5 ? 'CLEAR' : 'DRIVE'
+      const humanTarget: [number, number, number] = [opponent.pos[0], 0, opponent.pos[2]]
+      const contacted = attemptPlayerContact(player, shuttle, humanShotType, 0.7, humanTarget, 0)
+      players[i] = contacted?.player ?? { ...player, wantsToSwing: false }
+      if (contacted) {
+        return contacted.shuttle
+      }
+    }
   }
 
   return shuttle
 }
 
-/** 根据目标位置和球路计算击球速度向量 */
-function computeShotVelocity(
-  playerPos: [number, number, number],
+function attemptPlayerContact(
+  player: PlayerState,
+  shuttle: ShuttlecockState,
+  technique: ShotType,
+  power: number,
   target: [number, number, number],
-  speed: number,
-  shotType: ShotType,
-): [number, number, number] {
-  const dx = target[0] - playerPos[0]
-  const dz = target[2] - playerPos[2]
+  swingOffsetMs: number,
+): { player: PlayerState; shuttle: ShuttlecockState } | null {
+  const racketFaceDeg = getTechniqueRacketFaceDeg(technique)
+  const desiredContact = getShuttleCorkCenter(shuttle.pos, shuttle.vel)
+  const racket = createReachableRacketPose({
+    desiredContact,
+    playerPos: player.pos,
+    playerSide: player.side,
+    racketFaceDeg,
+  })
+  if (!racket.reachable) return null
 
-  let elevation: number
-  switch (shotType) {
-    case 'SMASH':   elevation = 15; break
-    case 'DROP':    elevation = 30; break
-    case 'CLEAR':   elevation = 55; break
-    case 'DRIVE':   elevation = 8; break
-    case 'NET_DROP': elevation = 15; break
-    case 'LIFT':    elevation = 60; break
-    default:        elevation = 30
+  const result = evaluateContact({
+    intent: technique,
+    playerPos: player.pos,
+    playerSide: player.side,
+    power,
+    racket,
+    racketFaceDeg,
+    shuttle,
+    swingOffsetMs,
+    target,
+    targetZ: target[2],
+  })
+  if (result.outcome !== 'hit') return null
+
+  return {
+    player: {
+      ...player,
+      racket: {
+        ...player.racket,
+        normal: [...racket.faceNormal],
+        pos: [...racket.stringCenter],
+        vel: [
+          result.outgoingVel[0] * 0.55,
+          result.outgoingVel[1] * 0.55,
+          result.outgoingVel[2] * 0.55,
+        ],
+      },
+      wantsToSwing: false,
+    },
+    shuttle: {
+      pos: [...result.launchPoint],
+      spin: [...result.outgoingSpin],
+      vel: [...result.outgoingVel],
+    },
   }
-
-  const angleRad = elevation * Math.PI / 180
-  const headingRad = Math.atan2(dx, dz)
-
-  return [
-    speed * Math.cos(angleRad) * Math.sin(headingRad),
-    speed * Math.sin(angleRad),
-    speed * Math.cos(angleRad) * Math.cos(headingRad),
-  ]
 }

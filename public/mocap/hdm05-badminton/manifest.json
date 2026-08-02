@@ -1,0 +1,116 @@
+{
+  "source": "HDM05 3-11 Badminton, AMASS SMPL-H pose parameters",
+  "fps": 30,
+  "motions": [
+    {
+      "id": "bk-01-low-serve",
+      "action": "low_serve",
+      "label": "Low serve",
+      "actor": "bk",
+      "take": "01",
+      "frames": 779,
+      "duration": 25.967,
+      "path": "/mocap/hdm05-badminton/bk-01-low-serve.json",
+      "sourcePath": "HDM05/MPI_HDM05/bk/HDM_bk_03-11_01_120_poses.npz"
+    },
+    {
+      "id": "bk-02-clear",
+      "action": "clear",
+      "label": "Clear",
+      "actor": "bk",
+      "take": "02",
+      "frames": 820,
+      "duration": 27.333,
+      "path": "/mocap/hdm05-badminton/bk-02-clear.json",
+      "sourcePath": "HDM05/MPI_HDM05/bk/HDM_bk_03-11_02_120_poses.npz"
+    },
+    {
+      "id": "bk-03-drop",
+      "action": "drop",
+      "label": "Drop",
+      "actor": "bk",
+      "take": "03",
+      "frames": 752,
+      "duration": 25.067,
+      "path": "/mocap/hdm05-badminton/bk-03-drop.json",
+      "sourcePath": "HDM05/MPI_HDM05/bk/HDM_bk_03-11_03_120_poses.npz"
+    },
+    {
+      "id": "dg-01-low-serve",
+      "action": "low_serve",
+      "label": "Low serve",
+      "actor": "dg",
+      "take": "01",
+      "frames": 715,
+      "duration": 23.833,
+      "path": "/mocap/hdm05-badminton/dg-01-low-serve.json",
+      "sourcePath": "HDM05/MPI_HDM05/dg/HDM_dg_03-11_01_120_poses.npz"
+    },
+    {
+      "id": "dg-02-clear",
+      "action": "clear",
+      "label": "Clear",
+      "actor": "dg",
+      "take": "02",
+      "frames": 785,
+      "duration": 26.167,
+      "path": "/mocap/hdm05-badminton/dg-02-clear.json",
+      "sourcePath": "HDM05/MPI_HDM05/dg/HDM_dg_03-11_02_120_poses.npz"
+    },
+    {
+      "id": "dg-03-drop",
+      "action": "drop",
+      "label": "Drop",
+      "actor": "dg",
+      "take": "03",
+      "frames": 678,
+      "duration": 22.6,
+      "path": "/mocap/hdm05-badminton/dg-03-drop.json",
+      "sourcePath": "HDM05/MPI_HDM05/dg/HDM_dg_03-11_03_120_poses.npz"
+    },
+    {
+      "id": "dg-04-smash",
+      "action": "smash",
+      "label": "Smash",
+      "actor": "dg",
+      "take": "04",
+      "frames": 1547,
+      "duration": 51.567,
+      "path": "/mocap/hdm05-badminton/dg-04-smash.json",
+      "sourcePath": "HDM05/MPI_HDM05/dg/HDM_dg_03-11_04_120_poses.npz"
+    },
+    {
+      "id": "tr-01-low-serve",
+      "action": "low_serve",
+      "label": "Low serve",
+      "actor": "tr",
+      "take": "01",
+      "frames": 909,
+      "duration": 30.3,
+      "path": "/mocap/hdm05-badminton/tr-01-low-serve.json",
+      "sourcePath": "HDM05/MPI_HDM05/tr/HDM_tr_03-11_01_120_poses.npz"
+    },
+    {
+      "id": "tr-02-clear",
+      "action": "clear",
+      "label": "Clear",
+      "actor": "tr",
+      "take": "02",
+      "frames": 646,
+      "duration": 21.533,
+      "path": "/mocap/hdm05-badminton/tr-02-clear.json",
+      "sourcePath": "HDM05/MPI_HDM05/tr/HDM_tr_03-11_02_120_poses.npz"
+    },
+    {
+      "id": "tr-03-drop",
+      "action": "drop",
+      "label": "Drop",
+      "actor": "tr",
+      "take": "03",
+      "frames": 553,
+      "duration": 18.433,
+      "path": "/mocap/hdm05-badminton/tr-03-drop.json",
+      "sourcePath": "HDM05/MPI_HDM05/tr/HDM_tr_03-11_03_120_poses.npz"
+    }
+  ]
+}
