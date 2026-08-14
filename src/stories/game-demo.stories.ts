@@ -4,7 +4,9 @@ import { createCourt } from '../render/court'
 import { createShuttlecockMesh } from '../render/shuttlecockMesh'
 import { updateCamera, toggleCameraMode, getCameraMode } from '../render/camera'
 import { createTrailSystem } from '../render/trajectory'
-import { createPlayerMesh, updatePlayerMesh, createGroundMarker } from '../render/playerMesh'
+import { createGroundMarker } from '../render/playerMesh'
+import { createSkeletalPlayer } from '../render/skeletalPlayer'
+import type { BadmintonAction } from '../render/skeletalBadminton'
 import { gameReducer } from '../game/reducer'
 import type { GameAction } from '../game/reducer'
 import { createFullGameState } from '../game/types'
@@ -74,15 +76,9 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
     // Trail
     const trail = createTrailSystem(ctx.scene)
 
-    // Players
-    const homeMesh = createPlayerMesh({
-      body: 0x00ddff, head: 0xffcc99, racket: 0xcccccc, marker: 0x00ffff,
-    }, 'A')
-    const awayMesh = createPlayerMesh({
-      body: 0xff2255, head: 0xffcc99, racket: 0xcccccc, marker: 0xff44aa,
-    }, 'B')
-    ctx.scene.add(homeMesh)
-    ctx.scene.add(awayMesh)
+    // Players — 骨骼模型（xbot.glb + 羽毛球动作状态机）
+    const homePlayer = createSkeletalPlayer(ctx.scene)
+    const awayPlayer = createSkeletalPlayer(ctx.scene)
 
     const homeMarker = createGroundMarker(0x00ddff)
     const awayMarker = createGroundMarker(0xff2255)
@@ -226,6 +222,8 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
             trail.reset()
             rallyHits = 0
             gameState = st
+            const serverPlayer = server === 0 ? homePlayer : awayPlayer
+            serverPlayer.play('serve')
           }
           idleSince = performance.now()
         }
@@ -256,6 +254,7 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
           if (dot < -pSpeed * cSpeed * 0.2 || cSpeed > pSpeed * 3 || cSpeed < pSpeed * 0.3) {
             rallyHits++
             spawnImpactEffect(currentShuttle.pos, Math.min(cSpeed / 40, 1))
+            triggerSwing(prevShuttle.pos, currentShuttle.vel)
           }
         }
       }
@@ -271,13 +270,15 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
       }
 
       if (gameState.players[0]) {
-        updatePlayerMesh(homeMesh, gameState.players[0].pos, gameState.players[0].facing)
+        homePlayer.place(gameState.players[0].pos, gameState.players[0].facing)
         homeMarker.position.set(gameState.players[0].pos[0], 0.02, gameState.players[0].pos[2])
       }
       if (gameState.players[1]) {
-        updatePlayerMesh(awayMesh, gameState.players[1].pos, gameState.players[1].facing)
+        awayPlayer.place(gameState.players[1].pos, gameState.players[1].facing)
         awayMarker.position.set(gameState.players[1].pos[0], 0.02, gameState.players[1].pos[2])
       }
+      homePlayer.update(dt)
+      awayPlayer.update(dt)
 
       // --- Score HUD ---
       if (gameState.match) {
@@ -301,11 +302,30 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
     }
     animate()
 
+    /**
+     * 击球瞬间触发挥拍：离击球点近的球员挥拍，
+     * 出射速度快选 smash，否则 forehand_clear。
+     */
+    function triggerSwing(contactPos: [number, number, number], outVel: [number, number, number]): void {
+      const home = gameState.players[0]
+      const away = gameState.players[1]
+      if (!home || !away) return
+      const speed = Math.hypot(outVel[0], outVel[1], outVel[2])
+      const action: BadmintonAction = speed > 45 ? 'smash' : 'forehand_clear'
+      const homeDist = Math.hypot(home.pos[0] - contactPos[0], home.pos[2] - contactPos[2])
+      const awayDist = Math.hypot(away.pos[0] - contactPos[0], away.pos[2] - contactPos[2])
+      if (homeDist <= awayDist) homePlayer.play(action)
+      else awayPlayer.play(action)
+    }
+
     // Override cleanup
     const origDispose = ctx.dispose
     ctx.dispose = () => {
       origDispose()
       trail.dispose()
+      scoreHUD.detach(ctx.scene)
+      homePlayer.dispose()
+      awayPlayer.dispose()
     }
 
     return container

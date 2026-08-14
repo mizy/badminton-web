@@ -7,13 +7,11 @@ import type {
   Hdm05Motion,
   Hdm05PlaybackOptions,
 } from './hdm05BadmintonMocap'
-import { applyHdm05SourceSkeleton, type Hdm05SourceSkeleton } from './hdm05SourceSkeleton'
+import { applyHdm05Motion } from './hdm05BadmintonMocap'
 import { syncShuttlecockMesh } from './shuttlecockMesh'
 import { getRacketStringCenterWorld, syncRacketToGrip } from './skeletalRacket'
+import type { HumanoidBones } from './skeletalBadminton'
 
-const RIGHT_SHOULDER = 17
-const RIGHT_ELBOW = 19
-const RIGHT_WRIST = 21
 const RACKET_GRIP = new THREE.Vector3()
 const RACKET_DIRECTION = new THREE.Vector3()
 const RACKET_FACE = new THREE.Vector3()
@@ -27,16 +25,23 @@ const INCOMING_CENTER = new THREE.Vector3()
 const INCOMING_VELOCITY = new THREE.Vector3()
 const STRIKE_HEAD = new THREE.Vector3()
 const PREVIOUS_STRIKE_HEAD = new THREE.Vector3()
+const HAND_POS = new THREE.Vector3()
+const WRIST_POS = new THREE.Vector3()
+const ELBOW_POS = new THREE.Vector3()
 
-/** @entry 以肩肘腕平面、前向和手腕扬角共同确定球拍轴与拍面。 */
+/** @entry 以肩肘腕平面、前向和手腕扬角共同确定球拍轴与拍面（球拍挂假人右手骨骼）。 */
 export function syncHdm05Racket(
-  joints: THREE.Vector3[],
+  bones: HumanoidBones,
   racket: THREE.Group,
   action: Hdm05BadmintonAction,
 ): void {
-  RACKET_GRIP.copy(joints[RIGHT_WRIST])
-  FOREARM.copy(joints[RIGHT_WRIST]).sub(joints[RIGHT_ELBOW]).normalize()
-  UPPER_ARM.copy(joints[RIGHT_ELBOW]).sub(joints[RIGHT_SHOULDER]).normalize()
+  const hand = bones.rightHand
+  const wrist = bones.rightForeArm
+  const elbow = bones.rightArm
+  if (!hand || !wrist || !elbow) return
+  RACKET_GRIP.copy(hand.getWorldPosition(HAND_POS))
+  FOREARM.copy(hand.getWorldPosition(HAND_POS)).sub(wrist.getWorldPosition(WRIST_POS)).normalize()
+  UPPER_ARM.copy(wrist.getWorldPosition(WRIST_POS)).sub(elbow.getWorldPosition(ELBOW_POS)).normalize()
   ARM_PLANE.crossVectors(UPPER_ARM, FOREARM)
   if (ARM_PLANE.lengthSq() < 0.000001) ARM_PLANE.set(0, 0, 1)
   ARM_PLANE.normalize()
@@ -58,7 +63,7 @@ export function syncHdm05Racket(
 
 /** 从实际投影后的拍头速度与击球高度选事件帧，避免把原始轴角尖峰当成击球。 */
 export function findHdm05VisualStrikeFrame(
-  rig: Hdm05SourceSkeleton,
+  bones: HumanoidBones,
   racket: THREE.Group,
   motion: Hdm05Motion,
   options: Hdm05PlaybackOptions,
@@ -68,8 +73,8 @@ export function findHdm05VisualStrikeFrame(
   const overhead = motion.action !== 'low_serve'
 
   for (let frame = 0; frame < motion.poseBody.length; frame += 1) {
-    applyHdm05SourceSkeleton(rig, motion, frame / motion.fps, options)
-    syncHdm05Racket(rig.jointPositions, racket, motion.action)
+    applyHdm05Motion(bones, motion, frame / motion.fps, options)
+    syncHdm05Racket(bones, racket, motion.action)
     getRacketStringCenterWorld(racket, STRIKE_HEAD)
     if (frame > 0) {
       const speed = Math.min(STRIKE_HEAD.distanceTo(PREVIOUS_STRIKE_HEAD) * motion.fps, 20)

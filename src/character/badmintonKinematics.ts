@@ -111,6 +111,11 @@ export function getBadmintonActionContactTime(action: BadmintonAction): number {
   return spec.duration * spec.contact
 }
 
+/** 动作完整时长（秒）— 播放完一整个挥拍循环所需时间。 */
+export function getBadmintonActionDuration(action: BadmintonAction): number {
+  return ACTION_SPECS[action].duration
+}
+
 export function canBadmintonActionContact(action: BadmintonAction): boolean {
   return !NO_SHUTTLE.has(action)
 }

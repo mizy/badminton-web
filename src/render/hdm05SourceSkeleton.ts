@@ -14,32 +14,37 @@ export interface Hdm05SourceSkeleton {
 
 const PARENTS = [-1, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 12, 13, 14, 16, 17, 18, 19]
 const BONES = PARENTS.map((parent, joint) => [parent, joint]).filter(([parent]) => parent >= 0)
+/**
+ * T-pose 关节偏移（渲染坐标系）。整体已做 (x,y,z)→(z,y,x) 变换：
+ * 使假人面朝 +x（球网在 x=0），数据右手落在假人视觉右侧（+z）。
+ * 左/右标签与假人朝向一致：left* 在 -z 侧，right* 在 +z 侧。
+ */
 const OFFSETS: Array<[number, number, number]> = [
   [0, 0.95, 0],
-  [-0.09, -0.08, 0],
-  [0.09, -0.08, 0],
+  [0, -0.08, -0.09],
+  [0, -0.08, 0.09],
   [0, 0.12, 0],
-  [0, -0.43, 0.015],
-  [0, -0.43, 0.015],
+  [0.015, -0.43, 0],
+  [0.015, -0.43, 0],
   [0, 0.18, 0],
-  [0, -0.43, -0.015],
-  [0, -0.43, -0.015],
+  [-0.015, -0.43, 0],
+  [-0.015, -0.43, 0],
   [0, 0.18, 0],
-  [0, -0.06, 0.13],
-  [0, -0.06, 0.13],
+  [0.13, -0.06, 0],
+  [0.13, -0.06, 0],
   [0, 0.16, 0],
-  [-0.08, 0.11, 0],
-  [0.08, 0.11, 0],
-  [0, 0.18, 0.02],
-  [-0.18, 0.02, 0],
-  [0.18, 0.02, 0],
-  [-0.28, 0, 0],
-  [0.28, 0, 0],
-  [-0.25, 0, 0],
-  [0.25, 0, 0],
+  [0, 0.11, -0.08],
+  [0, 0.11, 0.08],
+  [0.02, 0.18, 0],
+  [0, 0.02, -0.18],
+  [0, 0.02, 0.18],
+  [0, 0, -0.28],
+  [0, 0, 0.28],
+  [0, 0, -0.25],
+  [0, 0, 0.25],
 ]
 
-const BASE_POSITION = new THREE.Vector3(-2.2, 0, -0.15)
+const BASE_POSITION = new THREE.Vector3(-2.2, 0, 0)
 const AXIS = new THREE.Vector3()
 const ROOT_OFFSET = new THREE.Vector3()
 const TEMP_QUAT = new THREE.Quaternion()
@@ -133,7 +138,8 @@ function rotationFromVector(sourceVector: number[], scale: number): THREE.Quater
   const length = axis.length()
   if (length < 0.00001 || scale === 0) return TEMP_QUAT.identity().clone()
   AXIS.copy(axis).multiplyScalar(1 / length)
-  return TEMP_QUAT.setFromAxisAngle(AXIS, length * scale).clone()
+  // 轴角映射含镜像（行列式 -1），镜像共轭会使旋转方向反转，故角度取反
+  return TEMP_QUAT.setFromAxisAngle(AXIS, -length * scale).clone()
 }
 
 function axisAt(rows: number[][], frame: number, nextFrame: number, alpha: number, joint: number): number[] {
@@ -153,8 +159,16 @@ function lerpRow(rows: number[][], frame: number, nextFrame: number, alpha: numb
   ]
 }
 
+/**
+ * AMASS/HDM05 坐标系 → Three.js：
+ * 数据实测为 z-up（垂直轴在数据 z 分量，root 位移的 z 全程恒定≈0），
+ * Three.js 为 y-up。故 x→y、y→z、z→-x（等价于 (x,-z,y) 再镜像 x 并绕 Y 转 +90°）。
+ * 这样假人面朝 +x（球网在 x=0），数据右手（SMPL 关节 20→骨架 21）落在假人视觉右手侧；
+ * 若用 (x,-z,y)，假人面朝 +z，挥拍手会画到假人左侧（左右镜像错误）。
+ * 垂直分量同为 -z，击球点高度语义不变（扣杀 2.1m、高远 2.1m、吊球 2.1m、低发 1.1m）。
+ */
 function smplVectorToThree(value: number[], scale: number): THREE.Vector3 {
-  return new THREE.Vector3(value[0] * scale, value[2] * scale, -value[1] * scale)
+  return new THREE.Vector3(value[1] * scale, -value[2] * scale, value[0] * scale)
 }
 
 function vectorFromOffset(value: [number, number, number]): THREE.Vector3 {

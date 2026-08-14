@@ -2,14 +2,20 @@ import type { Meta, StoryObj } from '@storybook/html'
 import type { Controller } from 'lil-gui'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import {
+  applyHdm05Motion,
   createDefaultPlaybackOptions,
   type Hdm05Manifest,
   type Hdm05Motion,
   type Hdm05MotionSummary,
   type Hdm05PlaybackSample,
 } from '../render/hdm05BadmintonMocap'
-import { applyHdm05SourceSkeleton, createHdm05SourceSkeleton } from '../render/hdm05SourceSkeleton'
+import {
+  findHumanoidBones,
+  normalizeHumanoidModel,
+  type HumanoidBones,
+} from '../render/skeletalBadminton'
 import {
   createSkeletalRacket,
   getRacketStringCenterWorld,
@@ -87,12 +93,32 @@ const meta: Meta = {
     }
 
     const gui = createHdm05StoryGui(container, controls)
-    const sourceRig = createHdm05SourceSkeleton()
+    const playerGroup = new THREE.Group()
+    playerGroup.position.set(-2.2, 0, 0)
+    ctx.scene.add(playerGroup)
+    const player: { bones: HumanoidBones; loaded: boolean } = { bones: {}, loaded: false }
+    new GLTFLoader().load(
+      '/models/xbot.glb',
+      (gltf) => {
+        const model = gltf.scene
+        normalizeHumanoidModel(model)
+        playerGroup.add(model)
+        player.bones = findHumanoidBones(model)
+        player.loaded = true
+        ;(window as any).__hdm05_player__ = player
+        ;(window as any).__hdm05_player_group__ = playerGroup
+        if (motion) recomputeStrike(motion)
+      },
+      undefined,
+      (error) => {
+        loadError = error instanceof Error ? error.message : String(error)
+      },
+    )
     const racket = createSkeletalRacket()
     racket.scale.setScalar(0.88)
     const contactMarker = createContactMarker()
     const shuttle = createShuttlecockMesh()
-    ctx.scene.add(sourceRig.group, racket, contactMarker, shuttle)
+    ctx.scene.add(racket, contactMarker, shuttle)
     const trail = createTrailSystem(ctx.scene)
 
     let manifest: Hdm05Manifest | null = null
@@ -135,11 +161,12 @@ const meta: Meta = {
       syncPlaybackOptions(playback, controls)
 
       let sample: Hdm05PlaybackSample | null = null
-      if (motion) {
-        sample = applyHdm05SourceSkeleton(sourceRig, motion, elapsed + previewOffset, playback)
+      if (motion && player.loaded) {
+        sample = applyHdm05Motion(player.bones, motion, elapsed + previewOffset, playback)
+        playerGroup.updateMatrixWorld(true)
       }
 
-      syncHdm05Racket(sourceRig.jointPositions, racket, motion?.action ?? 'clear')
+      syncHdm05Racket(player.bones, racket, motion?.action ?? 'clear')
       getRacketStringCenterWorld(racket, head)
       racketSpeed = controls.paused ? 0 : updateRacketHeadSpeed(dt, sample)
       if (!controls.paused && motion && sample) advanceMocapShuttle(dt, motion, sample)
@@ -214,12 +241,9 @@ const meta: Meta = {
         if (request !== motionRequest) return
         selectedSummary = summary
         motion = nextMotion
-        strikeFrame = findHdm05VisualStrikeFrame(sourceRig, racket, nextMotion, playback)
-        previewOffset = Math.max(0, strikeFrame - Math.round(nextMotion.fps * 1.2)) / nextMotion.fps
         elapsed = 0
         autoCycleElapsed = 0
-        measureStrikeAnchor(nextMotion)
-        resetShuttlePlayback()
+        recomputeStrike(nextMotion)
         ;(window as any).__hdm05_badminton_ready__ = true
       } catch (error) {
         loadError = error instanceof Error ? error.message : String(error)
@@ -239,9 +263,18 @@ const meta: Meta = {
       void loadMotion(nextId)
     }
 
+    function recomputeStrike(nextMotion: Hdm05Motion): void {
+      if (!player.loaded) return
+      strikeFrame = findHdm05VisualStrikeFrame(player.bones, racket, nextMotion, playback)
+      previewOffset = Math.max(0, strikeFrame - Math.round(nextMotion.fps * 1.2)) / nextMotion.fps
+      measureStrikeAnchor(nextMotion)
+      resetShuttlePlayback()
+    }
+
     function measureStrikeAnchor(nextMotion: Hdm05Motion): void {
-      applyHdm05SourceSkeleton(sourceRig, nextMotion, strikeFrame / nextMotion.fps, playback)
-      syncHdm05Racket(sourceRig.jointPositions, racket, nextMotion.action)
+      applyHdm05Motion(player.bones, nextMotion, strikeFrame / nextMotion.fps, playback)
+      playerGroup.updateMatrixWorld(true)
+      syncHdm05Racket(player.bones, racket, nextMotion.action)
       getRacketStringCenterWorld(racket, strikeAnchor)
       incomingStart.copy(strikeAnchor).add(new THREE.Vector3(1.7, 0.42, 0.28))
     }
@@ -336,7 +369,7 @@ const meta: Meta = {
       gui.destroy()
       orbit.dispose()
       trail.dispose()
-      sourceRig.dispose()
+      disposeGroup(playerGroup)
       overlay.disposeLayout()
       disposeGroup(racket)
       disposeGroup(shuttle)
@@ -391,14 +424,15 @@ function setCamera(
   compact: boolean,
 ): void {
   const scale = compact ? 1.3 : 1
-  if (view === 'front') camera.position.set(-2.2, 1.45, 5.2 * scale)
-  if (view === 'side') camera.position.set(-2.2 - 4.8 * scale, 2.45, 0.2)
-  if (view === 'back') camera.position.set(-2.2, 1.65, -5.2 * scale)
-  if (view === 'top') camera.position.set(-2.2, 7.2 * scale, 0.1)
-  if (view === 'orbit') camera.position.set(-2.2 - 4 * scale, 3, 4.15 * scale)
+  // 假人面朝 +x（球网在 x=0），站位 x≈-2.2、z≈0；右侧（挥拍手）在 +z 侧
+  if (view === 'front') camera.position.set(-1.9, 1.45, 5.2 * scale + 0.4)
+  if (view === 'side') camera.position.set(-1.9 - 4.8 * scale, 2.45, 0.4)
+  if (view === 'back') camera.position.set(-1.9, 1.65, 0.4 - 5.2 * scale)
+  if (view === 'top') camera.position.set(-1.9, 7.2 * scale, 0.4)
+  if (view === 'orbit') camera.position.set(-1.9 - 4 * scale, 3, 4.15 * scale + 0.4)
   camera.fov = compact ? 52 : 45
   camera.updateProjectionMatrix()
-  orbit.target.set(-1.7, 1.15, 0.02)
+  orbit.target.set(-1.9, 1.1, 0.4)
   camera.lookAt(orbit.target)
 }
 

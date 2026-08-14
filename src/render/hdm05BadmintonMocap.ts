@@ -229,7 +229,8 @@ function setRotationVector(bone: THREE.Object3D, sourceVector: number[], scale: 
     return
   }
   AXIS.copy(vector).multiplyScalar(1 / length)
-  TEMP_QUAT.setFromAxisAngle(AXIS, length * scale)
+  // 轴角映射含镜像（行列式 -1），镜像共轭会使旋转方向反转，故角度取反
+  TEMP_QUAT.setFromAxisAngle(AXIS, -length * scale)
   bone.quaternion.copy(rest.quaternion).multiply(TEMP_QUAT)
 }
 
@@ -250,8 +251,15 @@ function lerpRow(rows: number[][], frame: number, nextFrame: number, alpha: numb
   ]
 }
 
+/**
+ * AMASS/HDM05 坐标系 → 假人骨骼局部系（模型绕 Y 转 +90° 后面朝球网 +x）：
+ * 数据实测为 z-up（垂直轴在数据 z 分量，root 位移的 z 全程恒定≈0）。
+ * 渲染系轴角 = (y, -z, x)，再转回模型局部系（绕 Y -90°）= (-x, -z, y)。
+ * 模型局部系下局部旋转链 + 根位移产生正确世界姿态（脚趾 +x、右手挥拍）。
+ * 垂直分量同为 -z，击球点高度语义不变（扣杀 2.1m、高远 2.1m、吊球 2.1m、低发 1.1m）。
+ */
 function smplVectorToThree(value: number[], scale: number): THREE.Vector3 {
-  return OFFSET.set(value[0] * scale, value[2] * scale, -value[1] * scale)
+  return OFFSET.set(-value[0] * scale, -value[2] * scale, value[1] * scale)
 }
 
 function getRest(bone: THREE.Object3D): BoneRest {

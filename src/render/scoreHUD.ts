@@ -11,13 +11,19 @@ import * as THREE from 'three'
 export interface ScoreHUD {
   mesh: THREE.Sprite
   update: (home: number, away: number, setStr: string, rally: number, isDeuce: boolean) => void
+  /** 每帧调用：把 sprite 放到相机右上方固定屏幕位置（世界跟随）。 */
   syncPosition: (camera: THREE.Camera) => void
+  /** 从场景移除 sprite（dispose 时调用）。 */
+  detach: (scene: THREE.Scene) => void
 }
 
 const CANVAS_W = 800
 const CANVAS_H = 300
-const SPRITE_W = 16
-const SPRITE_H = 6
+/** 世界尺寸按屏幕占比缩小：约屏幕宽 1/3、高 1/6，不再盖住球场。 */
+const SPRITE_W = 3.4
+const SPRITE_H = 1.3
+/** 相机局部坐标偏移（右、上、前），转世界后 sprite 固定在屏幕右上。 */
+const SCREEN_OFFSET = new THREE.Vector3(2.7, 1.05, -6)
 
 /** 纯文本缓存 key，避免每帧重绘 */
 function cacheKey(home: number, away: number, setStr: string, rally: number, isDeuce: boolean): string {
@@ -98,14 +104,23 @@ export function createScoreHUD(): ScoreHUD {
   return {
     mesh,
     update: draw,
-    syncPosition(_camera: THREE.Camera) {
-      // Place HUD above net center at a fixed world position
-      // This is reliably visible from the broadcast camera angle
-      // Sprite automatically faces camera
-      mesh.position.set(0, 3.2, 0)
+    syncPosition(camera: THREE.Camera) {
+      // 世界跟随相机：偏移量经相机四元数转到世界，sprite 始终在屏幕右上角
+      camera.updateMatrixWorld(true)
+      camera.getWorldQuaternion(WORLD_QUAT)
+      camera.getWorldPosition(WORLD_POS)
+      SCREEN_OFFSET_TMP.copy(SCREEN_OFFSET).applyQuaternion(WORLD_QUAT)
+      mesh.position.copy(WORLD_POS).add(SCREEN_OFFSET_TMP)
+    },
+    detach(scene: THREE.Scene) {
+      scene.remove(mesh)
     },
   }
 }
+
+const WORLD_QUAT = new THREE.Quaternion()
+const WORLD_POS = new THREE.Vector3()
+const SCREEN_OFFSET_TMP = new THREE.Vector3()
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath()
