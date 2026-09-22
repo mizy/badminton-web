@@ -17,7 +17,7 @@ pnpm test:watch   # vitest
 | P1 | 球物理 + 场景 | `physics/*`, `render/*`, `play/*`, `game/reducer.ts` | `pnpm test` |
 | P2 | 碰撞集成 | `game/reducer.ts` 新增碰撞步骤 | 集成测试 |
 | P3 | 角色+输入+步法 | `input/*`, `character/*`, `render/playerMesh.ts` | 移动测试 |
-| P4 | 击球合成 | `character/shotSynthesis.ts`, `game/shotLegality.ts` | 6球路测试 |
+| P4 | 击球合成 | `character/shotSynthesis.ts`, `character/contact.ts`, `character/shotTargeting.ts` | 6球路测试 |
 | P5 | AI | `ai/*` | AI vs 玩家 |
 | P6 | 比赛规则 | `game/match.ts`, `game/stamina.ts` | BWF 计分测试 |
 | P7 | 装备系统 | `equipment/*` | 装备属性影响测试 |

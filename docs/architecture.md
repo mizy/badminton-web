@@ -183,7 +183,7 @@ graph TD
         CHAR[character/*]
         AI[ai/*]
         INP[input/*]
-        GAME[game/reducer<br/>game/match<br/>game/shotLegality<br/>game/stamina]
+        GAME[game/reducer<br/>game/match<br/>game/stamina]
         RENDER[render/*]
         MAIN[main.ts]
         DEMO[demo/demoController]
@@ -270,15 +270,6 @@ function synthesizeShot(intent, player, shuttle, timing): ShotResult
 
 ✅ 6 种球路 + 高度/距离条件判定 + 质量倍率调节。
 
-#### `character/timing.ts` — 击球时机窗口
-
-```typescript
-type TimingWindow = { open, close: number; quality: 'perfect'|'good'|'late'|'miss' }
-function computeTimingWindow(player, shuttle, cfg?): TimingWindow | null
-```
-
-✅ 基于来球速度计算最佳击球区间，分 4 档品质。
-
 #### `ai/types.ts` — AI 决策类型
 
 ```typescript
@@ -296,13 +287,6 @@ function decideTactical(aiPlayer, opponent, shuttle, config): TacticalDecision
 ```
 
 ✅ 是否到位的判定 → 选球路 → 选落点 → 选力量，含随机扰动。
-
-#### `ai/prediction.ts` — 对手回球预估
-
-```typescript
-type OpponentProfile = { preferredShots, weakSide, avgReactionTime }
-function estimateReturnZone(opponent, profile): [3]number
-```
 
 #### `ai/difficulty.ts` — 难度参数调节
 
@@ -342,14 +326,6 @@ function handleSetEnd(match: MatchState): MatchState    // 局结算
 ```
 
 ✅ 三局两胜 21 分制、deuce（先到 30 分封顶）、发球权切换。
-
-#### `game/shotLegality.ts` — 球路合法性
-
-```typescript
-function validateShot(intent, player, shuttle): ShotLegality     // 高度/距离/球种条件
-function isBallInCourt(pos): boolean                              // 是否出界
-function isBallOverNet(pos, prevPos): boolean                     // 是否过网
-```
 
 #### `game/stamina.ts` — 体力系统
 
@@ -471,9 +447,9 @@ graph TD
 | Phase | 依赖 | 集成内容 | 关键动作 |
 |-------|------|---------|---------|
 | **P1** | — | physics/shuttlecock, render/*, game/reducer + game/types, play/start | ✅ 已完成 |
-| **P2** | P1 | physics/racket + collision 接入 game loop | ✅ 已集成 |
+| **P2** | P1 | physics/racket 接入 game loop | ✅ 已集成 |
 | **P3** | P1 | input/*, character/movement, render/playerMesh | ✅ 已集成 |
-| **P4** | P2+P3 | shotSynthesis, timing, shotLegality | ✅ 已集成 |
+| **P4** | P2+P3 | shotSynthesis, contact, shotTargeting | ✅ 已集成 |
 | **P5** | P3+P4 | ai/* | ✅ 已集成 |
 | **P6** | P4 | match, stamina | ✅ 已集成 |
 | **P7** | P5+P6 | equipment/* | 装备参数系统，影响物理和击球合成 |

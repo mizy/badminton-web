@@ -32,4 +32,21 @@ describe('badminton action contact kinematics', () => {
     expect(secondSample!.corkCenter[1] - firstSample!.corkCenter[1]).toBeCloseTo(second[1] - first[1])
     expect(secondSample!.corkCenter[2] - firstSample!.corkCenter[2]).toBeCloseTo(second[2] - first[2])
   })
+
+  it('brings the shuttle in from the opponent side before returning it across the net', () => {
+    const anchor: Vec3 = [-1.8, 1.7, 0.2]
+    const hittingActions = BADMINTON_ACTIONS.filter(canBadmintonActionContact)
+
+    for (const action of hittingActions) {
+      const contact = getBadmintonActionContactCycle(action)
+      const incomingStart = sampleBadmintonShuttle(action, contact - 0.12, anchor)!
+      const incomingEnd = sampleBadmintonShuttle(action, contact - 0.06, anchor)!
+      const outgoingStart = sampleBadmintonShuttle(action, contact + 0.03, anchor)!
+      const outgoingEnd = sampleBadmintonShuttle(action, contact + 0.09, anchor)!
+
+      expect(incomingStart.corkCenter[0], action).toBeGreaterThan(anchor[0])
+      expect(incomingEnd.corkCenter[0], action).toBeLessThan(incomingStart.corkCenter[0])
+      expect(outgoingEnd.corkCenter[0], action).toBeGreaterThan(outgoingStart.corkCenter[0])
+    }
+  })
 })

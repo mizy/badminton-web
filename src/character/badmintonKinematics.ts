@@ -54,18 +54,18 @@ const NO_SHUTTLE = new Set<BadmintonAction>(['ready', 'split_step'])
 const ACTION_SPECS: Record<BadmintonAction, ActionSpec> = {
   ready: spec('Ready stance', 1.4, 0.5, [-0.4, 0.1, 0], [0.4, 0.08, 0], 0.1, [0.55, 0.25, -0.05], [1, 0, 0]),
   split_step: spec('Split step', 1.05, 0.42, [-0.45, 0.1, -0.1], [0.35, 0.05, -0.05], 0.08, [0.58, 0.22, -0.08], [1, 0, 0]),
-  serve: spec('Low serve', 1.9, 0.48, [-0.38, -0.1, -0.1], [2.57, -0.18, 0.03], 0.08, [0.82, -0.36, 0.12], [0.98, 0.18, 0.04]),
-  forehand_clear: spec('Forehand clear', 1.85, 0.5, [-0.52, -0.17, -0.02], [6.18, 0.78, 0.28], 1, [0.48, 0.86, 0.12], [0.93, 0.36, 0.08]),
-  backhand_clear: spec('Backhand clear', 1.95, 0.53, [-0.55, -0.25, 0.07], [5.75, 0.65, -0.13], 0.9, [0.35, 0.82, -0.42], [0.9, 0.36, -0.18]),
-  forehand_drive: spec('Forehand drive', 1.35, 0.45, [-0.76, -0.1, 0.1], [5.04, -0.2, 0.08], 0.15, [0.94, 0.12, 0.25], [0.98, 0.04, 0.08]),
-  backhand_drive: spec('Backhand drive', 1.35, 0.45, [-0.63, 0.02, -0.15], [4.87, -0.17, -0.07], 0.12, [0.88, 0.08, -0.38], [0.96, 0.04, -0.18]),
-  smash: spec('Jump smash', 1.75, 0.52, [-0.63, -0.42, -0.06], [4.52, -2.04, 0.07], -0.15, [0.45, 0.88, 0.12], [0.98, -0.18, 0.04]),
-  drop: spec('Drop shot', 1.75, 0.52, [-0.45, -0.16, -0.03], [2.52, -1.2, 0.37], 0.22, [0.5, 0.84, 0.12], [0.96, 0.16, 0.08]),
-  net_shot: spec('Net shot', 1.45, 0.5, [-0.6, -0.2, -0.02], [1.95, -0.2, 0.14], 0.18, [0.9, -0.18, 0.25], [0.96, 0.2, 0.12]),
-  net_kill: spec('Net kill', 1.35, 0.48, [-0.61, -0.03, -0.06], [1.82, -0.73, 0], -0.05, [0.88, 0.25, 0.2], [0.98, -0.2, 0.04]),
-  lift: spec('Defensive lift', 1.65, 0.46, [-0.57, -0.16, -0.02], [5.23, 1.92, 0.41], 1.15, [0.72, -0.62, 0.2], [0.9, 0.42, 0.12]),
-  defense_lunge: spec('Defensive lunge', 1.45, 0.46, [-0.58, 0.07, -0.13], [2.62, 0.2, -0.1], 0.15, [0.85, 0.08, -0.42], [0.98, 0.02, -0.18]),
-  block: spec('Body block', 1.25, 0.44, [-0.73, 0.1, 0.02], [2.37, -0.07, 0.1], 0.04, [0.92, 0.08, -0.12], [0.99, 0.02, -0.06]),
+  serve: spec('Low serve', 1.9, 0.48, [0.28, 0.16, -0.1], [2.57, -0.18, 0.03], 0.08, [0.82, -0.36, 0.12], [0.98, 0.18, 0.04]),
+  forehand_clear: spec('Forehand clear', 1.85, 0.5, [0.52, 0.17, -0.02], [6.18, 0.78, 0.28], 1, [0.48, 0.86, 0.12], [0.93, 0.36, 0.08]),
+  backhand_clear: spec('Backhand clear', 1.95, 0.53, [0.55, 0.25, 0.07], [5.75, 0.65, -0.13], 0.9, [0.35, 0.82, -0.42], [0.9, 0.36, -0.18]),
+  forehand_drive: spec('Forehand drive', 1.35, 0.45, [0.76, 0.1, 0.1], [5.04, -0.2, 0.08], 0.15, [0.94, 0.12, 0.25], [0.98, 0.04, 0.08]),
+  backhand_drive: spec('Backhand drive', 1.35, 0.45, [0.63, 0.02, -0.15], [4.87, -0.17, -0.07], 0.12, [0.88, 0.08, -0.38], [0.96, 0.04, -0.18]),
+  smash: spec('Jump smash', 1.75, 0.52, [0.63, 0.42, -0.06], [4.52, -2.04, 0.07], -0.15, [0.45, 0.88, 0.12], [0.98, -0.18, 0.04]),
+  drop: spec('Drop shot', 1.75, 0.52, [0.45, 0.16, -0.03], [2.52, -1.2, 0.37], 0.22, [0.5, 0.84, 0.12], [0.96, 0.16, 0.08]),
+  net_shot: spec('Net shot', 1.45, 0.5, [0.6, 0.2, -0.02], [1.95, -0.2, 0.14], 0.18, [0.9, -0.18, 0.25], [0.96, 0.2, 0.12]),
+  net_kill: spec('Net kill', 1.35, 0.52, [0.61, 0.03, -0.06], [1.82, -0.73, 0], -0.05, [0.88, 0.25, 0.2], [0.98, -0.2, 0.04]),
+  lift: spec('Defensive lift', 1.65, 0.46, [0.57, 0.16, -0.02], [5.23, 1.92, 0.41], 1.15, [0.72, -0.62, 0.2], [0.9, 0.42, 0.12]),
+  defense_lunge: spec('Defensive lunge', 1.45, 0.46, [0.58, 0.07, -0.13], [2.62, 0.2, -0.1], 0.15, [0.85, 0.08, -0.42], [0.98, 0.02, -0.18]),
+  block: spec('Body block', 1.25, 0.44, [0.73, 0.1, 0.02], [2.37, -0.07, 0.1], 0.04, [0.92, 0.08, -0.12], [0.99, 0.02, -0.06]),
 }
 
 export const ACTION_LABELS = Object.fromEntries(
@@ -143,14 +143,34 @@ function spec(
 }
 
 function racketDirectionAt(spec: ActionSpec, cycle: number): Vec3 {
-  const relative = cycle - spec.contact
-  const before = Math.max(-1, Math.min(0, relative / Math.max(spec.contact, 0.001)))
-  const after = Math.max(0, Math.min(1, relative / Math.max(1 - spec.contact, 0.001)))
-  return normalize3([
-    spec.contactDirection[0] - before * 0.18 - after * 0.08,
-    spec.contactDirection[1] - before * 0.14 - after * 0.32,
-    spec.contactDirection[2] + before * 0.34 - after * 0.28,
-  ], spec.contactDirection)
+  const readyDirection: Vec3 = [
+    spec.contactDirection[0] - 1,
+    spec.contactDirection[1] - 0.14,
+    spec.contactDirection[2] - 0.34,
+  ]
+  if (cycle < spec.contact) {
+    return normalize3(
+      lerp3(readyDirection, spec.contactDirection, cycle / Math.max(spec.contact, 0.001)),
+      spec.contactDirection,
+    )
+  }
+
+  const followEnd = 0.78
+  const followDirection: Vec3 = [
+    spec.contactDirection[0] + 0.32,
+    spec.contactDirection[1] - 0.36,
+    spec.contactDirection[2] - 0.28,
+  ]
+  if (cycle < followEnd) {
+    return normalize3(
+      lerp3(spec.contactDirection, followDirection, (cycle - spec.contact) / (followEnd - spec.contact)),
+      spec.contactDirection,
+    )
+  }
+  return normalize3(
+    lerp3(followDirection, readyDirection, smoothstep((cycle - followEnd) / (1 - followEnd))),
+    readyDirection,
+  )
 }
 
 function shuttleAt(spec: ActionSpec, cycle: number, contactCenter: Vec3): Vec3 {
