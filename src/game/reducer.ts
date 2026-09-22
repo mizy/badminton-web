@@ -21,27 +21,8 @@ export type GameAction =
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
-    case 'SERVE': {
-      if (state.phase !== 'idle' || state.shuttle) return state
-      const server = state.mode === 'training' ? 0 : state.match?.server ?? 0
-      if (action.playerIndex !== server) return state
-      const player = state.players[server]
-      if (!player) return state
-      const forward = player.side === 0 ? 1 : -1
-      const serviceZ = forward * (state.match?.serviceSide === 'left' ? -1 : 1)
-      if (Math.abs(player.pos[0]) < SHORT_SERVICE_LINE || Math.abs(player.pos[0]) > 6.7
-        || player.pos[2] * serviceZ <= 0 || Math.abs(player.pos[2]) > SINGLES_HALF_WIDTH) {
-        return updatePlayer(state, server, p => ({ ...p, feedback: '发球：请站在本方高亮发球区内' }))
-      }
-      const origin: [number, number, number] = [player.pos[0] + forward * 0.35, 1.1, player.pos[2]]
-      const { solution } = solveServe(player.serveSelection, origin, forward, serviceZ)
-      return {
-        ...state, phase: 'playing', phaseTime: 0, currentPlayer: server,
-        shuttle: { pos: solution.launchPoint, vel: solution.outgoingVel, spin: [0, 8, 0] },
-        lastHitter: server, lastHitAt: state.elapsed, rallyId: state.rallyId + 1, rallyHits: 0,
-        serveInFlight: true, serviceCourtZ: -serviceZ, netTouched: false, lastPoint: null,
-      }
-    }
+    case 'SERVE':
+      return serveFrom(state, action.playerIndex)
     case 'MOVE': {
       if (state.phase !== 'playing' && state.phase !== 'idle') return state
       // 击球即制动：引拍与挥拍期间 WASD 只作落点采样，不再驱动移动。
@@ -63,19 +44,31 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'SCISSOR_STEP':
       if (state.phase !== 'playing') return state
       return updatePlayer(state, action.playerIndex, p => beginBodyAction(p, action.type === 'JUMP' ? 'jump' : 'scissor'))
-    case 'SWING_START':
+    case 'SWING_START': {
       if (state.phase !== 'playing' && state.phase !== 'idle') return state
-      return updatePlayer(state, action.playerIndex, p => {
+      const selected = updatePlayer(state, action.playerIndex, p => {
         if (p.swing.phase !== 'ready') return p
-        const selected = { ...p, selectedShot: action.shot ?? p.selectedShot, aim: action.aim ?? p.aim }
-        if (state.phase === 'idle') return { ...selected, serveSelection: SERVE_BY_SHOT[selected.selectedShot] ?? selected.serveSelection }
-        const winding = beginSwing(selected)
+        return {
+          ...p,
+          selectedShot: action.shot ?? p.selectedShot,
+          aim: action.aim ?? p.aim,
+          serveSelection: state.phase === 'idle' && action.shot
+            ? SERVE_BY_SHOT[action.shot] ?? p.serveSelection
+            : p.serveSelection,
+        }
+      })
+      // 等待发球时，发球键（J/K/I/L）即选择并直接发出该种发球。
+      if (state.phase === 'idle') return serveFrom(selected, action.playerIndex)
+      return updatePlayer(selected, action.playerIndex, p => {
+        if (p.swing.phase !== 'ready') return p
+        const winding = beginSwing(p)
         return {
           ...winding,
           movement: { ...winding.movement, targetDir: { x: 0, z: 0 } },
           swing: { ...winding.swing, slice: action.slice ?? false },
         }
       })
+    }
     case 'SWING_RELEASE':
       return updatePlayer(state, action.playerIndex, releaseSwing)
     case 'PAUSE':
@@ -123,6 +116,29 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 function updatePlayer(state: GameState, index: 0 | 1, update: (p: NonNullable<GameState['players'][0]>) => NonNullable<GameState['players'][0]>): GameState {
   if (!state.players[index]) return state
   return { ...state, players: state.players.map((p, i) => p && i === index ? update(p) : p) as GameState['players'] }
+}
+
+/** 发球共用入口：SERVE 键与等待发球时的击球键都走这里。 */
+function serveFrom(state: GameState, playerIndex: 0 | 1): GameState {
+  if (state.phase !== 'idle' || state.shuttle) return state
+  const server = state.mode === 'training' ? 0 : state.match?.server ?? 0
+  if (playerIndex !== server) return state
+  const player = state.players[server]
+  if (!player) return state
+  const forward = player.side === 0 ? 1 : -1
+  const serviceZ = forward * (state.match?.serviceSide === 'left' ? -1 : 1)
+  if (Math.abs(player.pos[0]) < SHORT_SERVICE_LINE || Math.abs(player.pos[0]) > 6.7
+    || player.pos[2] * serviceZ <= 0 || Math.abs(player.pos[2]) > SINGLES_HALF_WIDTH) {
+    return updatePlayer(state, server, p => ({ ...p, feedback: '发球：请站在本方高亮发球区内' }))
+  }
+  const origin: [number, number, number] = [player.pos[0] + forward * 0.35, 1.1, player.pos[2]]
+  const { solution } = solveServe(player.serveSelection, origin, forward, serviceZ)
+  return {
+    ...state, phase: 'playing', phaseTime: 0, currentPlayer: server,
+    shuttle: { pos: solution.launchPoint, vel: solution.outgoingVel, spin: [0, 8, 0] },
+    lastHitter: server, lastHitAt: state.elapsed, rallyId: state.rallyId + 1, rallyHits: 0,
+    serveInFlight: true, serviceCourtZ: -serviceZ, netTouched: false, lastPoint: null,
+  }
 }
 
 function changeEnds(players: GameState['players']): GameState['players'] {

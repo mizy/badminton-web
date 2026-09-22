@@ -110,7 +110,7 @@ export function createPlayUI(callbacks: PlayCallbacks): {
         <ol class="play-shots" data-ui="shots" aria-label="J K L U I O 直接击球；数字 1 至 6 同效；等待发球时仅选球"></ol>
         <div class="play-contact-window" data-ui="contact-window" hidden><strong>当前可打窗口</strong><span data-ui="legal-shots">等待发球</span><small>仅提示身体可达，仍需提前引拍；不保证命中。</small></div>
         <div class="play-key-hints" aria-label="键盘操作">
-          <span><kbd>W A S D</kbd> 移动</span><span><kbd>Space</kbd> 发球 / 起跳</span><span><kbd>Q</kbd> 蹬转</span><span>击球按住蓄力 · <kbd>WASD</kbd> 定方向 · 松开出拍</span><span><kbd>Esc</kbd> 暂停</span>
+          <span><kbd>W A S D</kbd> 移动</span><span><kbd>J K I L</kbd> 直接发球</span><span><kbd>Space</kbd> 起跳</span><span><kbd>Q</kbd> 蹬转</span><span>击球按住蓄力 · <kbd>WASD</kbd> 定方向 · 松开出拍</span><span><kbd>Esc</kbd> 暂停</span>
           <span><kbd>Space</kbd> → <kbd>L</kbd> 跳杀</span><span><kbd>Q</kbd> → <kbd>L</kbd> 蹬转杀</span><span><kbd>Shift + J</kbd> 滑板高远</span><span><kbd>Shift + K</kbd> 切削吊球</span>
         </div>
       </footer>
@@ -147,7 +147,7 @@ export function createPlayUI(callbacks: PlayCallbacks): {
           </div>
         </div>
         <footer class="play-menu-footer">
-          <div class="play-menu-controls"><span><kbd>WASD</kbd> 移动 <kbd>Space</kbd> 发球 / 起跳 <kbd>Q</kbd> 蹬转</span><span>发球 <kbd>J</kbd> 高远 <kbd>K</kbd> 小球 <kbd>I</kbd> 反手小 <kbd>L</kbd> 平射，击球 <kbd>J</kbd> 高远 <kbd>K</kbd> 吊球 <kbd>L</kbd> 杀球 <kbd>U</kbd> 平抽 <kbd>I</kbd> 放网 <kbd>O</kbd> 挑球</span><span>击球按住蓄力、<kbd>WASD</kbd> 定落点 · <kbd>Space → L</kbd> 跳杀 <kbd>Q → L</kbd> 蹬转杀 <kbd>Shift + J</kbd> 滑板高远 <kbd>Shift + K</kbd> 切削吊球</span></div>
+          <div class="play-menu-controls"><span><kbd>WASD</kbd> 移动 <kbd>Space</kbd> 起跳 <kbd>Q</kbd> 蹬转</span><span>发球 <kbd>J</kbd> 高远 <kbd>K</kbd> 小球 <kbd>I</kbd> 反手小 <kbd>L</kbd> 平射（按下即发）· 击球 <kbd>J</kbd> 高远 <kbd>K</kbd> 吊球 <kbd>L</kbd> 杀球 <kbd>U</kbd> 平抽 <kbd>I</kbd> 放网 <kbd>O</kbd> 挑球</span><span>击球按住蓄力、<kbd>WASD</kbd> 定落点 · <kbd>Space → L</kbd> 跳杀 <kbd>Q → L</kbd> 蹬转杀 <kbd>Shift + J</kbd> 滑板高远 <kbd>Shift + K</kbd> 切削吊球</span></div>
           <p>球路键按下即击球，数字 1–6 同效；等待发球时仅选球。Shift 单独不挥拍。</p>
           <p>先到位再起跳，空中不能二次起跳，落地要恢复。推荐桌面 + 键盘 · 支持 Tab / Enter 操作菜单</p>
         </footer>
@@ -439,7 +439,7 @@ export function createPlayUI(callbacks: PlayCallbacks): {
       : state.phase === 'match_end' ? '比赛结束'
       : state.phase === 'set_end' ? '本局结束'
       : point ? `${state.phase === 'idle' ? '上一分：' : ''}${point}`
-      : state.phase === 'idle' ? (serving === 0 ? '站进发球区 · J 高远 / K 小球 / I 反手小 / L 平射 · Space 发出' : '准备接发 · 对手即将发球')
+      : state.phase === 'idle' ? (serving === 0 ? '站进发球区 · J 高远 / K 小球 / I 反手小 / L 平射 直接发出' : '准备接发 · 对手即将发球')
       : '回合进行中 · J / K / L / U / I / O 直接击球')
     text(feedback, player?.feedback || '先到位再起跳，空中不能二次起跳，落地要恢复。')
 
