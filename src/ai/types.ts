@@ -3,9 +3,12 @@
 import type { ShotType } from '../character/shotSynthesis'
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard'
+export type AIStyle = 'attacker' | 'rally' | 'placement'
 
 export interface AIConfig {
   difficulty: AIDifficulty
+  style?: AIStyle
+  cooperative?: boolean
   reactionDelay: number
   accuracy: number
   aggressiveness: number
@@ -31,4 +34,14 @@ export interface TacticalDecision {
   power: number
   target: [number, number, number]
   risk: number
+}
+
+export interface InterceptionPrediction {
+  /** 自己半场内的站位，不是球的落点。 */
+  moveTarget: [number, number, number]
+  /** 从当前状态起的秒数 / 球塞接触高度（米）；不可达时均为 null。 */
+  contactTime: number | null
+  contactHeight: number | null
+  /** 仅为共享移动/身体模型的预测，不保证实际挥拍命中。 */
+  reachable: boolean
 }

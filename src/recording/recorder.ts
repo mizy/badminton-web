@@ -94,8 +94,14 @@ export class Recorder {
       if (!this.mediaRecorder) return resolve(new Blob())
       // Set recording = false immediately to prevent double-stop race conditions
       this.recording = false
+      const recorder = this.mediaRecorder
       this.mediaRecorder.onstop = () => {
         const blob = new Blob(this.chunks, { type: 'video/webm' })
+        recorder.stream.getTracks().forEach(track => track.stop())
+        this.mediaRecorder = null
+        this.compCanvas = null
+        this.compCtx = null
+        this.chunks = []
         resolve(blob)
       }
       if (this.mediaRecorder.state === 'recording') {

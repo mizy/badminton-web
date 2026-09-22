@@ -14,17 +14,23 @@ describe('shuttlecock physics', () => {
     expect(result.vel[1]).toBeCloseTo(-0.49, 2)
   })
 
-  // 杀球速度衰减: 80 m/s → 0.5s 内降至 ~5-10 m/s (接近收尾速度)
-  it('smash speed decays drastically from 80 m/s in 0.5s', () => {
-    const state = launchShuttlecock([0, 2, 0], 80, 0, 0)
-    const result = stepShuttlecock(state, 0.5, DEFAULT_SHUTTLECOCK, 32)
+  // 收尾速度: 由低速 Cd·A 决定，实测约 6.7–6.8 m/s
+  it('approaches the measured terminal velocity', () => {
+    let state = launchShuttlecock([0, 30, 0], 0, -90, 0)
+    for (let i = 0; i < 300; i++) state = stepShuttlecock(state, 1 / 30, DEFAULT_SHUTTLECOCK, 4)
+    expect(state.vel[1]).toBeGreaterThan(-7.3)
+    expect(state.vel[1]).toBeLessThan(-6.2)
+  })
 
-    const speed = Math.sqrt(
-      result.vel[0] ** 2 + result.vel[1] ** 2 + result.vel[2] ** 2,
-    )
-    // 高速 Cd~0.035, crossSection=0.0020, 速度仍较高
-    expect(speed).toBeLessThan(70)
-    expect(speed).toBeGreaterThan(35)
+  // 杀球速度衰减: 高阻力使 80 m/s 在 0.2s 内衰减过半
+  it('smash speed decays drastically from 80 m/s', () => {
+    const state = launchShuttlecock([0, 2, 0], 80, 0, 0)
+    const quarter = stepShuttlecock(state, 0.25, DEFAULT_SHUTTLECOCK, 32)
+    const half = stepShuttlecock(state, 0.5, DEFAULT_SHUTTLECOCK, 32)
+    const speed = (s: typeof state) => Math.sqrt(s.vel[0] ** 2 + s.vel[1] ** 2 + s.vel[2] ** 2)
+    expect(speed(quarter)).toBeLessThan(45)
+    expect(speed(quarter)).toBeGreaterThan(10)
+    expect(speed(half)).toBeLessThan(20)
   })
 
   // 高远球轨迹: 28 m/s 仰角 55°, 滞空与落点合理

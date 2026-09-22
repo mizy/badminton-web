@@ -20,20 +20,20 @@ export function createSkeletalRacket(): THREE.Group {
   const group = new THREE.Group()
   const material = new THREE.MeshStandardMaterial({ color: 0xe7ecf4, metalness: 0.18, roughness: 0.34 })
   const gripMaterial = new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.08, roughness: 0.72 })
-  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.021, 0.34, 10), gripMaterial)
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.012, 0.16, 10), gripMaterial)
   group.add(handle)
 
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.44, 8), material)
-  shaft.position.y = 0.38
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.25, 8), material)
+  shaft.position.y = 0.205
   group.add(shaft)
 
-  const head = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.012, 8, 28), material)
+  const head = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.007, 8, 28), material)
   head.position.y = RACKET_HEAD_DISTANCE
   head.scale.x = 0.76
   group.add(head)
 
   const strings = new THREE.Mesh(
-    new THREE.CircleGeometry(0.145, 24),
+    new THREE.CircleGeometry(0.12, 24),
     new THREE.MeshBasicMaterial({ color: 0xdce6f5, transparent: true, opacity: 0.18, side: THREE.DoubleSide }),
   )
   strings.position.y = RACKET_HEAD_DISTANCE

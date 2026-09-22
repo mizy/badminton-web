@@ -50,6 +50,19 @@ describe('shot contact model', () => {
     expect(closed.reason).toContain('net risk')
   })
 
+  it('makes sliced clears and drops physically distinct from their flat equivalents', () => {
+    for (const shot of ['CLEAR', 'DROP'] as const) {
+      const contact = idealContactPoint(PLAYER_POS, 0, shot)
+      const input = createInput(contact, shot, shot === 'CLEAR' ? 18 : 12)
+      const normal = evaluateContact(input)
+      const sliced = evaluateContact({ ...input, slice: true })
+      expect(sliced.outcome).toBe('hit')
+      expect(sliced.outgoingSpin[1]).toBeGreaterThan(normal.outgoingSpin[1])
+      expect(sliced.outgoingVel).not.toEqual(normal.outgoingVel)
+      expect(sliced.netClearance).toBeGreaterThan(0)
+    }
+  })
+
   it('maps high descending contact to smash in auto mode', () => {
     const contact = idealContactPoint(PLAYER_POS, 0, 'SMASH')
     const result = evaluateContact(createInput(contact, 'AUTO', -18, [16, -6, 0.2]))

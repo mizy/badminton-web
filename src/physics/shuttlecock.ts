@@ -16,9 +16,9 @@ export interface ShuttlecockConfig {
 
 /** 77 速羽球基准配置。77 是球速等级，不是 77m/s 初速。 */
 export const SPEED_77_SHUTTLECOCK: ShuttlecockConfig = {
-  mass: 0.005,
-  crossSection: 0.0020,
-  magnusCoef: 0.00025,
+  mass: 0.005,          // BWF 规则 4.74–5.50 g
+  crossSection: 0.0028, // 裙部迎风面积（半径约 3.3 cm）
+  magnusCoef: 0.00006,  // 羽球侧向偏转远小于球类；切削只保留轻微弧线
 }
 
 export const DEFAULT_SHUTTLECOCK: ShuttlecockConfig = SPEED_77_SHUTTLECOCK
@@ -27,13 +27,14 @@ const AIR_DENSITY = 1.225
 const GRAVITY: [number, number, number] = [0, -9.81, 0]
 
 /** 根据速度计算实时阻力系数 Cd
- *  羽毛球气动特性: 高速(>50m/s) Cd~0.035, 中速大幅升高, 低速(~0m/s) Cd~0.70
- *  80→20m/s 约 2.5s; 高远球 28m/s 55° 滞空约 1.5s 左右
+ *  锚点：实测收尾速度约 6.7–6.8 m/s（决定低速 Cd·A）；
+ *  杀球初速 60–80 m/s 在 0.2s 内衰减过半（风洞/比赛观测）。
+ *  羽球裙部 Cd 处于 0.4–0.7 量级，随速度降低裙形展开而增大。
  */
 function dragCoefficient(speed: number): number {
-  if (speed > 50) return 0.035
-  if (speed > 10) return 0.035 + 0.365 * ((50 - speed) / 40)
-  return 0.40 + 0.30 * ((10 - speed) / 10)
+  if (speed > 40) return 0.45
+  if (speed > 10) return 0.45 + 0.17 * ((40 - speed) / 30)
+  return 0.62 + 0.06 * ((10 - speed) / 10)
 }
 
 function derivative(s: ShuttlecockState, cfg: ShuttlecockConfig): ShuttlecockState {

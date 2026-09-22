@@ -24,6 +24,7 @@ export interface ContactInput {
   swingOffsetMs: number
   target?: Vec3
   targetZ: number
+  slice?: boolean
 }
 
 export interface ContactResult {
@@ -91,7 +92,7 @@ const TECHNIQUES: Record<ShotType, TechniqueProfile> = {
     height: 1.72, heightTolerance: 0.42, reach: 0.7, reachTolerance: 0.44, targetX: 1.15,
   },
   NET_DROP: {
-    baseSpeed: 7.5, elevationDeg: 31, faceDeg: 8,
+    baseSpeed: 7.5, elevationDeg: 68, faceDeg: 8,
     height: 0.88, heightTolerance: 0.28, reach: 0.45, reachTolerance: 0.34, targetX: 0.65,
   },
   LIFT: {
@@ -130,11 +131,12 @@ export function evaluateContact(input: ContactInput): ContactResult {
     return missResult(input, { contactError, idealPoint, shuttleCorkCenter, sweetSpot, target, technique, techniqueFit, timing, timingScore }, 'technique reach')
   }
 
-  const outgoingSpin: Vec3 = [0, 22 + quality * 24, input.playerSide === 0 ? -3 : 3]
+  const outgoingSpin: Vec3 = [0, input.slice ? 105 : 22 + quality * 24, input.playerSide === 0 ? -3 : 3]
   const maxSpeed = profile.baseSpeed
     * (0.52 + clamp01(input.power) * 0.48)
-    * (0.58 + quality * 0.42)
+    * (0.58 + quality * 0.42) * (input.slice ? 0.86 : 1)
   const elevationDeg = profile.elevationDeg + (input.racketFaceDeg - profile.faceDeg) * 0.65
+    + (input.slice && technique === 'CLEAR' ? 7 : input.slice && technique === 'DROP' ? 4 : 0)
   const solution = solveTargetedShot({
     corkCenter: input.racket.stringCenter,
     elevationDeg,

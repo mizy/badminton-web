@@ -4,12 +4,11 @@ import type { GameAction } from '../game/reducer'
 import type { GameState } from '../game/types'
 
 export interface AIMoveActionConfigs {
-  away: AIConfig
-  home: AIConfig
+  away?: AIConfig
+  home?: AIConfig
 }
 
 const STOP_DISTANCE = 0.2
-const NET_READY_DISTANCE = 1.1
 
 export function createAIMoveActions(
   state: GameState,
@@ -25,9 +24,10 @@ export function createAIMoveActions(
     if (!player || !opponent) continue
 
     const config = playerIndex === 0 ? configs.home : configs.away
+    if (!config) continue
     const decision = decideTactical(player, opponent, state.shuttle, config)
-    const targetX = clampToReadyHalf(decision.moveTarget[0], playerIndex)
-    const dx = targetX - player.pos[0]
+    // 决策已按 player.side 约束在单打半场内；身份 index 不代表场地一侧。
+    const dx = decision.moveTarget[0] - player.pos[0]
     const dz = decision.moveTarget[2] - player.pos[2]
     const distance = Math.hypot(dx, dz)
 
@@ -43,10 +43,4 @@ export function createAIMoveActions(
   }
 
   return actions
-}
-
-function clampToReadyHalf(x: number, playerIndex: 0 | 1): number {
-  return playerIndex === 0
-    ? Math.min(x, -NET_READY_DISTANCE)
-    : Math.max(x, NET_READY_DISTANCE)
 }

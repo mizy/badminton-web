@@ -2,6 +2,7 @@
 
 import type { GameState } from '../game/types'
 import type { GameAction } from '../game/reducer'
+import type { TickAIConfigs } from '../game/tickService'
 import type { AIConfig } from '../ai/types'
 import { createAIMoveActions } from '../play/aiMoveActions'
 
@@ -34,7 +35,8 @@ export class DemoController {
     })
   }
 
-  getAIConfigs(): { home: AIConfig; away: AIConfig } {
+  getAIConfigs(): TickAIConfigs {
+    if (!this.active) return {}
     return { home: this.homeConfig, away: this.awayConfig }
   }
 }

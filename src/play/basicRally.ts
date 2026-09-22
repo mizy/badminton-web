@@ -3,8 +3,6 @@ import type { AIConfig, AIDifficulty } from '../ai/types'
 import { createPlayer } from '../game/playerFactory'
 import { gameReducer } from '../game/reducer'
 import { createFullGameState, type GameState } from '../game/types'
-import type { ShuttlecockState } from '../physics/shuttlecock'
-import { createAIMoveActions } from './aiMoveActions'
 
 const DEFAULT_AUTO_SERVE_DELAY_SECONDS = 0.15
 const DEFAULT_POINT_PAUSE_SECONDS = 0.8
@@ -51,10 +49,11 @@ export function createBasicRallyOptions(difficulty: AIDifficulty = 'medium'): Ba
 }
 
 export function createBasicRallyState(): BasicRallyState {
-  let game = createFullGameState()
-  game = gameReducer(game, {
-    type: 'SET_PLAYERS',
-    players: createMatchPlayers(),
+  const game = gameReducer(createFullGameState(), {
+    type: 'START_SESSION',
+    mode: 'match',
+    players: [createPlayer(0), createPlayer(1)],
+    controls: ['ai', 'ai'],
   })
 
   return {
@@ -89,21 +88,26 @@ export function stepBasicRally(
     }
   }
 
-  let game = resolveSetEnd(state.game)
+  let game = state.game
   let idleSeconds = state.idleSeconds
   let pointPauseSeconds = state.pointPauseSeconds
-  let stats = state.stats
+  let stats = { ...state.stats, hitCount: game.rallyHits }
 
+  if (game.phase === 'set_end') {
+    stats.lastRallyHits = game.rallyHits
+    game = gameReducer(game, { type: 'RESOLVE_SET_END' })
+    idleSeconds = 0
+    pointPauseSeconds = 0
+  }
+
+  // Demo delays are local: only tick during play so the main game's timers
+  // cannot shorten the story's configured serve/point pauses.
   if (game.phase === 'point_scored') {
     pointPauseSeconds += stepSeconds
-    stats = { ...stats, lastRallyHits: stats.hitCount }
+    stats.lastRallyHits = game.rallyHits
 
     if (pointPauseSeconds >= options.pointPauseSeconds) {
       game = gameReducer(game, { type: 'POINT_DELAY_ELAPSED' })
-      game = gameReducer(game, {
-        type: 'SET_PLAYERS',
-        players: createMatchPlayers(),
-      })
       pointPauseSeconds = 0
       idleSeconds = 0
     }
@@ -137,8 +141,6 @@ export function stepBasicRally(
   }
 
   if (game.phase === 'playing') {
-    game = dispatchAIMovement(game, options.homeAI, options.awayAI)
-    const previousShuttle = game.shuttle
     const nextGame = gameReducer(game, {
       type: 'TICK',
       dt: stepSeconds,
@@ -148,13 +150,11 @@ export function stepBasicRally(
       },
     })
 
-    events.hit = didHitShuttle(previousShuttle, nextGame.shuttle)
-    events.pointEnded = game.phase === 'playing' && nextGame.phase !== 'playing'
-    if (events.hit) {
-      stats = { ...stats, hitCount: stats.hitCount + 1 }
-    }
+    events.hit = nextGame.rallyHits > game.rallyHits
+    events.pointEnded = nextGame.phase !== 'playing'
+    stats.hitCount = nextGame.rallyHits
     if (events.pointEnded) {
-      stats = { ...stats, lastRallyHits: stats.hitCount }
+      stats.lastRallyHits = nextGame.rallyHits
     }
 
     game = nextGame
@@ -164,48 +164,4 @@ export function stepBasicRally(
     events,
     rally: { game, idleSeconds, pointPauseSeconds, stats },
   }
-}
-
-function createMatchPlayers(): GameState['players'] {
-  return [createPlayer(0), createPlayer(1)]
-}
-
-function resolveSetEnd(game: GameState): GameState {
-  if (game.phase !== 'set_end') return game
-  return gameReducer(game, { type: 'RESOLVE_SET_END' })
-}
-
-function dispatchAIMovement(game: GameState, homeAI: AIConfig, awayAI: AIConfig): GameState {
-  let nextGame = game
-  for (const action of createAIMoveActions(game, { away: awayAI, home: homeAI })) {
-    nextGame = gameReducer(nextGame, action)
-  }
-
-  return nextGame
-}
-
-function didHitShuttle(
-  previousShuttle: ShuttlecockState | null,
-  currentShuttle: ShuttlecockState | null,
-): boolean {
-  if (!previousShuttle || !currentShuttle) return false
-
-  const previousVelocity = previousShuttle.vel
-  const currentVelocity = currentShuttle.vel
-  const previousSpeed2 = previousVelocity[0] ** 2 + previousVelocity[1] ** 2 + previousVelocity[2] ** 2
-  const currentSpeed2 = currentVelocity[0] ** 2 + currentVelocity[1] ** 2 + currentVelocity[2] ** 2
-  if (previousSpeed2 <= 0.5 || currentSpeed2 <= 0.5) return false
-
-  const dot =
-    previousVelocity[0] * currentVelocity[0] +
-    previousVelocity[1] * currentVelocity[1] +
-    previousVelocity[2] * currentVelocity[2]
-  const previousSpeed = Math.sqrt(previousSpeed2)
-  const currentSpeed = Math.sqrt(currentSpeed2)
-
-  return (
-    dot < -previousSpeed * currentSpeed * 0.2 ||
-    currentSpeed > previousSpeed * 3 ||
-    currentSpeed < previousSpeed * 0.3
-  )
 }

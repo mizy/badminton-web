@@ -1,13 +1,12 @@
-/** 集中状态归约器 — 所有 GameState 变更经过此函数 */
-
 import type { InputAction } from '../input/types'
-import { handleSetEnd } from './match'
-import { createFullGameState, type GameState } from './types'
-import { launchShuttlecock } from '../physics/shuttlecock'
-import { processGameTick } from './tickService'
-import type { TickAIConfigs } from './tickService'
+import { handleSetEnd, SHORT_SERVICE_LINE, SINGLES_HALF_WIDTH } from './match'
+import { createFullGameState, type GameMode, type GameState } from './types'
+import { processGameTick, type TickAIConfigs } from './tickService'
+import { beginSwing, releaseSwing } from '../character/stroke'
+import { SERVE_BY_SHOT, solveServe } from '../character/serve'
+import { beginBodyAction } from '../character/body'
+import { createPlayer } from './playerFactory'
 
-/** 与 InputAction 相同，但携带 playerIndex */
 export type PlayerGameAction = InputAction & { playerIndex: 0 | 1 }
 
 export type GameAction =
@@ -15,111 +14,135 @@ export type GameAction =
   | { type: 'TICK'; dt: number; aiConfigs?: TickAIConfigs }
   | { type: 'RESET' }
   | { type: 'SET_PLAYERS'; players: GameState['players'] }
+  | { type: 'START_SESSION'; mode: GameMode; players: GameState['players']; controls?: GameState['controls'] }
   | { type: 'POINT_DELAY_ELAPSED' }
   | { type: 'RESOLVE_SET_END' }
   | { type: 'RESTART_MATCH'; players: GameState['players'] }
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
-    case 'SERVE':
-      if (state.phase !== 'idle' || state.shuttle !== null) return state
-      const server = state.match?.server ?? 0
-      const originX = server === 0 ? -0.5 : 0.5
-      const heading = server === 0 ? 90 : -90
-      return {
-        ...state,
-        phase: 'playing',
-        currentPlayer: server,
-        // 平快发球（20 m/s, 22°仰角）：保持球在碰撞检测范围内(y<4)，
-        // 让AI能够持续拦截，形成多回合对打
-        shuttle: launchShuttlecock([originX, 1.5, 0], 20, 22, heading),
+    case 'SERVE': {
+      if (state.phase !== 'idle' || state.shuttle) return state
+      const server = state.mode === 'training' ? 0 : state.match?.server ?? 0
+      if (action.playerIndex !== server) return state
+      const player = state.players[server]
+      if (!player) return state
+      const forward = player.side === 0 ? 1 : -1
+      const serviceZ = forward * (state.match?.serviceSide === 'left' ? -1 : 1)
+      if (Math.abs(player.pos[0]) < SHORT_SERVICE_LINE || Math.abs(player.pos[0]) > 6.7
+        || player.pos[2] * serviceZ <= 0 || Math.abs(player.pos[2]) > SINGLES_HALF_WIDTH) {
+        return updatePlayer(state, server, p => ({ ...p, feedback: '发球：请站在本方高亮发球区内' }))
       }
-
-    case 'MOVE':
-      if (state.phase !== 'playing') return state
-      if (!state.players[action.playerIndex]) return state
+      const origin: [number, number, number] = [player.pos[0] + forward * 0.35, 1.1, player.pos[2]]
+      const { solution } = solveServe(player.serveSelection, origin, forward, serviceZ)
       return {
-        ...state,
-        players: state.players.map((p, i) =>
-          i === action.playerIndex && p
-            ? { ...p, movement: { ...p.movement, targetDir: action.dir } }
-            : p,
-        ) as [typeof state.players[0], typeof state.players[1]],
+        ...state, phase: 'playing', phaseTime: 0, currentPlayer: server,
+        shuttle: { pos: solution.launchPoint, vel: solution.outgoingVel, spin: [0, 8, 0] },
+        lastHitter: server, lastHitAt: state.elapsed, rallyId: state.rallyId + 1, rallyHits: 0,
+        serveInFlight: true, serviceCourtZ: -serviceZ, netTouched: false, lastPoint: null,
       }
-
+    }
+    case 'MOVE': {
+      if (state.phase !== 'playing' && state.phase !== 'idle') return state
+      // 击球即制动：引拍与挥拍期间 WASD 只作落点采样，不再驱动移动。
+      if (state.phase === 'playing') {
+        const swing = state.players[action.playerIndex]?.swing.phase
+        if (swing === 'preparing' || swing === 'swinging') return state
+      }
+      return updatePlayer(state, action.playerIndex, p => ({ ...p, movement: { ...p.movement, targetDir: action.dir } }))
+    }
     case 'STOP_MOVE':
+      return updatePlayer(state, action.playerIndex, p => ({ ...p, movement: { ...p.movement, targetDir: { x: 0, z: 0 } } }))
+    case 'SELECT_SHOT':
+      return updatePlayer(state, action.playerIndex, p => ({ ...p, selectedShot: action.shot }))
+    case 'AIM':
+      return updatePlayer(state, action.playerIndex, p => ({ ...p, aim: { ...action.aim } }))
+    case 'SERVE_OR_JUMP':
+      return gameReducer(state, { type: state.phase === 'idle' ? 'SERVE' : 'JUMP', playerIndex: action.playerIndex })
+    case 'JUMP':
+    case 'SCISSOR_STEP':
       if (state.phase !== 'playing') return state
-      if (!state.players[action.playerIndex]) return state
-      return {
-        ...state,
-        players: state.players.map((p, i) =>
-          i === action.playerIndex && p
-            ? { ...p, movement: { ...p.movement, targetDir: { x: 0, z: 0 } } }
-            : p,
-        ) as [typeof state.players[0], typeof state.players[1]],
-      }
-
+      return updatePlayer(state, action.playerIndex, p => beginBodyAction(p, action.type === 'JUMP' ? 'jump' : 'scissor'))
     case 'SWING_START':
-      if (state.phase !== 'playing') return state
-      if (!state.players[action.playerIndex]) return state
-      return {
-        ...state,
-        players: state.players.map((p, i) =>
-          i === action.playerIndex && p
-            ? { ...p, wantsToSwing: true }
-            : p,
-        ) as [typeof state.players[0], typeof state.players[1]],
-      }
-
+      if (state.phase !== 'playing' && state.phase !== 'idle') return state
+      return updatePlayer(state, action.playerIndex, p => {
+        if (p.swing.phase !== 'ready') return p
+        const selected = { ...p, selectedShot: action.shot ?? p.selectedShot, aim: action.aim ?? p.aim }
+        if (state.phase === 'idle') return { ...selected, serveSelection: SERVE_BY_SHOT[selected.selectedShot] ?? selected.serveSelection }
+        const winding = beginSwing(selected)
+        return {
+          ...winding,
+          movement: { ...winding.movement, targetDir: { x: 0, z: 0 } },
+          swing: { ...winding.swing, slice: action.slice ?? false },
+        }
+      })
     case 'SWING_RELEASE':
-      if (state.phase !== 'playing') return state
-      if (!state.players[action.playerIndex]) return state
-      return {
-        ...state,
-        players: state.players.map((p, i) =>
-          i === action.playerIndex && p
-            ? { ...p, wantsToSwing: false }
-            : p,
-        ) as [typeof state.players[0], typeof state.players[1]],
-      }
-
+      return updatePlayer(state, action.playerIndex, releaseSwing)
     case 'PAUSE':
-      if (state.phase === 'playing') return { ...state, phase: 'paused' }
-      if (state.phase === 'paused') return { ...state, phase: 'playing' }
-      return state
-
-    case 'TICK':
-      return processGameTick(state, action.dt, action.aiConfigs)
-
+      if (state.phase === 'match_end' || state.phase === 'set_end') return state
+      if (state.phase === 'paused') return { ...state, phase: state.pausedPhase ?? 'idle', pausedPhase: null }
+      return {
+        ...state, phase: 'paused', pausedPhase: state.phase,
+        players: state.players.map(p => p && ({ ...p, movement: { ...p.movement, targetDir: { x: 0, z: 0 } } })) as GameState['players'],
+      }
+    case 'TICK': {
+      if (!Number.isFinite(action.dt) || action.dt <= 0 || state.phase === 'paused'
+        || state.phase === 'match_end' || state.phase === 'set_end') return state
+      const next = processGameTick(state, action.dt, action.aiConfigs)
+      if (next.phase === 'point_scored' && next.phaseTime >= 1.1) return gameReducer(next, { type: 'POINT_DELAY_ELAPSED' })
+      const server = next.mode === 'training' ? 0 : next.match?.server ?? 0
+      if (next.phase === 'idle' && next.controls[server] === 'ai' && next.phaseTime >= 0.9) {
+        return gameReducer(next, { type: 'SERVE', playerIndex: server })
+      }
+      return next
+    }
     case 'RESET':
-      return createFullGameState()
-
+      return positionForService({ ...createFullGameState(), mode: state.mode, controls: state.controls, players: state.players.map(p => p && ({ ...createPlayer(p.side), loadout: p.loadout })) as GameState['players'] })
     case 'SET_PLAYERS':
       return { ...state, players: action.players }
-
-    case 'POINT_DELAY_ELAPSED':
+    case 'START_SESSION':
+      return positionForService({ ...createFullGameState(), mode: action.mode, controls: action.controls ?? ['human', 'ai'], players: action.players })
+    case 'POINT_DELAY_ELAPSED': {
       if (state.phase !== 'point_scored') return state
-      return { ...state, phase: 'idle' }
-
+      let next = { ...state, phase: 'idle' as const, phaseTime: 0 }
+      if (state.mode === 'match' && state.match?.currentSet === 2 && !state.match.decidingEndsChanged && Math.max(...state.match.points) >= 11) {
+        next = { ...next, players: changeEnds(next.players), match: { ...state.match, decidingEndsChanged: true } }
+      }
+      return positionForService(next)
+    }
     case 'RESOLVE_SET_END':
       if (state.phase !== 'set_end' || !state.match) return state
-      const nextMatch = handleSetEnd(state.match)
-      const homeSets = nextMatch.sets.filter((set) => set.home > set.away).length
-      const awaySets = nextMatch.sets.filter((set) => set.away > set.home).length
-      return {
-        ...state,
-        match: nextMatch,
-        shuttle: null,
-        phase: homeSets >= 2 || awaySets >= 2 ? 'match_end' : 'idle',
-      }
-
+      return positionForService({ ...state, match: handleSetEnd(state.match), players: changeEnds(state.players), phase: 'idle', phaseTime: 0, shuttle: null })
     case 'RESTART_MATCH':
-      return {
-        ...createFullGameState(),
-        players: action.players,
-      }
-
+      return positionForService({ ...createFullGameState(), mode: state.mode, controls: state.controls, players: action.players })
     default:
       return state
+  }
+}
+
+function updatePlayer(state: GameState, index: 0 | 1, update: (p: NonNullable<GameState['players'][0]>) => NonNullable<GameState['players'][0]>): GameState {
+  if (!state.players[index]) return state
+  return { ...state, players: state.players.map((p, i) => p && i === index ? update(p) : p) as GameState['players'] }
+}
+
+function changeEnds(players: GameState['players']): GameState['players'] {
+  return players.map(p => p && ({ ...p, side: p.side === 0 ? 1 : 0, facing: p.side === 0 ? Math.PI : 0 })) as GameState['players']
+}
+
+function positionForService(state: GameState): GameState {
+  const server = state.mode === 'training' ? 0 : state.match?.server ?? 0
+  const serverSide = state.players[server]?.side ?? server
+  const z = (serverSide === 0 ? 1 : -1) * (state.match?.serviceSide === 'left' ? -1 : 1)
+  return {
+    ...state,
+    players: state.players.map((p, i) => {
+      if (!p) return null
+      const fresh = createPlayer(p.side)
+      return {
+        ...fresh, loadout: p.loadout, selectedShot: p.selectedShot, aim: p.aim,
+        stamina: state.lastPoint ? Math.min(p.maxStamina, p.stamina + 8) : p.stamina,
+        pos: [(p.side === 0 ? -1 : 1) * (i === server ? 3 : 4.2), 0, i === server ? z : -z] as [number, number, number],
+      }
+    }) as GameState['players'],
   }
 }

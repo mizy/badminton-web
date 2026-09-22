@@ -14,12 +14,12 @@ export interface StaminaConfig {
 
 export const DEFAULT_STAMINA: StaminaConfig = {
   maxStamina: 100,
-  sprintDrain: 25,
-  walkDrain: 5,
-  idleRegen: 15,
-  walkRegen: 5,
-  fatigueThreshold: 20,
-  fatigueSpeedMultiplier: 0.7,
+  sprintDrain: 6,
+  walkDrain: 1.5,
+  idleRegen: 8,
+  walkRegen: 2,
+  fatigueThreshold: 25,
+  fatigueSpeedMultiplier: 0.65,
 }
 
 export function updateStamina(
@@ -27,26 +27,35 @@ export function updateStamina(
   dt: number,
   cfg: StaminaConfig = DEFAULT_STAMINA,
 ): PlayerState {
-  const gait = player.movement.gait
-  let delta = 0
+  if (!Number.isFinite(dt) || dt <= 0) return player
+  const { gait, currentVel, footwork } = player.movement
+  const resting = player.swing.phase === 'ready' && footwork !== 'recover'
+  let rate = 0
 
   switch (gait) {
     case 'sprint':
-      delta = -cfg.sprintDrain * dt
+      rate = -cfg.sprintDrain
       break
     case 'walk':
-      delta = -cfg.walkDrain * dt
+      // 慢速调整步可以稍作恢复，快速并步仍有净消耗。
+      rate = -cfg.walkDrain + (resting && Math.hypot(currentVel.x, currentVel.z) < 1 ? cfg.walkRegen : 0)
       break
     case 'idle':
-      delta = cfg.idleRegen * dt
+      rate = resting ? cfg.idleRegen : 0
       break
   }
 
-  const newStamina = Math.max(0, Math.min(cfg.maxStamina, player.stamina + delta))
-
-  return { ...player, stamina: newStamina }
+  const stamina = Math.max(0, Math.min(player.maxStamina, player.stamina + rate * dt))
+  return { ...player, stamina }
 }
 
-export function getSpeedMultiplier(stamina: number, cfg: StaminaConfig = DEFAULT_STAMINA): number {
-  return stamina < cfg.fatigueThreshold ? cfg.fatigueSpeedMultiplier : 1
+/** 第三参数为球员容量；前两个参数保持兼容，阈值按配置容量同比缩放。 */
+export function getSpeedMultiplier(
+  stamina: number,
+  cfg: StaminaConfig = DEFAULT_STAMINA,
+  maxStamina: number = cfg.maxStamina,
+): number {
+  const threshold = maxStamina * cfg.fatigueThreshold / Math.max(1, cfg.maxStamina)
+  const freshness = threshold > 0 ? Math.max(0, Math.min(1, stamina / threshold)) : 0
+  return cfg.fatigueSpeedMultiplier + (1 - cfg.fatigueSpeedMultiplier) * freshness
 }

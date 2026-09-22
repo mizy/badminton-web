@@ -7,16 +7,10 @@ import { createTrailSystem } from '../render/trajectory'
 import { createGroundMarker } from '../render/playerMesh'
 import { createSkeletalPlayer } from '../render/skeletalPlayer'
 import type { BadmintonAction } from '../render/skeletalBadminton'
-import { gameReducer } from '../game/reducer'
-import type { GameAction } from '../game/reducer'
-import { createFullGameState } from '../game/types'
-import { createPlayer } from '../game/playerFactory'
-import { decideTactical } from '../ai/tactical'
-import type { AIConfig } from '../ai/types'
+import { createBasicRallyOptions, createBasicRallyState, stepBasicRally } from '../play/basicRally'
 import { getAIConfig } from '../ai/difficulty'
 import { createScoreHUD } from '../render/scoreHUD'
 import { spawnImpactEffect, updateEffects } from '../render/effects'
-import { handleSetEnd } from '../game/match'
 import { mountScene } from './threeHelper'
 
 type Difficulty = 'easy' | 'medium' | 'hard'
@@ -85,22 +79,17 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
     ctx.scene.add(homeMarker)
     ctx.scene.add(awayMarker)
 
-    // Game state
-    let gameState = createFullGameState()
-    gameState = gameReducer(gameState, { type: 'SET_PLAYERS', players: [createPlayer(0), createPlayer(1)] })
-
-    const homeConfig: AIConfig = getAIConfig(args.homeDifficulty)
-    const awayConfig: AIConfig = getAIConfig(args.awayDifficulty)
+    // The demo owns its pacing; rules, positioning and AI stay in the reducer.
+    let rally = createBasicRallyState()
+    const options = createBasicRallyOptions(args.homeDifficulty)
+    options.awayAI = getAIConfig(args.awayDifficulty)
+    options.autoServeDelaySeconds = 0.5
+    options.pointPauseSeconds = 0.8
+    let matchEndSeconds = 0
 
     // Score HUD
     const scoreHUD = createScoreHUD()
     ctx.scene.add(scoreHUD.mesh)
-
-    // Game stats
-    let rallyHits = 0
-    let lastRallyHits = 0
-    let pointScoredAt = 0
-    let idleSince = performance.now()
 
     // Control panel
     const controls = document.createElement('div')
@@ -109,11 +98,11 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
     btnReset.textContent = '🔄 重置比赛'
     btnReset.style.cssText = 'padding:6px 14px;border:none;border-radius:4px;background:#555;color:#fff;font:13px sans-serif;cursor:pointer;'
     btnReset.addEventListener('click', () => {
-      gameState = createFullGameState()
-      gameState = gameReducer(gameState, { type: 'SET_PLAYERS', players: [createPlayer(0), createPlayer(1)] })
-      rallyHits = 0
-      lastRallyHits = 0
-      pointScoredAt = 0
+      rally = createBasicRallyState()
+      matchEndSeconds = 0
+      trail.reset()
+      homePlayer.play('ready')
+      awayPlayer.play('ready')
     })
     controls.appendChild(btnReset)
 
@@ -151,113 +140,25 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
       const dt = Math.min((now - lastTime) / 1000, 1 / 30)
       lastTime = now
 
-      // --- Point scored timer ---
-      if (gameState.phase === 'point_scored') {
-        if (pointScoredAt === 0) {
-          pointScoredAt = performance.now()
-          lastRallyHits = rallyHits
-        } else if (performance.now() - pointScoredAt >= 800) {
-          gameState = { ...gameState, phase: 'idle' }
-          pointScoredAt = 0
-          idleSince = performance.now()
+      // Only this story loops completed matches; the main game keeps match_end.
+      if (rally.game.phase === 'match_end') matchEndSeconds += dt
+      else matchEndSeconds = 0
+      if (rally.game.phase !== 'match_end' || matchEndSeconds >= 3) {
+        const result = stepBasicRally(rally, dt, options)
+        rally = result.rally
+        if (result.events.served || result.events.restarted) trail.reset()
+        if (result.events.restarted) {
+          matchEndSeconds = 0
+          homePlayer.play('ready')
+          awayPlayer.play('ready')
         }
-      } else {
-        pointScoredAt = 0
-      }
-
-      // --- Handle set_end ---
-      if (gameState.phase === 'set_end' && gameState.match) {
-        const newMatch = handleSetEnd(gameState.match)
-        const homeSets = newMatch.sets.filter(s => s.home > s.away).length
-        const awaySets = newMatch.sets.filter(s => s.away > s.home).length
-        if (homeSets >= 2 || awaySets >= 2) {
-          gameState = { ...gameState, match: newMatch, phase: 'match_end' }
-          pointScoredAt = performance.now()
-          lastRallyHits = rallyHits
-        } else {
-          gameState = { ...gameState, match: newMatch, phase: 'idle' }
-          rallyHits = 0
-          lastRallyHits = 0
+        if (result.events.served) {
+          const serverPlayer = rally.game.match?.server === 1 ? awayPlayer : homePlayer
+          serverPlayer.play('serve')
         }
+        if (result.events.hit) triggerSwing()
       }
-
-      // --- Handle match_end: auto-reset ---
-      if (gameState.phase === 'match_end' && gameState.match) {
-        if (pointScoredAt > 0 && performance.now() - pointScoredAt >= 3000) {
-          gameState = createFullGameState()
-          gameState = gameReducer(gameState, { type: 'SET_PLAYERS', players: [createPlayer(0), createPlayer(1)] })
-          pointScoredAt = 0
-          rallyHits = 0
-          lastRallyHits = 0
-        }
-      }
-
-      // --- AI decisions ---
-      if (gameState.phase === 'playing' && gameState.shuttle && gameState.players[0] && gameState.players[1]) {
-        const p0 = gameState.players[0]
-        const p1 = gameState.players[1]
-        const shuttle = gameState.shuttle
-        for (const pi of [0, 1] as const) {
-          const config = pi === 0 ? homeConfig : awayConfig
-          const player = pi === 0 ? p0 : p1
-          const opponent = pi === 0 ? p1 : p0
-          const decision = decideTactical(player, opponent, shuttle, config)
-          const dx = decision.moveTarget[0] - player.pos[0]
-          const dz = decision.moveTarget[2] - player.pos[2]
-          const dist = Math.sqrt(dx * dx + dz * dz)
-          if (dist > 0.2) {
-            gameState = gameReducer(gameState, { type: 'MOVE', playerIndex: pi as 0 | 1, dir: { x: dx / dist, z: dz / dist } })
-          } else {
-            gameState = gameReducer(gameState, { type: 'STOP_MOVE', playerIndex: pi as 0 | 1 })
-          }
-        }
-      }
-
-      // --- Auto-serve ---
-      if (gameState.phase === 'idle' && !gameState.shuttle) {
-        if (performance.now() - idleSince > 500) {
-          const server = gameState.match?.server ?? 0
-          const st = gameReducer(gameState, { type: 'SERVE', playerIndex: server })
-          if (st.shuttle) {
-            trail.reset()
-            rallyHits = 0
-            gameState = st
-            const serverPlayer = server === 0 ? homePlayer : awayPlayer
-            serverPlayer.play('serve')
-          }
-          idleSince = performance.now()
-        }
-      } else if (gameState.shuttle) {
-        idleSince = performance.now()
-      }
-
-      // --- Game tick ---
-      const prevShuttle = gameState.shuttle
-      const tickAction: GameAction & { type: 'TICK' } = {
-        type: 'TICK',
-        dt,
-        aiConfigs: { home: homeConfig, away: awayConfig },
-      }
-      gameState = gameReducer(gameState, tickAction)
-
-      // --- Rally hit tracking ---
-      const currentShuttle = gameState.shuttle
-      if (currentShuttle && prevShuttle) {
-        const pv = prevShuttle.vel
-        const cv = currentShuttle.vel
-        const pSpeed2 = pv[0]*pv[0] + pv[1]*pv[1] + pv[2]*pv[2]
-        const cSpeed2 = cv[0]*cv[0] + cv[1]*cv[1] + cv[2]*cv[2]
-        if (pSpeed2 > 0.5 && cSpeed2 > 0.5) {
-          const dot = pv[0]*cv[0] + pv[1]*cv[1] + pv[2]*cv[2]
-          const pSpeed = Math.sqrt(pSpeed2)
-          const cSpeed = Math.sqrt(cSpeed2)
-          if (dot < -pSpeed * cSpeed * 0.2 || cSpeed > pSpeed * 3 || cSpeed < pSpeed * 0.3) {
-            rallyHits++
-            spawnImpactEffect(currentShuttle.pos, Math.min(cSpeed / 40, 1))
-            triggerSwing(prevShuttle.pos, currentShuttle.vel)
-          }
-        }
-      }
+      const gameState = rally.game
 
       // --- Update visuals ---
       if (gameState.shuttle) {
@@ -287,8 +188,8 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
           .slice(0, currentSet + 1)
           .map((s, idx) => `S${idx + 1}  ${s.home}-${s.away}`)
           .join('  |  ')
-        const rally = gameState.shuttle ? rallyHits : (lastRallyHits > 0 ? lastRallyHits : 0)
-        scoreHUD.update(points[0], points[1], setStr, rally, isDeuce)
+        const hits = gameState.shuttle ? rally.stats.hitCount : rally.stats.lastRallyHits
+        scoreHUD.update(points[0], points[1], setStr, hits, isDeuce)
       }
       scoreHUD.syncPosition(ctx.camera)
 
@@ -302,20 +203,24 @@ const meta: Meta<{ homeDifficulty: Difficulty; awayDifficulty: Difficulty; camer
     }
     animate()
 
-    /**
-     * 击球瞬间触发挥拍：离击球点近的球员挥拍，
-     * 出射速度快选 smash，否则 forehand_clear。
-     */
-    function triggerSwing(contactPos: [number, number, number], outVel: [number, number, number]): void {
-      const home = gameState.players[0]
-      const away = gameState.players[1]
-      if (!home || !away) return
-      const speed = Math.hypot(outVel[0], outVel[1], outVel[2])
-      const action: BadmintonAction = speed > 45 ? 'smash' : 'forehand_clear'
-      const homeDist = Math.hypot(home.pos[0] - contactPos[0], home.pos[2] - contactPos[2])
-      const awayDist = Math.hypot(away.pos[0] - contactPos[0], away.pos[2] - contactPos[2])
-      if (homeDist <= awayDist) homePlayer.play(action)
-      else awayPlayer.play(action)
+    /** Animate the recorded contact, independent of court end or shuttle velocity. */
+    function triggerSwing(): void {
+      const hitterIndex = rally.game.lastHitter
+      if (hitterIndex === null) return
+      const hitter = rally.game.players[hitterIndex]
+      if (!hitter) return
+      const action: BadmintonAction = ({
+        CLEAR: hitter.grip === 'backhand' ? 'backhand_clear' : 'forehand_clear',
+        DRIVE: hitter.grip === 'backhand' ? 'backhand_drive' : 'forehand_drive',
+        SMASH: 'smash',
+        DROP: 'drop',
+        NET_DROP: 'net_shot',
+        LIFT: 'lift',
+      } as const)[hitter.swing.shot]
+      const contactPos = hitter.contactPose?.stringCenter
+      if (contactPos) spawnImpactEffect(contactPos, Math.min(Math.hypot(...hitter.racket.vel) / 40, 1))
+      const player = hitterIndex === 0 ? homePlayer : awayPlayer
+      player.play(action)
     }
 
     // Override cleanup

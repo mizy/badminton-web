@@ -18,28 +18,32 @@ export interface ReachableRacketPoseInput {
   racketFaceDeg: number
 }
 
-export const RACKET_STRING_CENTER_DISTANCE = 0.72
+export const PLAYER_HEIGHT = 1.78
+export const SHOULDER_HEIGHT = 1.46
+export const SHOULDER_HALF_WIDTH = 0.2
+export const ARM_LENGTH = 0.66
+export const RACKET_STRING_CENTER_DISTANCE = 0.46
 export const SHUTTLE_CORK_RADIUS = 0.018
 export const MAX_CONTACT_ERROR = 0.05
 
-const ARM_LENGTH = 0.64
-const MIN_REACH_DISTANCE = Math.abs(RACKET_STRING_CENTER_DISTANCE - ARM_LENGTH) + 0.02
+const MIN_REACH_DISTANCE = 0.1
 const MAX_REACH_DISTANCE = RACKET_STRING_CENTER_DISTANCE + ARM_LENGTH - 0.02
-const SHOULDER_HEIGHT = 1.46
-const CONTACT_HEIGHT_RANGE = [0.32, 2.72] as const
+export const MAX_CONTACT_HEIGHT = SHOULDER_HEIGHT + MAX_REACH_DISTANCE
+const CONTACT_HEIGHT_RANGE = [0.32, MAX_CONTACT_HEIGHT] as const
 
 /** @entry 用双球面 IK 求出可达手位；不可达时返回极限拍弦位置而不是伪造命中。 */
 export function createReachableRacketPose(input: ReachableRacketPoseInput): RacketContactPose {
-  const shoulder = playerShoulder(input.playerPos, input.playerSide)
+  const shoulder = getPlayerRightShoulder(input.playerPos, input.playerSide)
   const desiredOffset = subtract3(input.desiredContact, shoulder)
   const desiredDistance = length3(desiredOffset)
-  const heightReachable = input.desiredContact[1] >= CONTACT_HEIGHT_RANGE[0]
-    && input.desiredContact[1] <= CONTACT_HEIGHT_RANGE[1]
+  const minHeight = input.playerPos[1] + CONTACT_HEIGHT_RANGE[0]
+  const maxHeight = input.playerPos[1] + CONTACT_HEIGHT_RANGE[1]
+  const heightReachable = input.desiredContact[1] >= minHeight && input.desiredContact[1] <= maxHeight
   const distanceReachable = desiredDistance >= MIN_REACH_DISTANCE && desiredDistance <= MAX_REACH_DISTANCE
   const reachable = heightReachable && distanceReachable
   const constrainedTarget: Vec3 = [
     input.desiredContact[0],
-    clamp(input.desiredContact[1], CONTACT_HEIGHT_RANGE[0], CONTACT_HEIGHT_RANGE[1]),
+    clamp(input.desiredContact[1], minHeight, maxHeight),
     input.desiredContact[2],
   ]
   const constrainedOffset = subtract3(constrainedTarget, shoulder)
@@ -120,13 +124,15 @@ function solveGripPoint(shoulder: Vec3, stringCenter: Vec3, playerSide: 0 | 1): 
   const between = subtract3(stringCenter, shoulder)
   const distance = Math.max(length3(between), 0.0001)
   const axis = normalize3(between, playerSide === 0 ? [1, 0, 0] : [-1, 0, 0])
+  const armReach = Math.min(ARM_LENGTH, Math.max(0.38,
+    distance - RACKET_STRING_CENTER_DISTANCE + 0.04, RACKET_STRING_CENTER_DISTANCE - distance + 0.04))
   const along = clamp(
-    (ARM_LENGTH ** 2 - RACKET_STRING_CENTER_DISTANCE ** 2 + distance ** 2) / (2 * distance),
-    -ARM_LENGTH,
-    ARM_LENGTH,
+    (armReach ** 2 - RACKET_STRING_CENTER_DISTANCE ** 2 + distance ** 2) / (2 * distance),
+    -armReach,
+    armReach,
   )
-  const circleRadius = Math.sqrt(Math.max(0, ARM_LENGTH ** 2 - along ** 2))
-  const pole: Vec3 = [0, -0.58, playerSide === 0 ? -0.82 : 0.82]
+  const circleRadius = Math.sqrt(Math.max(0, armReach ** 2 - along ** 2))
+  const pole: Vec3 = [0, -0.58, playerSide === 0 ? 0.82 : -0.82]
   const perpendicular = orthogonalize(pole, axis)
   return add3(add3(shoulder, scale3(axis, along)), scale3(perpendicular, circleRadius))
 }
@@ -145,9 +151,9 @@ function orthogonalize(value: Vec3, axis: Vec3): Vec3 {
   return normalize3(cross3(axis, fallback), [0, 0, 1])
 }
 
-function playerShoulder(playerPos: Vec3, playerSide: 0 | 1): Vec3 {
+export function getPlayerRightShoulder(playerPos: Vec3, playerSide: 0 | 1): Vec3 {
   const forward = playerSide === 0 ? 1 : -1
-  return [playerPos[0] + forward * 0.08, playerPos[1] + SHOULDER_HEIGHT, playerPos[2] - forward * 0.16]
+  return [playerPos[0] + forward * 0.04, playerPos[1] + SHOULDER_HEIGHT, playerPos[2] + forward * SHOULDER_HALF_WIDTH]
 }
 
 function add3(a: Vec3, b: Vec3): Vec3 {
