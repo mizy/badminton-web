@@ -2,13 +2,14 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>COURT / 01 — 羽毛球单打</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23133329'/%3E%3Cpath d='M8 5h16v22H8zM8 16h16M16 5v22' fill='none' stroke='%23e7eb80' stroke-width='2'/%3E%3C/svg%3E" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; }
-    canvas { display: block; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; overscroll-behavior: none; }
+    /* 触屏下禁止页面滚动/双指缩放；菜单弹层自身仍可上下滑动（touch-action: pan-y）。 */
+    canvas { display: block; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   </style>
 </head>
 <body>

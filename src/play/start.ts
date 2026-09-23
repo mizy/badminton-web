@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { createPlayer } from '../game/playerFactory'
 import { gameReducer, type GameAction } from '../game/reducer'
 import { createFullGameState, type GameState } from '../game/types'
-import { createKeyboardAdapter, type InputEvent } from '../input'
+import { createKeyboardAdapter, createTouchControlsAdapter, isTouchDevice, type InputAdapter, type InputEvent } from '../input'
 import { getAIConfig } from '../ai/difficulty'
 import { getPersona } from '../ai/personas'
 import { Recorder } from '../recording/recorder'
@@ -32,7 +32,8 @@ export function startGame(): () => void {
   let audio: AudioContext | null = null
   let animation = 0
   let recordingBusy = false
-  let keyboard = createKeyboardAdapter(0, undefined, () => state.players[0]?.side ?? 0)
+  // 粗指针 / 有触点 = 触屏设备：只挂触屏层，不注册键盘，避免两套输入打架。
+  const touchDevice = isTouchDevice()
   const ui = createPlayUI({
     start: startSession,
     pause: () => dispatch({ type: 'PAUSE', playerIndex: 0 }),
@@ -41,20 +42,23 @@ export function startGame(): () => void {
     menu: () => {
       if (state.phase !== 'paused') dispatch({ type: 'PAUSE', playerIndex: 0 })
       active = false
-      keyboard.disconnect()
+      input.disconnect()
       ui.showMenu()
     },
     record: () => { void toggleRecording() },
     sound: enabled => { soundEnabled = enabled; if (enabled) unlockAudio() },
     prediction: enabled => { prediction = enabled },
-  })
+  }, { touch: touchDevice })
+  const input: InputAdapter = touchDevice
+    ? createTouchControlsAdapter(0, { root: ui.touchRoot, getSide: () => state.players[0]?.side ?? 0 })
+    : createKeyboardAdapter(0, undefined, () => state.players[0]?.side ?? 0)
   const disconnectHotkeys = connectPlayHotkeys(() => { if (active) void toggleRecording() })
 
   function dispatch(action: GameAction): void {
     const wasPaused = state.phase === 'paused'
     state = gameReducer(state, action)
-    if (!wasPaused && state.phase === 'paused') keyboard.disconnect()
-    if (wasPaused && state.phase !== 'paused' && active) keyboard.connect(handleInput)
+    if (!wasPaused && state.phase === 'paused') input.disconnect()
+    if (wasPaused && state.phase !== 'paused' && active) input.connect(handleInput)
     ui.update(state)
     if (wasPaused && state.phase !== 'paused' && active) objects.renderer.domElement.focus({ preventScroll: true })
   }
@@ -66,7 +70,7 @@ export function startGame(): () => void {
 
   function startSession(nextOptions: SessionOptions): void {
     options = nextOptions
-    keyboard.disconnect()
+    input.disconnect()
     const players: GameState['players'] = [createPlayer(0), createPlayer(1)]
     players[0]!.loadout = nextOptions.loadout
     players[1]!.loadout = nextOptions.loadout
@@ -78,8 +82,7 @@ export function startGame(): () => void {
     view.accumulator = 0
     view.lastTime = performance.now()
     view.lastRallyId = -1
-    keyboard = createKeyboardAdapter(0, undefined, () => state.players[0]?.side ?? 0)
-    keyboard.connect(handleInput)
+    input.connect(handleInput)
     ui.update(state)
     objects.renderer.domElement.focus({ preventScroll: true })
     unlockAudio()
@@ -149,7 +152,7 @@ export function startGame(): () => void {
     objects.renderer.render(scene, objects.camera)
     if (recorder.isRecording()) {
       const text = (id: string) => document.getElementById(id)?.textContent ?? ''
-      recorder.updateHud({ scoreText: text('score-overlay'), setText: text('set-overlay'), rallyText: text('rally-overlay'), statusText: text('status'), controlsText: 'WASD 移动 · J 挥拍 · 1–6 球路' })
+      recorder.updateHud({ scoreText: text('score-overlay'), setText: text('set-overlay'), rallyText: text('rally-overlay'), statusText: text('status'), controlsText: touchDevice ? '左摇杆移动 · 按住球路蓄力 · 拖动瞄准' : 'WASD 移动 · J 挥拍 · 1–6 球路' })
       recorder.composite(objects.renderer.domElement)
     }
   }
@@ -165,6 +168,9 @@ export function startGame(): () => void {
     view.accumulator = 0
   }
   window.addEventListener('resize', onResize)
+  // 转屏时部分浏览器先改 innerWidth 再改 innerHeight，延迟再取一次保证 canvas 尺寸正确。
+  const onOrientationChange = () => setTimeout(onResize, 300)
+  window.addEventListener('orientationchange', onOrientationChange)
   document.addEventListener('visibilitychange', onHidden)
   if (import.meta.env.DEV) {
     Object.defineProperty(window, '__badminton__', { configurable: true, value: { getState: () => structuredClone(state), isRecording: () => recorder.isRecording() } })
@@ -172,9 +178,10 @@ export function startGame(): () => void {
   animate()
   return () => {
     cancelAnimationFrame(animation)
-    keyboard.disconnect()
+    input.disconnect()
     disconnectHotkeys()
     window.removeEventListener('resize', onResize)
+    window.removeEventListener('orientationchange', onOrientationChange)
     document.removeEventListener('visibilitychange', onHidden)
     ui.destroy()
     if (recorder.isRecording()) void recorder.stop()

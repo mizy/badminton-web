@@ -17,3 +17,15 @@ export type { GamepadMapping } from './gamepad'
 
 export { createTouchAdapter, detectTap } from './touch'
 export type { TouchZone } from './touch'
+
+export {
+  AIM_DEADZONE,
+  STICK_DEADZONE,
+  aimFromDrag,
+  clampStickOffset,
+  createTouchControlsAdapter,
+  isTouchDevice,
+  moveVectorFromStick,
+  swingStartAction,
+} from './touchControls'
+export type { TouchControlsOptions } from './touchControls'

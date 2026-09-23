@@ -1,0 +1,187 @@
+/* 触屏操作层：虚拟摇杆（左）+ 6 球路按钮（右）+ 功能按钮。
+   仅在 .play-ui[data-input="touch"] 下显示；桌面键盘布局完全不受影响。 */
+
+.play-touch { display: none; }
+
+.play-ui[data-input="touch"] {
+  --play-touch-stick: 132px;
+  --play-touch-shot: 62px;
+  --play-touch-gap: 6px;
+  --play-safe-left: env(safe-area-inset-left, 0px);
+  --play-safe-right: env(safe-area-inset-right, 0px);
+  --play-safe-top: env(safe-area-inset-top, 0px);
+  --play-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.play-ui[data-input="touch"] .play-touch {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.play-touch-stick,
+.play-touch-shot,
+.play-touch-button { touch-action: none; -webkit-tap-highlight-color: transparent; }
+
+.play-ui[data-input="touch"] .play-touch-stick {
+  position: absolute;
+  left: calc(14px + var(--play-safe-left));
+  bottom: calc(14px + var(--play-safe-bottom));
+  width: var(--play-touch-stick);
+  height: var(--play-touch-stick);
+  border: 1px solid var(--play-line);
+  border-radius: 50%;
+  background: rgb(9 41 31 / 58%);
+  box-shadow: inset 0 0 22px rgb(0 0 0 / 28%);
+  pointer-events: auto;
+}
+.play-touch-stick-ring {
+  position: absolute;
+  inset: 16%;
+  border: 1px dashed rgb(242 239 223 / 22%);
+  border-radius: 50%;
+}
+.play-touch-stick-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 46%;
+  height: 46%;
+  margin: -23% 0 0 -23%;
+  border: 1px solid rgb(9 41 31 / 45%);
+  border-radius: 50%;
+  background: rgb(228 242 121 / 82%);
+  transition: background-color 120ms;
+}
+.play-ui[data-input="touch"] .play-touch-stick:active .play-touch-stick-knob { background: var(--play-lemon); }
+
+.play-ui[data-input="touch"] .play-touch-actions {
+  position: absolute;
+  left: calc(14px + var(--play-safe-left));
+  bottom: calc(24px + var(--play-safe-bottom) + var(--play-touch-stick));
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+.play-ui[data-input="touch"] .play-touch-button {
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  min-width: 58px;
+  min-height: 46px;
+  padding: 5px 10px;
+  border: 1px solid var(--play-line);
+  color: var(--play-paper);
+  background: rgb(9 41 31 / 82%);
+  font-size: 12px;
+  pointer-events: auto;
+}
+.play-ui[data-input="touch"] .play-touch-button small { font-size: 9px; color: var(--play-muted); }
+.play-ui[data-input="touch"] .play-touch-button:active,
+.play-ui[data-input="touch"] .play-touch-button[data-pressed="true"] { border-color: var(--play-lemon); background: rgb(228 242 121 / 18%); }
+
+.play-ui[data-input="touch"] .play-touch-shots {
+  position: absolute;
+  right: calc(14px + var(--play-safe-right));
+  bottom: calc(14px + var(--play-safe-bottom));
+  display: grid;
+  grid-template-columns: repeat(3, var(--play-touch-shot));
+  gap: var(--play-touch-gap);
+}
+.play-ui[data-input="touch"] .play-touch-shot {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 1px;
+  min-height: var(--play-touch-shot);
+  padding: 4px 3px;
+  border: 1px solid var(--play-line);
+  color: var(--play-paper);
+  background: rgb(9 41 31 / 78%);
+  font-size: 12px;
+  line-height: 1.2;
+}
+.play-ui[data-input="touch"] .play-touch-shot small { font-size: 8px; color: var(--play-muted); }
+.play-ui[data-input="touch"] .play-touch-shot[data-available="true"] { box-shadow: inset 0 -3px var(--play-lemon); }
+.play-ui[data-input="touch"] .play-touch-shot[data-selected="true"] { border-color: var(--play-lemon); color: var(--play-deep); background: var(--play-lemon); }
+.play-ui[data-input="touch"] .play-touch-shot[data-selected="true"] small { color: rgb(9 41 31 / 78%); }
+.play-ui[data-input="touch"] .play-touch-shot[data-pressed="true"] { border-color: var(--play-lemon); background: rgb(228 242 121 / 26%); }
+.play-ui[data-input="touch"] .play-touch-shot[data-pressed="true"][data-selected="true"] { background: var(--play-lemon); }
+
+/* 触屏下键盘专属提示退场，换成触屏说明（仍占 console 的 keys 行）。 */
+.play-touch-hint { display: none; }
+.play-ui[data-input="touch"] .play-key-hints,
+.play-ui[data-input="touch"] .play-mobile-hint,
+.play-ui[data-input="touch"] .play-shots,
+.play-ui[data-input="touch"] .play-menu-controls,
+.play-ui[data-input="touch"] .play-keyboard-note { display: none; }
+.play-ui[data-input="touch"] .play-touch-hint {
+  grid-area: keys;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--play-muted);
+  font-size: 10px;
+  text-align: center;
+}
+.play-touch-controls { display: none; }
+.play-ui[data-input="touch"] .play-touch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 22px;
+}
+.play-ui[data-input="touch"] .play-touch-controls > span { line-height: 1.8; }
+
+/* 横屏：console 居中让开左右两侧的触控件，避免遮挡记分牌外的球路/接触窗口。 */
+.play-ui[data-input="touch"] .play-console {
+  bottom: calc(10px + var(--play-safe-bottom));
+  width: min(560px, calc(100% - var(--play-touch-stick) * 2 - 68px));
+  min-width: 240px;
+  grid-template-areas: "feedback feedback" "player player" "window window" "keys keys";
+  row-gap: 6px;
+  padding: 8px 12px;
+}
+.play-ui[data-input="touch"] .play-training { top: calc(96px + var(--play-safe-top)); width: 152px; }
+.play-ui[data-input="touch"] .play-tasks,
+.play-ui[data-input="touch"] .play-training-note { display: none; }
+.play-ui[data-input="touch"] .play-modal-layer {
+  padding: calc(18px + var(--play-safe-top)) calc(18px + var(--play-safe-right)) calc(18px + var(--play-safe-bottom)) calc(18px + var(--play-safe-left));
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+.play-ui[data-input="touch"] .play-field select { height: 46px; font-size: 13px; }
+.play-ui[data-input="touch"] .play-mode-button { padding: 14px 16px; }
+
+/* 竖屏：console 挪到记分牌下方，底部整条留给双手；训练面板改为不占位。 */
+@media (orientation: portrait) {
+  .play-ui[data-input="touch"] .play-training { display: none; }
+  .play-ui[data-input="touch"] .play-console {
+    top: calc(140px + var(--play-safe-top));
+    bottom: auto;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    transform: none;
+  }
+  .play-ui[data-input="touch"] .play-touch-shots {
+    grid-template-columns: repeat(2, var(--play-touch-shot));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .play-ui[data-input="touch"] { --play-touch-stick: 112px; --play-touch-shot: 54px; }
+  .play-ui[data-input="touch"] .play-touch-button { min-height: 40px; padding: 4px 8px; font-size: 11px; }
+  .play-ui[data-input="touch"] .play-touch-shot { font-size: 11px; }
+  .play-ui[data-input="touch"] .play-touch-shot small { display: none; }
+  .play-ui[data-input="touch"] .play-console { padding: 6px 10px; row-gap: 4px; }
+}
+
+@media (orientation: portrait) and (max-width: 380px) {
+  .play-ui[data-input="touch"] { --play-touch-stick: 112px; --play-touch-shot: 58px; }
+}

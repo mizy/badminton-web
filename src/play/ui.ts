@@ -5,6 +5,7 @@ import { RACKETS, SHOT_NAMES, SHOT_ORDER } from '../character/stroke'
 import { PERSONAS, getPersona, type PersonaId } from '../ai/personas'
 import { getLegalShots } from '../ai/tactical'
 import './ui.css'
+import './touchControls.css'
 
 export interface SessionOptions {
   mode: 'training' | 'match'
@@ -62,16 +63,25 @@ const LOADOUT_NOTES: Record<SessionOptions['loadout'], string> = {
 
 type DialogKind = 'menu' | 'paused' | 'set_end' | 'match_end' | null
 
+export interface PlayUIOptions {
+  /** 触屏设备：挂载虚拟摇杆 / 击球按钮，并把键盘提示替换为触屏说明。 */
+  touch?: boolean
+}
+
 /** Owns DOM only. Session changes, audio, prediction and recording belong to the caller. */
-export function createPlayUI(callbacks: PlayCallbacks): {
+export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = {}): {
   update(state: GameState): void
   showMenu(): void
   setRecording(recording: boolean): void
+  /** 触屏操作层的容器；桌面设备下同样存在但隐藏，供键盘路径忽略。 */
+  touchRoot: HTMLElement
   destroy(): void
 } {
+  const touch = options.touch === true
   const root = document.createElement('div')
   root.id = 'play-ui'
   root.className = 'play-ui'
+  if (touch) root.dataset.input = 'touch'
   root.innerHTML = `
     <div class="play-hud" data-ui="hud" hidden>
       <div class="play-court-brand" aria-hidden="true"><b>COURT / 01</b><span>单人 · 离线 · 羽毛球</span></div>
@@ -92,8 +102,8 @@ export function createPlayUI(callbacks: PlayCallbacks): {
         <div class="play-eyebrow">PRACTICE / 05</div>
         <h2 id="play-training-title">把基本功连起来</h2>
         <ol class="play-tasks">
-          <li data-task="0"><span class="play-task-index">01</span><span><kbd>WASD</kbd> 移动</span><span class="play-task-state">待完成</span></li>
-          <li data-task="1"><span class="play-task-index">02</span><span><kbd>Space</kbd> 发球</span><span class="play-task-state">待完成</span></li>
+          <li data-task="0"><span class="play-task-index">01</span><span><kbd data-ui="move-key">WASD</kbd> 移动</span><span class="play-task-state">待完成</span></li>
+          <li data-task="1"><span class="play-task-index">02</span><span><kbd data-ui="serve-key">Space</kbd> 发球</span><span class="play-task-state">待完成</span></li>
           <li data-task="2"><span class="play-task-index">03</span><span>任意击球键接一拍</span><span class="play-task-state">待完成</span></li>
           <li data-task="3"><span class="play-task-index">04</span><span>连续多拍 ≥ 6</span><span class="play-task-state">待完成</span></li>
           <li data-task="4"><span class="play-task-index">05</span><span>打出 6 种球路</span><span class="play-task-state">待完成</span></li>
@@ -113,8 +123,21 @@ export function createPlayUI(callbacks: PlayCallbacks): {
           <span><kbd>W A S D</kbd> 移动</span><span><kbd>J K I L</kbd> 直接发球</span><span><kbd>Space</kbd> 起跳</span><span><kbd>Q</kbd> 蹬转</span><span>击球按住蓄力 · <kbd>WASD</kbd> 定方向 · 松开出拍</span><span><kbd>Esc</kbd> 暂停</span>
           <span><kbd>Space</kbd> → <kbd>L</kbd> 跳杀</span><span><kbd>Q</kbd> → <kbd>L</kbd> 蹬转杀</span><span><kbd>Shift + J</kbd> 滑板高远</span><span><kbd>Shift + K</kbd> 切削吊球</span>
         </div>
+        <p class="play-touch-hint">左摇杆移动 · 按住球路蓄力 · 按住时拖动瞄准 · 松开出拍 · 右下角发球 / 起跳 / 蹬转 / 暂停</p>
       </footer>
-      <p class="play-mobile-hint">推荐桌面键盘游玩；菜单仍可操作。</p>
+      <p class="play-mobile-hint">小窗口建议横屏或全屏游玩；键盘操作不受影响。</p>
+      <div class="play-touch" data-ui="touch" aria-label="触屏操作">
+        <div class="play-touch-stick" data-touch="stick" role="group" aria-label="移动摇杆">
+          <span class="play-touch-stick-ring" aria-hidden="true"></span>
+          <i class="play-touch-stick-knob" data-touch="stick-knob" aria-hidden="true"></i>
+        </div>
+        <div class="play-touch-actions" aria-label="功能按钮">
+          <button type="button" class="play-touch-button" data-touch="action" data-action="serve">发球<small>起跳</small></button>
+          <button type="button" class="play-touch-button" data-touch="action" data-action="scissor">蹬转</button>
+          <button type="button" class="play-touch-button" data-touch="action" data-action="pause">暂停</button>
+        </div>
+        <div class="play-touch-shots" data-ui="touch-shots" aria-label="按住蓄力、拖动瞄准、松开出拍"></div>
+      </div>
     </div>
     <div class="play-modal-layer" data-ui="layer">
       <section class="play-menu" data-ui="menu-dialog" role="dialog" aria-modal="true" aria-labelledby="play-menu-title" aria-describedby="play-menu-description" tabindex="-1">
@@ -147,9 +170,12 @@ export function createPlayUI(callbacks: PlayCallbacks): {
           </div>
         </div>
         <footer class="play-menu-footer">
-          <div class="play-menu-controls"><span><kbd>WASD</kbd> 移动 <kbd>Space</kbd> 起跳 <kbd>Q</kbd> 蹬转</span><span>发球 <kbd>J</kbd> 高远 <kbd>K</kbd> 小球 <kbd>I</kbd> 反手小 <kbd>L</kbd> 平射（按下即发）· 击球 <kbd>J</kbd> 高远 <kbd>K</kbd> 吊球 <kbd>L</kbd> 杀球 <kbd>U</kbd> 平抽 <kbd>I</kbd> 放网 <kbd>O</kbd> 挑球</span><span>击球按住蓄力、<kbd>WASD</kbd> 定落点 · <kbd>Space → L</kbd> 跳杀 <kbd>Q → L</kbd> 蹬转杀 <kbd>Shift + J</kbd> 滑板高远 <kbd>Shift + K</kbd> 切削吊球</span></div>
-          <p>球路键按下即击球，数字 1–6 同效；等待发球时仅选球。Shift 单独不挥拍。</p>
-          <p>先到位再起跳，空中不能二次起跳，落地要恢复。推荐桌面 + 键盘 · 支持 Tab / Enter 操作菜单</p>
+          <div class="play-menu-controls" data-ui="keyboard-controls"><span><kbd>WASD</kbd> 移动 <kbd>Space</kbd> 起跳 <kbd>Q</kbd> 蹬转</span><span>发球 <kbd>J</kbd> 高远 <kbd>K</kbd> 小球 <kbd>I</kbd> 反手小 <kbd>L</kbd> 平射（按下即发）· 击球 <kbd>J</kbd> 高远 <kbd>K</kbd> 吊球 <kbd>L</kbd> 杀球 <kbd>U</kbd> 平抽 <kbd>I</kbd> 放网 <kbd>O</kbd> 挑球</span><span>击球按住蓄力、<kbd>WASD</kbd> 定落点 · <kbd>Space → L</kbd> 跳杀 <kbd>Q → L</kbd> 蹬转杀 <kbd>Shift + J</kbd> 滑板高远 <kbd>Shift + K</kbd> 切削吊球</span></div>
+          <p class="play-keyboard-note">球路键按下即击球，数字 1–6 同效；等待发球时仅选球。Shift 单独不挥拍。</p>
+          <p class="play-keyboard-note">先到位再起跳，空中不能二次起跳，落地要恢复。推荐桌面 + 键盘 · 支持 Tab / Enter 操作菜单</p>
+          <div class="play-touch-controls" data-ui="touch-controls">
+            <span>左摇杆移动（推到底冲刺）</span><span>右下 6 个球路按钮：按住蓄力，松开出拍</span><span>按住球路时在按钮或摇杆上拖动 = 调整落点</span><span>右下角另有 发球 / 起跳、蹬转、暂停</span><span>等待发球时按住球路按钮即可直接发球</span><span>先到位再起跳，空中不能二次起跳</span>
+          </div>
         </footer>
       </section>
       <section class="play-break-dialog" data-ui="break-dialog" role="dialog" aria-modal="true" aria-labelledby="play-break-title" aria-describedby="play-break-description" tabindex="-1" hidden>
@@ -234,6 +260,21 @@ export function createPlayUI(callbacks: PlayCallbacks): {
     item.dataset.shot = shot
     ui('shots').append(item)
     return item
+  })
+  const touchShotButtons = SHOT_ORDER.map(shot => {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'play-touch-shot'
+    button.dataset.touch = 'shot'
+    button.dataset.shot = shot
+    const name = document.createElement('span')
+    name.textContent = SHOT_NAMES[shot]
+    const condition = document.createElement('small')
+    condition.textContent = SHOT_CONTROLS[shot].condition
+    button.append(name, condition)
+    button.title = `按住${SHOT_NAMES[shot]}蓄力（${SHOT_CONTROLS[shot].condition}），拖动瞄准，松开出拍；等待发球时直接发出`
+    ui('touch-shots').append(button)
+    return button
   })
   const resultRows = Array.from({ length: 3 }, (_, index) => {
     const row = document.createElement('tr')
@@ -434,6 +475,14 @@ export function createPlayUI(callbacks: PlayCallbacks): {
       if (selected) item.setAttribute('aria-current', 'true')
       else item.removeAttribute('aria-current')
     })
+    // 键盘提示在触屏下被触屏按钮取代，可打窗口的高亮镜像到触屏按钮上。
+    touchShotButtons.forEach((button, index) => {
+      const shot = SHOT_ORDER[index]
+      const available = String(training && open && legalShots.includes(shot))
+      if (button.dataset.available !== available) button.dataset.available = available
+      const selected = String(shot === player?.selectedShot)
+      if (button.dataset.selected !== selected) button.dataset.selected = selected
+    })
     const point = pointMessage(state)
     text(statusTitle, state.phase === 'paused' ? '已暂停 · Esc 继续'
       : state.phase === 'match_end' ? '比赛结束'
@@ -544,12 +593,18 @@ export function createPlayUI(callbacks: PlayCallbacks): {
     }, { signal })
   }
 
+  if (touch) {
+    // 训练任务里指向键盘的两处文案换成触屏说法，避免移动端给出按不到的键。
+    text(ui('move-key'), '摇杆')
+    text(ui('serve-key'), '发球键')
+  }
   refreshSettings()
   refreshToggles()
   showDialog('menu')
 
   return {
     update,
+    touchRoot: ui('touch'),
     showMenu,
     setRecording(recording: boolean): void {
       if (destroyed) return
