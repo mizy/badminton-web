@@ -23,7 +23,9 @@ export interface TimingWindow {
 }
 
 export interface ShotAim {
-  lateral: -1 | 0 | 1
+  /** 横向落点：-1 左路 … 0 中路 … 1 右路。键盘只给 -1/0/1，触屏瞄准区给连续值。 */
+  lateral: number
+  /** 纵深修正：-1 网前 … 0 标准 … 1 底线。出拍时再叠加按住时长的力度加成（见 stroke.releaseSwing）。 */
   depth: number
 }
 
@@ -35,6 +37,8 @@ export interface SwingState {
   target: [number, number, number] | null
   slice: boolean
   charge01: number
+  /** 本次蓄力允许按住的秒数：到点自动出拍。准备时长 + 蓄力窗口，触屏另加瞄准宽限。 */
+  holdLimit: number
 }
 
 export interface BodyState {

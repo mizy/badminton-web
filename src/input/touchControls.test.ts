@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   AIM_DEADZONE,
+  AIM_LATERAL_SPAN,
   STICK_DEADZONE,
+  TAP_CHARGE,
+  TOUCH_AIM_HOLD_GRACE,
   aimFromDrag,
   clampStickOffset,
   isTouchDevice,
   moveVectorFromStick,
+  swingReleaseAction,
+  swingSelectAction,
   swingStartAction,
 } from './touchControls'
 
@@ -49,26 +54,34 @@ describe('moveVectorFromStick', () => {
 })
 
 describe('aimFromDrag', () => {
-  it('returns neutral aim inside the dead zone', () => {
+  it('没位移就是默认落点：中路、标准深度', () => {
     expect(aimFromDrag(0, 0, RADIUS)).toEqual({ lateral: 0, depth: 0 })
-    expect(aimFromDrag(RADIUS * AIM_DEADZONE * 0.5, -RADIUS * AIM_DEADZONE * 0.5, RADIUS))
-      .toEqual({ lateral: 0, depth: 0 })
   })
 
-  it('maps drag right/left to lateral and up/down to depth', () => {
-    expect(aimFromDrag(RADIUS, 0, RADIUS)).toEqual({ lateral: 1, depth: 0 })
-    expect(aimFromDrag(-RADIUS, 0, RADIUS)).toEqual({ lateral: -1, depth: 0 })
-    expect(aimFromDrag(0, -RADIUS, RADIUS)).toEqual({ lateral: 0, depth: 1 })
-    expect(aimFromDrag(0, RADIUS, RADIUS)).toEqual({ lateral: 0, depth: -1 })
+  it('横向落点连续：死区内中路，拖满一格到 ±1，中间有中间值', () => {
+    expect(aimFromDrag(RADIUS * 1.1, 0, RADIUS).lateral).toBe(1)
+    expect(aimFromDrag(-RADIUS * 1.1, 0, RADIUS).lateral).toBe(-1)
+    expect(aimFromDrag(RADIUS * AIM_DEADZONE * 0.5, 0, RADIUS).lateral).toBe(0)
+    const mid = aimFromDrag(RADIUS * (AIM_DEADZONE + AIM_LATERAL_SPAN) / 2, 0, RADIUS).lateral
+    expect(mid).toBeGreaterThan(0)
+    expect(mid).toBeLessThan(1)
   })
 
-  it('combines both axes for corner drags', () => {
-    expect(aimFromDrag(-RADIUS, -RADIUS, RADIUS)).toEqual({ lateral: -1, depth: 1 })
-    expect(aimFromDrag(RADIUS, RADIUS, RADIUS)).toEqual({ lateral: 1, depth: -1 })
+  it('往上拖落点更深，往下拖不主动打得更浅', () => {
+    expect(aimFromDrag(0, -RADIUS * 0.5, RADIUS).depth).toBeCloseTo(0.5, 6)
+    expect(aimFromDrag(0, -RADIUS * 3, RADIUS).depth).toBe(1)
+    expect(aimFromDrag(0, RADIUS * 2, RADIUS).depth).toBe(0)
   })
 
-  it('degrades to neutral aim on a zero radius', () => {
+  it('横向与纵深互不干扰', () => {
+    const corner = aimFromDrag(RADIUS, -RADIUS, RADIUS)
+    expect(corner.lateral).toBe(1)
+    expect(corner.depth).toBe(1)
+  })
+
+  it('拖动单位退化或输入异常时退回默认落点', () => {
     expect(aimFromDrag(40, -40, 0)).toEqual({ lateral: 0, depth: 0 })
+    expect(aimFromDrag(Number.NaN, -40, RADIUS)).toEqual({ lateral: 0, depth: 0 })
   })
 })
 
@@ -90,14 +103,35 @@ describe('clampStickOffset', () => {
   })
 })
 
-describe('swingStartAction', () => {
-  it('carries the held shot and the current aim', () => {
-    expect(swingStartAction('SMASH', { lateral: 1, depth: -1 })).toEqual({
+describe('挥拍动作构造', () => {
+  it('按下球路键即带着落点开始蓄力，并带上触屏瞄准宽限', () => {
+    expect(swingStartAction('SMASH', { lateral: 1, depth: 0 })).toEqual({
       type: 'SWING_START',
       shot: 'SMASH',
       slice: false,
-      aim: { lateral: 1, depth: -1 },
+      aim: { lateral: 1, depth: 0 },
+      holdGrace: TOUCH_AIM_HOLD_GRACE,
     })
+    expect(swingStartAction('SMASH', { lateral: 0, depth: 0 }, 0)).toEqual({
+      type: 'SWING_START',
+      shot: 'SMASH',
+      slice: false,
+      aim: { lateral: 0, depth: 0 },
+      holdGrace: 0,
+    })
+  })
+
+  it('拖动中只改落点，走独立的 SWING_SELECT', () => {
+    expect(swingSelectAction('CLEAR', { lateral: -1, depth: 0 })).toEqual({
+      type: 'SWING_SELECT',
+      shot: 'CLEAR',
+      aim: { lateral: -1, depth: 0 },
+    })
+  })
+
+  it('短按出招用点按力量，长按交给蓄力（下限 0）', () => {
+    expect(swingReleaseAction(true)).toEqual({ type: 'SWING_RELEASE', minimumCharge: TAP_CHARGE })
+    expect(swingReleaseAction(false)).toEqual({ type: 'SWING_RELEASE', minimumCharge: 0 })
   })
 })
 

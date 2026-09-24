@@ -3,7 +3,7 @@ import type { GameState } from '../game/types'
 import type { TickAIConfigs } from '../game/tickService'
 import { getShuttleShadow, updateCamera } from '../render/camera'
 import { spawnImpactEffect, updateEffects } from '../render/effects'
-import { syncPlayerMotion } from '../render/playerMesh'
+import { syncPlayerMotion, updateGroundMarker } from '../render/playerMesh'
 import { syncShuttlecockMesh } from '../render/shuttlecockMesh'
 import type { TrailSystem } from '../render/trajectory'
 import type { PlayViewState } from './viewState'
@@ -69,12 +69,14 @@ export function syncFrameView(now: number, state: GameState, view: PlayViewState
     syncPlayerMotion(i === 0 ? objects.homeMesh : objects.awayMesh, player, state.elapsed)
     const marker = i === 0 ? objects.homeGroundMarker : objects.awayGroundMarker
     marker.position.set(player.pos[0], 0.02, player.pos[2])
+    updateGroundMarker(marker, state.elapsed)
   }
   const home = state.players[0]
   if (home) {
     const target = getShotTarget(home, home.selectedShot, home.aim)
     objects.targetMarker.position.set(target[0], 0.045, target[2])
-    objects.targetMarker.visible = state.phase === 'playing'
+    // 等待发球时也亮：触屏是先拖出落点再松手发球，落点环要在按下之前就看得见。
+    objects.targetMarker.visible = state.phase === 'playing' || state.phase === 'idle'
   }
   const server = state.mode === 'training' ? 0 : state.match?.server ?? 0
   const servingPlayer = state.players[server]

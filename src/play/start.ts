@@ -20,7 +20,9 @@ interface PlayStartObjects extends PlaySceneObjects { renderer: THREE.WebGLRende
 
 export function startGame(): () => void {
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x0c2423)
+  scene.background = new THREE.Color(0x061b19)
+  // 雾只压很远处的背景（球场全长约 13.4m，相机距近端 ~10m）：远端不至于把对手糊掉。
+  scene.fog = new THREE.Fog(0x071d1a, 24, 64)
   const objects = createPlayObjects(scene)
   const recorder = new Recorder()
   const view = createViewState()
@@ -32,6 +34,10 @@ export function startGame(): () => void {
   let audio: AudioContext | null = null
   let animation = 0
   let recordingBusy = false
+  // 打击感：命中重杀 / 丢分时抖一下画布（transform 只动 canvas，录像取样不受影响）。
+  let shakePower = 0
+  let shakeUntil = 0
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   // 粗指针 / 有触点 = 触屏设备：只挂触屏层，不注册键盘，避免两套输入打架。
   const touchDevice = isTouchDevice()
   const ui = createPlayUI({
@@ -50,7 +56,12 @@ export function startGame(): () => void {
     prediction: enabled => { prediction = enabled },
   }, { touch: touchDevice })
   const input: InputAdapter = touchDevice
-    ? createTouchControlsAdapter(0, { root: ui.touchRoot, getSide: () => state.players[0]?.side ?? 0 })
+    // 等待发球时击球盘要按下-拖动选发球种类-松手才发出，所以把当前阶段告诉适配层（见 isAwaitingServe）。
+    ? createTouchControlsAdapter(0, {
+      root: ui.touchRoot,
+      getSide: () => state.players[0]?.side ?? 0,
+      isAwaitingServe: () => state.phase === 'idle',
+    })
     : createKeyboardAdapter(0, undefined, () => state.players[0]?.side ?? 0)
   const disconnectHotkeys = connectPlayHotkeys(() => { if (active) void toggleRecording() })
 
@@ -135,24 +146,53 @@ export function startGame(): () => void {
     }
   }
 
+  function shake(power: number): void {
+    if (reduceMotion) return
+    shakePower = Math.max(shakePower, power)
+    shakeUntil = performance.now() + 220
+  }
+
+  /** 画布抖动：指数衰减 + 双频正弦，scale(1.02) 保证位移时不会露出画布边缘。 */
+  function applyShake(now: number): void {
+    const element = objects.renderer.domElement
+    if (now < shakeUntil) {
+      const decay = (shakeUntil - now) / 220
+      const x = Math.sin(now * 0.09) * shakePower * 7 * decay
+      const y = Math.cos(now * 0.127) * shakePower * 5 * decay
+      element.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) scale(1.02)`
+      return
+    }
+    shakePower = 0
+    if (element.style.transform) element.style.transform = ''
+  }
+
   function animate(): void {
     animation = requestAnimationFrame(animate)
     const now = performance.now()
     const previous = state
     if (active) {
       state = stepFrame(now, state, view, { away: getAIConfig(options.difficulty, options.style, options.mode === 'training') , home: undefined })
-      if (state.rallyHits > previous.rallyHits) playTone(1050, 0.055)
-      if (state.lastPoint && state.lastPoint !== previous.lastPoint) playTone(state.lastPoint.winner === 0 ? 660 : 220, 0.23)
+      if (state.rallyHits > previous.rallyHits) {
+        playTone(1050, 0.055)
+        // 重杀命中抖得更狠，普通击球也有一点回馈。
+        const hitter = state.players[state.lastHitter ?? 0]
+        shake(hitter?.swing.shot === 'SMASH' ? 0.85 : 0.28)
+      }
+      if (state.lastPoint && state.lastPoint !== previous.lastPoint) {
+        playTone(state.lastPoint.winner === 0 ? 660 : 220, 0.23)
+        shake(state.lastPoint.winner === 0 ? 0.7 : 0.5)
+      }
     } else {
       view.lastTime = now
       view.accumulator = 0
     }
     syncFrameView(now, state, view, objects, prediction)
     ui.update(state)
+    applyShake(now)
     objects.renderer.render(scene, objects.camera)
     if (recorder.isRecording()) {
       const text = (id: string) => document.getElementById(id)?.textContent ?? ''
-      recorder.updateHud({ scoreText: text('score-overlay'), setText: text('set-overlay'), rallyText: text('rally-overlay'), statusText: text('status'), controlsText: touchDevice ? '左摇杆移动 · 按住球路蓄力 · 拖动瞄准' : 'WASD 移动 · J 挥拍 · 1–6 球路' })
+      recorder.updateHud({ scoreText: text('score-overlay'), setText: text('set-overlay'), rallyText: text('rally-overlay'), statusText: text('status'), controlsText: touchDevice ? '左摇杆移动 · 按住右半屏瞄准 · 松手出拍' : 'WASD 移动 · J 挥拍 · 1–6 球路' })
       recorder.composite(objects.renderer.domElement)
     }
   }
@@ -211,16 +251,22 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   floor.rotation.x = -Math.PI / 2
   floor.position.y = -0.015
   scene.add(floor)
-  scene.add(new THREE.HemisphereLight(0xffffed, 0x34554b, 2))
-  const light = new THREE.DirectionalLight(0xffffff, 2)
+  scene.add(new THREE.HemisphereLight(0xe8fbff, 0x2f5148, 2))
+  const light = new THREE.DirectionalLight(0xffffff, 2.1)
   light.position.set(-5, 12, 5)
-  scene.add(light)
+  // 冷暖双补光：青色的背光把球场边缘压出层次，暖色侧光让球员皮肤不至于发绿。
+  const rimLight = new THREE.DirectionalLight(0x6ff0d0, 0.7)
+  rimLight.position.set(7, 5, -9)
+  const warmFill = new THREE.DirectionalLight(0xffb073, 0.4)
+  warmFill.position.set(-8, 3, -4)
+  scene.add(light, rimLight, warmFill)
   const shuttleGroup = createShuttlecockMesh()
   shuttleGroup.scale.setScalar(1.65)
-  const homeMesh = createPlayerMesh({ body: 0xe7eb80, head: 0xf1c8a3, racket: 0xeeeecc, marker: 0xe6ed95 }, '你', { glowScale: 0, labelScale: 0.5 })
-  const awayMesh = createPlayerMesh({ body: 0xe48d73, head: 0xd9b08c, racket: 0xeeeecc, marker: 0xf4aa90 }, 'AI', { glowScale: 0, labelScale: 0.45 })
-  const homeGroundMarker = createGroundMarker(0xe7eb80)
-  const awayGroundMarker = createGroundMarker(0xe48d73)
+  // 队服配色：主场电光蓝+青霓虹、客场猩红+琥珀，和绿色球场拉开对比。
+  const homeMesh = createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '你', { glowScale: 0, labelScale: 0.5 })
+  const awayMesh = createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, 'AI', { glowScale: 0, labelScale: 0.45 })
+  const homeGroundMarker = createGroundMarker(0x5ce1ff)
+  const awayGroundMarker = createGroundMarker(0xffa14f)
   const marker = (color: number, inner: number, outer: number, opacity: number) => {
     const mesh = new THREE.Mesh(new THREE.RingGeometry(inner, outer, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }))
     mesh.rotation.x = -Math.PI / 2

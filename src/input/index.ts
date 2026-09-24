@@ -20,12 +20,17 @@ export type { TouchZone } from './touch'
 
 export {
   AIM_DEADZONE,
+  AIM_DRAG_UNIT,
   STICK_DEADZONE,
+  TAP_CHARGE,
+  TAP_RELEASE_MS,
   aimFromDrag,
   clampStickOffset,
   createTouchControlsAdapter,
   isTouchDevice,
   moveVectorFromStick,
+  swingReleaseAction,
+  swingSelectAction,
   swingStartAction,
 } from './touchControls'
 export type { TouchControlsOptions } from './touchControls'

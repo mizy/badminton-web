@@ -1,12 +1,19 @@
-/* 触屏操作层：虚拟摇杆（左）+ 6 球路按钮（右）+ 功能按钮。
-   仅在 .play-ui[data-input="touch"] 下显示；桌面键盘布局完全不受影响。 */
+/* 触屏操作层：整个屏幕交给 3D 画面，操作件都是漂浮在上面的半透明手柄。
+   左下虚拟摇杆移动；右下是王者荣耀 / 原神那套「技能键」——六个固定球路键排成两行
+   （上排上手球 高远/吊球/杀球，下排下手球 平抽/放网/挑球，排布见 ui.ts 的 TOUCH_SHOT_ROWS），
+   短按直接打该球路，按住拖动只改落点（横向连续左右、向上更深），力量条与落点读数在键组上方；
+   键组上面一个起跳键（按住不放是蹬转）；右上角一个暂停键。触屏一共就这几个可点控件。
+
+   只在 .play-ui[data-input="touch"] 下显示，桌面键盘布局不受影响。
+   触屏对记分牌 / 工具条 / 状态行的覆盖也集中在本文件末尾（真机竖屏最紧，改这些只看一个文件）。 */
 
 .play-touch { display: none; }
 
 .play-ui[data-input="touch"] {
-  --play-touch-stick: 132px;
-  --play-touch-shot: 62px;
-  --play-touch-gap: 6px;
+  --play-touch-stick: 108px;   /* 摇杆底盘直径 */
+  --play-touch-shot: 62px;     /* 单个球路键直径 */
+  --play-touch-jump: 58px;     /* 起跳键直径 */
+  --play-touch-edge: 14px;     /* 控件离屏幕边缘的距离（真机上按键贴边就按不到） */
   --play-safe-left: env(safe-area-inset-left, 0px);
   --play-safe-right: env(safe-area-inset-right, 0px);
   --play-safe-top: env(safe-area-inset-top, 0px);
@@ -22,28 +29,33 @@
   user-select: none;
 }
 
-.play-touch-stick,
-.play-touch-shot,
-.play-touch-button { touch-action: none; -webkit-tap-highlight-color: transparent; }
+.play-ui[data-input="touch"] .play-touch button,
+.play-ui[data-input="touch"] .play-touch-shot,
+.play-ui[data-input="touch"] .play-touch-stick { touch-action: none; -webkit-tap-highlight-color: transparent; }
 
+/* ---- 左摇杆：底盘刻线 + 虚线行程圈 + 跟手的高光摇杆头（transform 由 touchControls.ts 写入）。 ---- */
 .play-ui[data-input="touch"] .play-touch-stick {
   position: absolute;
-  left: calc(14px + var(--play-safe-left));
-  bottom: calc(14px + var(--play-safe-bottom));
+  left: calc(var(--play-touch-edge) + var(--play-safe-left));
+  bottom: calc(var(--play-touch-edge) + var(--play-safe-bottom));
   width: var(--play-touch-stick);
   height: var(--play-touch-stick);
   border: 1px solid var(--play-line);
   border-radius: 50%;
-  background: rgb(9 41 31 / 58%);
-  box-shadow: inset 0 0 22px rgb(0 0 0 / 28%);
+  background: radial-gradient(circle at 50% 36%, rgb(23 66 51 / 62%), rgb(6 26 21 / 72%));
+  box-shadow: inset 0 0 22px rgb(0 0 0 / 30%), 0 6px 18px rgb(0 0 0 / 24%);
   pointer-events: auto;
 }
-.play-touch-stick-ring {
+.play-touch-stick::before {
+  content: "";
   position: absolute;
-  inset: 16%;
-  border: 1px dashed rgb(242 239 223 / 22%);
+  inset: 9%;
   border-radius: 50%;
+  background:
+    linear-gradient(rgb(242 239 223 / 12%) 0 0) center / 100% 1px no-repeat,
+    linear-gradient(rgb(242 239 223 / 12%) 0 0) center / 1px 100% no-repeat;
 }
+.play-touch-stick-ring { position: absolute; inset: 16%; border: 1px dashed rgb(242 239 223 / 22%); border-radius: 50%; }
 .play-touch-stick-knob {
   position: absolute;
   top: 50%;
@@ -53,101 +65,230 @@
   margin: -23% 0 0 -23%;
   border: 1px solid rgb(9 41 31 / 45%);
   border-radius: 50%;
-  background: rgb(228 242 121 / 82%);
-  transition: background-color 120ms;
+  background: radial-gradient(circle at 50% 28%, rgb(240 250 170 / 96%), rgb(200 216 98 / 90%) 60%, rgb(150 168 60 / 92%));
+  box-shadow: 0 4px 10px rgb(0 0 0 / 34%), inset 0 -3px 6px rgb(0 0 0 / 18%);
 }
 .play-ui[data-input="touch"] .play-touch-stick:active .play-touch-stick-knob { background: var(--play-lemon); }
 
-.play-ui[data-input="touch"] .play-touch-actions {
+/* ---- 右上暂停键：HUD 上唯一的常驻工具键，其余工具搬进暂停对话框。 ---- */
+.play-ui[data-input="touch"] .play-touch-pause {
   position: absolute;
-  left: calc(14px + var(--play-safe-left));
-  bottom: calc(24px + var(--play-safe-bottom) + var(--play-touch-stick));
-  display: flex;
-  gap: 6px;
-  pointer-events: none;
-}
-.play-ui[data-input="touch"] .play-touch-button {
-  display: grid;
-  place-items: center;
-  gap: 1px;
-  min-width: 58px;
-  min-height: 46px;
-  padding: 5px 10px;
+  top: calc(10px + var(--play-safe-top));
+  right: calc(10px + var(--play-safe-right));
+  min-width: 52px;
+  min-height: 42px;
+  padding: 0 12px;
   border: 1px solid var(--play-line);
+  border-radius: 10px;
   color: var(--play-paper);
-  background: rgb(9 41 31 / 82%);
+  background: linear-gradient(rgb(20 58 46 / 74%), rgb(9 41 31 / 74%));
+  box-shadow: 0 3px 10px rgb(0 0 0 / 26%);
   font-size: 12px;
+  letter-spacing: .06em;
   pointer-events: auto;
 }
-.play-ui[data-input="touch"] .play-touch-button small { font-size: 9px; color: var(--play-muted); }
-.play-ui[data-input="touch"] .play-touch-button:active,
-.play-ui[data-input="touch"] .play-touch-button[data-pressed="true"] { border-color: var(--play-lemon); background: rgb(228 242 121 / 18%); }
+.play-ui[data-input="touch"] .play-touch-pause:active { border-color: var(--play-lemon); color: var(--play-lemon); }
 
-.play-ui[data-input="touch"] .play-touch-shots {
+/* ---- 右手区：力量条 + 落点读数 + 起跳键 + 球路键组，自下而上叠成一条拇指够得到的竖列。
+        容器本身不吃触摸（pointer-events: none），只有球路键和起跳键可点，其余都是提示。 ---- */
+.play-ui[data-input="touch"] .play-touch-shoot {
   position: absolute;
-  right: calc(14px + var(--play-safe-right));
-  bottom: calc(14px + var(--play-safe-bottom));
+  right: calc(var(--play-touch-edge) + var(--play-safe-right));
+  bottom: calc(var(--play-touch-edge) + var(--play-safe-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+.play-ui[data-input="touch"] .play-touch-readout,
+.play-ui[data-input="touch"] .play-touch-charge { pointer-events: none; }
+/* 力量条 / 读数右对齐球路键组（键组比它们宽，靠右才是拇指侧）。 */
+.play-ui[data-input="touch"] .play-touch-readout { margin-right: 0; }
+/* 力量条（从记分牌搬过来）：待机压暗，蓄力/出拍时点亮。宽度对齐下面两行球路键。 */
+.play-ui[data-input="touch"] .play-touch-charge {
+  width: calc(var(--play-touch-shot) * 3 + 16px);
+}
+.play-ui[data-input="touch"] .play-touch-charge .play-charge { margin-top: 0; }
+.play-ui[data-input="touch"] .play-touch-charge .play-charge > i { height: 5px; }
+
+.play-ui[data-input="touch"] .play-touch-jump {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  width: var(--play-touch-jump);
+  height: var(--play-touch-jump);
+  border: 1px solid rgb(228 242 121 / 55%);
+  border-radius: 50%;
+  color: var(--play-lemon);
+  background: radial-gradient(circle at 50% 32%, rgb(31 76 60 / 88%), rgb(9 41 31 / 88%));
+  box-shadow: 0 3px 10px rgb(0 0 0 / 30%), inset 0 -3px 6px rgb(0 0 0 / 22%);
+  font-size: 13px;
+  letter-spacing: .04em;
+  pointer-events: auto;
+}
+.play-ui[data-input="touch"] .play-touch-jump small { color: rgb(228 242 121 / 72%); font-size: 9px; }
+.play-ui[data-input="touch"] .play-touch-jump[data-pressed="true"] { background: rgb(228 242 121 / 24%); }
+
+/* ---- 落点读数：按住某个球路键拖动时才亮，写在这一列的最上面。 ---- */
+.play-ui[data-input="touch"] .play-touch-readout {
+  max-width: 210px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: var(--play-paper);
+  background: rgb(6 24 20 / 68%);
+  font-size: 11px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.play-ui[data-input="touch"] .play-touch-readout[data-active="true"] { opacity: 1; }
+
+/* ---- 球路键：六个固定圆键排两行（上排上手球 / 下排下手球），王者荣耀那套技能键的按法。
+        待机是深底 + 球路色字；训练模式下可打的球路描一圈；按住的键整块点亮成球路色。 ---- */
+.play-ui[data-input="touch"] .play-touch-shots {
   display: grid;
   grid-template-columns: repeat(3, var(--play-touch-shot));
-  gap: var(--play-touch-gap);
+  gap: 8px;
 }
 .play-ui[data-input="touch"] .play-touch-shot {
   display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 1px;
-  min-height: var(--play-touch-shot);
-  padding: 4px 3px;
-  border: 1px solid var(--play-line);
-  color: var(--play-paper);
-  background: rgb(9 41 31 / 78%);
+  place-items: center;
+  width: var(--play-touch-shot);
+  height: var(--play-touch-shot);
+  padding: 0;
+  border: 1px solid rgb(242 239 223 / 20%);
+  border-radius: 50%;
+  color: var(--shot-accent, var(--play-paper));
+  background: radial-gradient(circle at 50% 34%, rgb(31 76 60 / 86%), rgb(9 41 31 / 90%));
+  box-shadow: 0 3px 10px rgb(0 0 0 / 30%), inset 0 -3px 6px rgb(0 0 0 / 20%);
   font-size: 12px;
-  line-height: 1.2;
+  letter-spacing: .04em;
+  pointer-events: auto;
 }
-.play-ui[data-input="touch"] .play-touch-shot small { font-size: 8px; color: var(--play-muted); }
-.play-ui[data-input="touch"] .play-touch-shot[data-available="true"] { box-shadow: inset 0 -3px var(--play-lemon); }
-.play-ui[data-input="touch"] .play-touch-shot[data-selected="true"] { border-color: var(--play-lemon); color: var(--play-deep); background: var(--play-lemon); }
-.play-ui[data-input="touch"] .play-touch-shot[data-selected="true"] small { color: rgb(9 41 31 / 78%); }
-.play-ui[data-input="touch"] .play-touch-shot[data-pressed="true"] { border-color: var(--play-lemon); background: rgb(228 242 121 / 26%); }
-.play-ui[data-input="touch"] .play-touch-shot[data-pressed="true"][data-selected="true"] { background: var(--play-lemon); }
+/* 可打：描一圈自己的颜色（用 inset 阴影而不是 border，免得按下时尺寸跳动）。 */
+.play-ui[data-input="touch"] .play-touch-shot[data-available="true"] {
+  border-color: rgb(242 239 223 / 32%);
+  box-shadow: inset 0 0 0 1px var(--shot-accent, var(--play-lemon)), 0 3px 10px rgb(0 0 0 / 30%);
+}
+/* 顶着上次选中的球路：加一圈外发光，方便知道松开后的默认球。 */
+.play-ui[data-input="touch"] .play-touch-shot[data-selected="true"] { border-color: var(--play-line); }
+/* 正被按住：整块点亮成球路色（此时拖动改落点）。 */
+.play-ui[data-input="touch"] .play-touch-shot[data-aiming="true"] {
+  color: var(--play-deep);
+  background: var(--shot-accent, var(--play-lemon));
+  box-shadow: 0 0 16px var(--shot-accent, var(--play-lemon));
+  transform: scale(.94);
+}
 
-/* 触屏下键盘专属提示退场，换成触屏说明（仍占 console 的 keys 行）。 */
-.play-touch-hint { display: none; }
+/* ---- 触屏下键盘专属的东西退场 ---- */
 .play-ui[data-input="touch"] .play-key-hints,
 .play-ui[data-input="touch"] .play-mobile-hint,
 .play-ui[data-input="touch"] .play-shots,
 .play-ui[data-input="touch"] .play-menu-controls,
-.play-ui[data-input="touch"] .play-keyboard-note { display: none; }
-.play-ui[data-input="touch"] .play-touch-hint {
-  grid-area: keys;
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  color: var(--play-muted);
-  font-size: 10px;
-  text-align: center;
-}
+.play-ui[data-input="touch"] .play-keyboard-note,
+.play-ui[data-input="touch"] .play-court-brand,
+.play-ui[data-input="touch"] .play-training,
+.play-ui[data-input="touch"] .play-tasks,
+.play-ui[data-input="touch"] .play-training-note,
+.play-ui[data-input="touch"] .play-tools { display: none; }
 .play-touch-controls { display: none; }
-.play-ui[data-input="touch"] .play-touch-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px 22px;
-}
+.play-ui[data-input="touch"] .play-touch-controls { display: flex; flex-wrap: wrap; gap: 7px 22px; }
 .play-ui[data-input="touch"] .play-touch-controls > span { line-height: 1.8; }
 
-/* 横屏：console 居中让开左右两侧的触控件，避免遮挡记分牌外的球路/接触窗口。 */
-.play-ui[data-input="touch"] .play-console {
-  bottom: calc(10px + var(--play-safe-bottom));
-  width: min(560px, calc(100% - var(--play-touch-stick) * 2 - 68px));
-  min-width: 240px;
-  grid-template-areas: "feedback feedback" "player player" "window window" "keys keys";
-  row-gap: 6px;
-  padding: 8px 12px;
+/* ---- 记分牌 → 顶部悬浮比分胶囊（画面是主角，HUD 只留薄薄一层） ---- */
+.play-ui[data-input="touch"] .play-scoreboard {
+  top: calc(8px + var(--play-safe-top));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "top meta" "score score" "stamina stamina";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 3px;
+  width: auto;
+  min-width: 150px;
+  max-width: calc(100% - 84px);
+  padding: 5px 12px 7px;
+  border-top: 2px solid var(--play-home);
+  border-bottom: 1px solid rgb(242 239 223 / 14%);
+  border-radius: 3px 3px 12px 12px;
+  background: linear-gradient(rgb(6 27 25 / 78%), rgb(6 27 25 / 58%));
+  box-shadow: 0 8px 22px rgb(0 0 0 / 30%);
+  text-align: center;
 }
-.play-ui[data-input="touch"] .play-training { top: calc(96px + var(--play-safe-top)); width: 152px; }
-.play-ui[data-input="touch"] .play-tasks,
-.play-ui[data-input="touch"] .play-training-note { display: none; }
+.play-ui[data-input="touch"] .play-score-top { grid-area: top; justify-content: flex-start; gap: 6px; }
+.play-ui[data-input="touch"] .play-scoreboard .play-eyebrow { font-size: 9px; letter-spacing: .08em; }
+.play-ui[data-input="touch"] .play-badge { padding: 0 7px; font-size: 8px; }
+.play-ui[data-input="touch"] .play-score-meta {
+  grid-area: meta;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  font-size: 9px;
+}
+.play-ui[data-input="touch"] .play-score { grid-area: score; height: 26px; gap: 8px; }
+.play-ui[data-input="touch"] .play-score > span { gap: 6px; font-size: 11px; }
+.play-ui[data-input="touch"] .play-score strong { min-width: 22px; font-size: 24px; }
+.play-ui[data-input="touch"] .play-score i { font-size: 15px; }
+/* 局比分那一行在触屏收起：暂停对话框里有完整的局分表。 */
+.play-ui[data-input="touch"] .play-set-score { display: none; }
+.play-ui[data-input="touch"] .play-scoreboard .play-stamina { grid-area: stamina; width: 100%; margin-top: 1px; }
+.play-ui[data-input="touch"] .play-scoreboard .play-stamina label { margin-bottom: 2px; font-size: 8px; letter-spacing: .06em; }
+.play-ui[data-input="touch"] .play-scoreboard .play-stamina progress { height: 4px; }
+
+/* ---- 状态行 → 顶部漂浮 toast：文案变了才亮，TOAST_MS 之后自己淡出 ---- */
+.play-ui[data-input="touch"] .play-console {
+  top: calc(98px + var(--play-safe-top));
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  width: auto;
+  min-width: 0;
+  max-width: calc(100% - 28px);
+  padding: 5px 13px;
+  transform: translateX(-50%);
+  display: block;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(rgb(6 27 25 / 76%), rgb(6 27 25 / 56%));
+  box-shadow: 0 4px 14px rgb(0 0 0 / 26%);
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 460ms ease;
+  pointer-events: none;
+}
+.play-ui[data-input="touch"] .play-console[data-fresh="true"] { opacity: 1; }
+.play-ui[data-input="touch"] .play-feedback { display: grid; gap: 1px; padding: 0; }
+.play-ui[data-input="touch"] .play-feedback strong { font-size: 11px; }
+.play-ui[data-input="touch"] .play-feedback > span { font-size: 10px; line-height: 1.35; }
+.play-ui[data-input="touch"] .play-player-readout,
+.play-ui[data-input="touch"] .play-contact-window,
+.play-ui[data-input="touch"] .play-technique { display: none; }
+
+/* ---- 声音 / 预测 / 录像搬进暂停对话框（触屏 HUD 不放这些开关） ---- */
+.play-pause-settings { display: none; }
+.play-ui[data-input="touch"] .play-pause-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: center;
+}
+.play-ui[data-input="touch"] .play-pause-settings button {
+  min-height: 40px;
+  padding: 6px 14px;
+  border: 1px solid var(--play-line);
+  border-radius: 999px;
+  color: var(--play-paper);
+  background: rgb(20 58 46 / 70%);
+  font-size: 12px;
+}
+.play-ui[data-input="touch"] .play-pause-settings button[aria-pressed="true"] { border-color: rgb(228 242 121 / 55%); color: var(--play-lemon); }
+
 .play-ui[data-input="touch"] .play-modal-layer {
   padding: calc(18px + var(--play-safe-top)) calc(18px + var(--play-safe-right)) calc(18px + var(--play-safe-bottom)) calc(18px + var(--play-safe-left));
   -webkit-overflow-scrolling: touch;
@@ -156,32 +297,37 @@
 .play-ui[data-input="touch"] .play-field select { height: 46px; font-size: 13px; }
 .play-ui[data-input="touch"] .play-mode-button { padding: 14px 16px; }
 
-/* 竖屏：console 挪到记分牌下方，底部整条留给双手；训练面板改为不占位。 */
-@media (orientation: portrait) {
-  .play-ui[data-input="touch"] .play-training { display: none; }
-  .play-ui[data-input="touch"] .play-console {
-    top: calc(140px + var(--play-safe-top));
-    bottom: auto;
-    left: 12px;
-    right: 12px;
-    width: auto;
-    min-width: 0;
-    max-width: none;
-    transform: none;
-  }
-  .play-ui[data-input="touch"] .play-touch-shots {
-    grid-template-columns: repeat(2, var(--play-touch-shot));
-  }
-}
-
+/* 横屏（手机的另一种握法）：纵向只剩 393px，控件整体缩一号，记分牌压成一行。 */
 @media (orientation: landscape) and (max-height: 520px) {
-  .play-ui[data-input="touch"] { --play-touch-stick: 112px; --play-touch-shot: 54px; }
-  .play-ui[data-input="touch"] .play-touch-button { min-height: 40px; padding: 4px 8px; font-size: 11px; }
+  .play-ui[data-input="touch"] {
+    --play-touch-stick: 96px;
+    --play-touch-shot: 54px;
+    --play-touch-jump: 52px;
+    --play-touch-edge: 10px;
+  }
+  .play-ui[data-input="touch"] .play-touch-shoot { gap: 6px; }
+  .play-ui[data-input="touch"] .play-touch-shots { gap: 6px; }
   .play-ui[data-input="touch"] .play-touch-shot { font-size: 11px; }
-  .play-ui[data-input="touch"] .play-touch-shot small { display: none; }
-  .play-ui[data-input="touch"] .play-console { padding: 6px 10px; row-gap: 4px; }
+  .play-ui[data-input="touch"] .play-scoreboard {
+    grid-template-columns: auto auto auto;
+    grid-template-areas: "top score meta" "stamina stamina stamina";
+    row-gap: 2px;
+    padding: 3px 12px 5px;
+  }
+  .play-ui[data-input="touch"] .play-score { height: 24px; }
+  .play-ui[data-input="touch"] .play-score strong { font-size: 21px; }
+  /* 横屏把体力条压成纯色细条（标签藏起来），记分牌才不会顶到状态 toast。 */
+  .play-ui[data-input="touch"] .play-scoreboard .play-stamina { margin-top: 0; }
+  .play-ui[data-input="touch"] .play-scoreboard .play-stamina label { display: none; }
+  .play-ui[data-input="touch"] .play-scoreboard .play-stamina progress { height: 3px; }
+  .play-ui[data-input="touch"] .play-console { top: calc(60px + var(--play-safe-top)); }
 }
 
+/* 短屏竖机（宽 ≤ 380px）：再缩一点，保证球路键组不顶到状态 toast。 */
 @media (orientation: portrait) and (max-width: 380px) {
-  .play-ui[data-input="touch"] { --play-touch-stick: 112px; --play-touch-shot: 58px; }
+  .play-ui[data-input="touch"] {
+    --play-touch-stick: 100px;
+    --play-touch-shot: 58px;
+    --play-touch-jump: 54px;
+  }
 }

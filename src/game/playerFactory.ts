@@ -1,6 +1,7 @@
 /** 球员工厂 — 创建双方初始 PlayerState */
 
 import type { PlayerState } from '../character/types'
+import { holdLimitFor } from '../character/stroke'
 import type { RacketState } from '../physics/racket'
 
 export function createPlayer(side: 0 | 1): PlayerState {
@@ -31,7 +32,7 @@ export function createPlayer(side: 0 | 1): PlayerState {
     selectedShot: 'CLEAR',
     serveSelection: 'FOREHAND_HIGH',
     aim: { lateral: 0, depth: 0 },
-    swing: { phase: 'ready', elapsed: 0, shot: 'CLEAR', aim: { lateral: 0, depth: 0 }, target: null, slice: false, charge01: 0 },
+    swing: { phase: 'ready', elapsed: 0, shot: 'CLEAR', aim: { lateral: 0, depth: 0 }, target: null, slice: false, charge01: 0, holdLimit: holdLimitFor('balanced') },
     body: { phase: 'grounded', action: null, elapsed: 0, verticalVelocity: 0 },
     grip: 'forehand',
     loadout: 'balanced',

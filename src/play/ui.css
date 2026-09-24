@@ -4,6 +4,9 @@
   --play-paper: #f2efdf;
   --play-muted: #bcc9b8;
   --play-lemon: #e4f279;
+  /* 主客队霓虹色：与 start.ts 里两队队服/脚下能量环同色，HUD 与场上对得上。 */
+  --play-home: #5ce1ff;
+  --play-away: #ffa14f;
   --play-line: rgb(242 239 223 / 22%);
   position: fixed;
   inset: 0;
@@ -33,6 +36,48 @@
 }
 .play-eyebrow { font-size: 10px; font-weight: 650; letter-spacing: .15em; }
 .play-hud { position: absolute; inset: 0; }
+/* 画面外压暗 + 极轻扫描线：让 3D 画面看起来像"游戏画面"而不是网页里的 canvas。 */
+.play-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, rgb(0 0 0 / 9%) 0 1px, transparent 1px 3px),
+    radial-gradient(128% 90% at 50% 44%, transparent 46%, rgb(0 0 0 / 24%) 76%, rgb(0 0 0 / 54%) 100%);
+}
+/* 得分瞬间的全屏同色闪光。 */
+.play-flash { position: absolute; inset: 0; opacity: 0; }
+.play-flash[data-active="true"][data-side="home"] { animation: play-flash-home 620ms ease-out; }
+.play-flash[data-active="true"][data-side="away"] { animation: play-flash-away 620ms ease-out; }
+@keyframes play-flash-home { from { opacity: .5; background: radial-gradient(80% 60% at 50% 50%, rgb(92 225 255 / 60%), transparent 70%); } to { opacity: 0; } }
+@keyframes play-flash-away { from { opacity: .5; background: radial-gradient(80% 60% at 50% 50%, rgb(255 161 79 / 55%), transparent 70%); } to { opacity: 0; } }
+/* 得分横幅：出现在画面上三分之一处，1.5s 内自己淡出（ui.ts 的 showPointBanner 控制 data-active）。 */
+.play-point-banner {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 10px 26px;
+  transform: translateX(-50%);
+  border-top: 2px solid var(--play-home);
+  border-bottom: 2px solid var(--play-home);
+  background: linear-gradient(rgb(6 27 25 / 0%), rgb(6 27 25 / 82%) 30%, rgb(6 27 25 / 82%) 70%, rgb(6 27 25 / 0%));
+  opacity: 0;
+  text-align: center;
+}
+.play-point-banner[data-active="true"] { animation: play-banner 1.5s cubic-bezier(.16,.9,.3,1); }
+.play-point-banner[data-side="away"] { border-color: var(--play-away); }
+.play-point-banner strong { font: 700 34px/1.1 "Avenir Next Condensed", "DIN Condensed", "PingFang SC", sans-serif; letter-spacing: .06em; color: var(--play-home); text-shadow: 0 0 22px rgb(92 225 255 / 45%); }
+.play-point-banner[data-side="away"] strong { color: var(--play-away); text-shadow: 0 0 22px rgb(255 161 79 / 45%); }
+.play-point-banner > span { color: var(--play-muted); font-size: 12px; letter-spacing: .1em; }
+@keyframes play-banner {
+  0% { opacity: 0; transform: translateX(-50%) scale(.86); }
+  18% { opacity: 1; transform: translateX(-50%) scale(1.04); }
+  34% { transform: translateX(-50%) scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) scale(1.02); }
+}
 
 /* The playing surface stays empty: information sits on its perimeter. */
 .play-court-brand { position: absolute; top: 25px; left: 26px; display: grid; gap: 4px; }
@@ -45,22 +90,52 @@
   width: 348px;
   padding: 9px 20px 11px;
   transform: translateX(-50%);
-  border-top: 2px solid var(--play-lemon);
-  background: rgb(9 41 31 / 93%);
+  border-top: 2px solid var(--play-home);
+  border-bottom: 1px solid var(--play-line);
+  background:
+    linear-gradient(rgb(9 41 31 / 96%), rgb(6 27 25 / 88%)),
+    repeating-linear-gradient(90deg, rgb(92 225 255 / 7%) 0 1px, transparent 1px 7px);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 35%), inset 0 0 26px rgb(92 225 255 / 8%);
   text-align: center;
 }
-.play-scoreboard > .play-eyebrow { color: var(--play-muted); letter-spacing: .11em; }
+.play-score-top { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.play-scoreboard .play-eyebrow { color: var(--play-muted); letter-spacing: .11em; }
+/* 局点 / 赛点徽标：亮起来时自己呼吸。 */
+.play-badge {
+  padding: 1px 9px;
+  border-radius: 999px;
+  color: var(--play-deep);
+  background: var(--play-home);
+  font: 700 9px/1.7 "Avenir Next", "PingFang SC", sans-serif;
+  letter-spacing: .14em;
+  animation: play-badge-pulse 1.1s ease-in-out infinite;
+}
+.play-badge[data-side="away"] { background: var(--play-away); }
+@keyframes play-badge-pulse { 50% { transform: scale(1.08); box-shadow: 0 0 16px currentcolor; } }
 .play-score { display: flex; align-items: center; justify-content: center; gap: 21px; height: 51px; }
 .play-score > span { display: flex; align-items: center; gap: 15px; font-size: 12px; }
 .play-score strong {
   min-width: 46px;
-  font: 650 43px/1 "Avenir Next Condensed", "DIN Condensed", "Avenir Next", sans-serif;
+  font: 700 46px/1 "Avenir Next Condensed", "DIN Condensed", "Avenir Next", sans-serif;
   letter-spacing: -.03em;
 }
-.play-score > span:first-child strong { color: var(--play-lemon); }
-.play-score i { font-size: 22px; color: var(--play-muted); font-style: normal; }
-.play-set-score { font-size: 11px; color: var(--play-paper); }
+.play-score > span:first-child strong { color: var(--play-home); text-shadow: 0 0 18px rgb(92 225 255 / 40%); }
+.play-score > span:last-child strong { color: var(--play-away); text-shadow: 0 0 18px rgb(255 161 79 / 40%); }
+.play-score i { font-size: 22px; color: var(--play-muted); font-style: normal; opacity: .6; }
+.play-set-score { display: inline-block; padding: 2px 12px; border: 1px solid var(--play-line); border-radius: 999px; font-size: 11px; color: var(--play-paper); }
 .play-score-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--play-line); font-size: 10px; color: var(--play-muted); }
+/* 长回合"加热"：拍数越多字越大越亮。 */
+.play-rally { color: var(--play-paper); transition: color 160ms, text-shadow 160ms; }
+.play-rally[data-heat="1"] { color: var(--play-lemon); }
+.play-rally[data-heat="2"] { color: var(--play-lemon); font-weight: 650; text-shadow: 0 0 12px rgb(228 242 121 / 55%); }
+.play-rally[data-heat="3"] { color: #ffd76b; font-weight: 700; text-shadow: 0 0 18px rgb(255 215 107 / 70%); }
+/* 力量条：待机压暗，蓄力/出拍时点亮并左向右填满。 */
+.play-charge { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; margin-top: 6px; opacity: .35; transition: opacity 140ms; }
+.play-charge[data-active="true"] { opacity: 1; }
+.play-charge > span { font-size: 9px; letter-spacing: .1em; color: var(--play-muted); }
+.play-charge[data-active="true"] > span { color: var(--play-home); }
+.play-charge > i { display: block; height: 6px; border: 1px solid var(--play-line); background: rgb(0 0 0 / 32%); overflow: hidden; }
+.play-charge b { display: block; height: 100%; transform: scaleX(0); transform-origin: left center; background: linear-gradient(90deg, var(--play-home), var(--play-lemon)); box-shadow: 0 0 10px rgb(92 225 255 / 60%); }
 .play-tools {
   position: absolute;
   top: 20px;
@@ -70,10 +145,21 @@
   gap: 5px;
   max-width: 260px;
 }
-.play-tools button { min-height: 33px; padding: 5px 10px; border: 1px solid var(--play-line); color: var(--play-paper); background: rgb(9 41 31 / 92%); font-size: 11px; white-space: nowrap; }
+.play-tools button {
+  min-height: 33px;
+  padding: 5px 12px;
+  border: 1px solid var(--play-line);
+  border-radius: 999px;
+  color: var(--play-paper);
+  background: linear-gradient(rgb(20 58 46 / 92%), rgb(9 41 31 / 92%));
+  box-shadow: inset 0 1px 0 rgb(242 239 223 / 8%);
+  font-size: 11px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
 .play-tools button small { margin-left: 4px; font-size: 9px; color: var(--play-muted); }
 .play-tools button:hover:not(:disabled) { border-color: var(--play-lemon); background: var(--play-green); }
-.play-tools button[aria-pressed="true"] { color: var(--play-lemon); }
+.play-tools button[aria-pressed="true"] { border-color: rgb(228 242 121 / 55%); color: var(--play-lemon); box-shadow: inset 0 1px 0 rgb(242 239 223 / 8%), 0 0 12px rgb(228 242 121 / 25%); }
 .play-tools [data-ui="record"] { grid-column: span 2; }
 .play-tools [data-recording="true"]::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; border-radius: 50%; background: #ffb396; }
 
@@ -112,8 +198,14 @@
 .play-stamina { width: 142px; flex-shrink: 0; }
 .play-stamina label { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 10px; color: var(--play-muted); }
 .play-stamina progress { display: block; width: 100%; height: 5px; border: 0; appearance: none; accent-color: var(--play-lemon); background: rgb(242 239 223 / 16%); }
-.play-stamina progress::-webkit-progress-bar { background: rgb(242 239 223 / 16%); }
-.play-stamina progress::-webkit-progress-value { background: var(--play-lemon); }
+/* 体力条 = 方格能量槽，不是网页进度条。 */
+.play-stamina progress::-webkit-progress-bar { background: repeating-linear-gradient(90deg, rgb(242 239 223 / 14%) 0 5px, transparent 5px 7px); }
+.play-stamina progress::-webkit-progress-value {
+  background: var(--play-lemon);
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 7px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 5px, transparent 5px 7px);
+  box-shadow: 0 0 8px rgb(228 242 121 / 55%);
+}
 .play-stamina progress::-moz-progress-bar { background: var(--play-lemon); }
 .play-stamina progress[data-low="true"]::-webkit-progress-value { background: #ffb396; }
 .play-stamina progress[data-low="true"]::-moz-progress-bar { background: #ffb396; }
@@ -125,8 +217,10 @@
 .play-shots li { display: grid; grid-template-columns: auto auto; align-items: center; align-content: center; justify-content: center; gap: 3px 9px; min-height: 48px; padding: 7px 9px; border: 1px solid var(--play-line); color: var(--play-muted); font-size: 12px; }
 .play-shots kbd { opacity: .85; font-size: 13px; }
 .play-shots small { grid-column: 1 / -1; font-size: 9px; font-weight: 400; text-align: center; }
-.play-shots li[data-available="true"] { box-shadow: inset 0 -3px var(--play-lemon); color: var(--play-paper); }
-.play-shots li[data-selected="true"] { border-color: var(--play-lemon); color: var(--play-deep); background: var(--play-lemon); font-weight: 650; }
+/* 球路配色（ui.ts 写入 --shot-accent）：名字与"可打"高亮按球路区分。 */
+.play-shots li > span { color: var(--shot-accent, var(--play-muted)); }
+.play-shots li[data-available="true"] { box-shadow: inset 0 -3px var(--shot-accent, var(--play-lemon)); color: var(--play-paper); }
+.play-shots li[data-selected="true"] { border-color: var(--shot-accent, var(--play-lemon)); color: var(--play-deep); background: var(--shot-accent, var(--play-lemon)); font-weight: 650; }
 .play-shots li[data-selected="true"][data-available="true"] { box-shadow: inset 0 -3px var(--play-deep); }
 .play-shots li[data-selected="true"] kbd { opacity: 1; }
 .play-contact-window { grid-area: window; display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 3px 12px; font-size: 10px; color: var(--play-muted); }

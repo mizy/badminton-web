@@ -117,10 +117,7 @@ export function createKeyboardAdapter(
       // 无方向按下时保留现有 aim（含箭头/X 设置），不覆盖。
       const forward = Number(pressed.has(keymap.moveUp)) - Number(pressed.has(keymap.moveDown))
       const lateral = Number(pressed.has(keymap.moveRight)) - Number(pressed.has(keymap.moveLeft))
-      const sampled = {
-        lateral: Math.sign(lateral) as -1 | 0 | 1,
-        depth: Math.sign(forward) as -1 | 0 | 1,
-      }
+      const sampled = { lateral: Math.sign(lateral), depth: Math.sign(forward) }
       const swingAim: ShotAim = sampled.lateral || sampled.depth ? sampled : aim
       emit(shot ? { type: 'SWING_START', shot, slice, aim: swingAim } : { type: 'SWING_START', slice, aim: swingAim })
     }

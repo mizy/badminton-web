@@ -1,5 +1,10 @@
 import type { GameState, MatchState, PointReason } from './types'
 
+/** 21 分制、两分领先、30 分封顶；三局两胜。getPhase 与 HUD 的局点/赛点提示共用这一组规则。 */
+export const POINTS_TO_WIN = 21
+export const POINT_CAP = 30
+export const SETS_TO_WIN = 2
+
 export const SINGLES_HALF_WIDTH = 2.59
 export const COURT_HALF_LENGTH = 6.7
 export const SHORT_SERVICE_LINE = 1.98
@@ -37,7 +42,7 @@ function updateMatch(match: MatchState, scorer: 0 | 1): MatchState {
     ? { home: points[0], away: points[1] } : { ...set }) as MatchState['sets']
   return {
     ...match, points, sets,
-    isDeuce: points[0] >= 20 && points[1] >= 20,
+    isDeuce: points[0] >= POINTS_TO_WIN - 1 && points[1] >= POINTS_TO_WIN - 1,
     server: scorer,
     serviceSide: points[scorer] % 2 === 0 ? 'right' : 'left',
   }
@@ -45,11 +50,25 @@ function updateMatch(match: MatchState, scorer: 0 | 1): MatchState {
 
 function getPhase(match: MatchState): GameState['phase'] {
   const [a, b] = match.points
-  if (Math.max(a, b) < 30 && (Math.max(a, b) < 21 || Math.abs(a - b) < 2)) return 'point_scored'
+  if (Math.max(a, b) < POINT_CAP && (Math.max(a, b) < POINTS_TO_WIN || Math.abs(a - b) < 2)) return 'point_scored'
   const completed = match.sets.slice(0, match.currentSet + 1)
   const homeWins = completed.filter(s => s.home > s.away).length
   const awayWins = completed.filter(s => s.away > s.home).length
-  return homeWins >= 2 || awayWins >= 2 ? 'match_end' : 'set_end'
+  return homeWins >= SETS_TO_WIN || awayWins >= SETS_TO_WIN ? 'match_end' : 'set_end'
+}
+
+/**
+ * 局点 / 赛点判定：领先至少一分且已到 20 分（20-20 平要两分领先，所以平局不算局点）。
+ * matchPoint = 这一分拿下就直接赢下整场。HUD 徽标只读这里的结论，不自己算分。
+ */
+export function getMatchPoint(match: MatchState): { side: 0 | 1; leaderPoints: number; matchPoint: boolean } | null {
+  const [home, away] = match.points
+  const side: 0 | 1 = home >= away ? 0 : 1
+  const leaderPoints = side === 0 ? home : away
+  if (leaderPoints < POINTS_TO_WIN - 1 || Math.abs(home - away) < 1) return null
+  const completed = match.sets.slice(0, match.currentSet)
+  const setsWon = completed.filter(set => (side === 0 ? set.home > set.away : set.away > set.home)).length
+  return { side, leaderPoints, matchPoint: setsWon >= SETS_TO_WIN - 1 }
 }
 
 export function handleSetEnd(match: MatchState): MatchState {

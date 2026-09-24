@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { checkPoint, handleSetEnd } from './match'
+import { checkPoint, getMatchPoint, handleSetEnd } from './match'
+import type { MatchState } from './types'
 import { createFullGameState } from './types'
 import { createPlayer } from './playerFactory'
 import { gameReducer } from './reducer'
@@ -94,5 +95,32 @@ describe('BWF match flow', () => {
     const next = gameReducer(checkPoint(state), { type: 'POINT_DELAY_ELAPSED' })
     expect(next.players[0]?.side).toBe(1)
     expect(next.match?.decidingEndsChanged).toBe(true)
+  })
+})
+
+describe('局点 / 赛点判定', () => {
+  const withPoints = (points: [number, number], sets: Array<{ home: number; away: number }> = [], currentSet = 0) => ({
+    ...createFullGameState().match!,
+    points,
+    currentSet,
+    sets: Array.from({ length: 3 }, (_, index) => sets[index] ?? { home: 0, away: 0 }) as MatchState['sets'],
+  })
+
+  it('等到 20 分且领先才亮局点', () => {
+    expect(getMatchPoint(withPoints([19, 15]))).toBeNull()
+    expect(getMatchPoint(withPoints([20, 15]))).toEqual({ side: 0, leaderPoints: 20, matchPoint: false })
+    expect(getMatchPoint(withPoints([15, 20]))).toEqual({ side: 1, leaderPoints: 20, matchPoint: false })
+  })
+
+  it('20 平不算局点，两分领先才算', () => {
+    expect(getMatchPoint(withPoints([20, 20]))).toBeNull()
+    expect(getMatchPoint(withPoints([21, 20]))?.side).toBe(0)
+    expect(getMatchPoint(withPoints([29, 29]))).toBeNull()
+  })
+
+  it('已经赢下一局时，再拿一分就是赛点', () => {
+    const winningSet = [{ home: 21, away: 18 }]
+    expect(getMatchPoint(withPoints([20, 17], winningSet, 1))).toEqual({ side: 0, leaderPoints: 20, matchPoint: true })
+    expect(getMatchPoint(withPoints([20, 17], [{ home: 18, away: 21 }], 1))?.matchPoint).toBe(false)
   })
 })

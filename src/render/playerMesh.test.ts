@@ -16,6 +16,7 @@ import type { PlayerState } from '../character/types'
 import {
   createGroundMarker,
   createPlayerMesh,
+  updateGroundMarker,
   syncPlayerMotion,
   updatePlayerMesh,
   updatePlayerRacketPose,
@@ -256,6 +257,26 @@ describe('low-poly player rig', () => {
     expect(point(moving, 'right-shoulder').distanceTo(point(moving, 'right-wrist'))).toBeLessThan(0.5)
   })
 
+  it('霓虹饰件存在且自带自发光（队服饰边 / 额带 / 袖口 / 护腕 / 鞋侧 / 拍框 / 手胶）', () => {
+    const mesh = makeMesh()
+    const parts = [
+      'jersey-trim', 'jersey-collar', 'player-headband', 'shorts-waistband',
+      'right-sleeve', 'left-sleeve', 'right-wristband', 'right-shoe-stripe', 'right-shoe-laces',
+      'racket-frame', 'racket-shaft', 'racket-grip-wrap-0.02', 'player-rim-light',
+    ]
+    for (const name of parts) {
+      const node = mesh.getObjectByName(name)
+      expect(node, name).toBeDefined()
+      if (node instanceof THREE.Mesh) {
+        expect((node.material as THREE.MeshStandardMaterial).emissiveIntensity, name).toBeGreaterThan(0)
+      }
+    }
+    // 身体包围盒仍由原骨架决定：饰件没有把身高撑高，也没有把鞋底压到地面以下。
+    const box = bounds(mesh)
+    expect(box.min.y).toBeCloseTo(0, 5)
+    expect(box.max.y).toBeCloseTo(PLAYER_HEIGHT, 4)
+  })
+
   it('retains legacy positioning/swing interfaces without detaching the right hand', () => {
     const mesh = makeMesh()
     updatePlayerMesh(mesh, [2, 0.3, -1], Math.PI / 2)
@@ -265,8 +286,13 @@ describe('low-poly player rig', () => {
       updatePlayerRacketPose(mesh, t)
       expectChains(mesh)
     }
+    // 脚下能量环：细边线环 + 光晕 + 扫描弧，三层都不许长成发光圆盘。
     const marker = createGroundMarker(0xabcdef)
-    expect(marker.children).toHaveLength(1)
+    expect(marker.children.map(child => child.name)).toEqual(['ground-ring', 'ground-halo', 'ground-sweep'])
     expect(bounds(marker).getSize(new THREE.Vector3()).x).toBeLessThan(0.75)
+    updateGroundMarker(marker, 0.5)
+    expect(marker.getObjectByName('ground-sweep')!.rotation.z).toBeCloseTo(-0.75, 6)
+    const halo = marker.getObjectByName('ground-halo') as THREE.Mesh
+    expect((halo.material as THREE.MeshBasicMaterial).opacity).toBeGreaterThan(0.1)
   })
 })

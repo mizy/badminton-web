@@ -1,7 +1,8 @@
 import type { GameState, PointReason } from '../game/types'
-import type { BodyState, Footwork } from '../character/types'
+import type { BodyState, Footwork, PlayerState, ShotAim } from '../character/types'
 import type { ShotType } from '../character/shotSynthesis'
-import { RACKETS, SHOT_NAMES, SHOT_ORDER } from '../character/stroke'
+import { RACKETS, SHOT_NAMES, SHOT_ORDER, charge01 } from '../character/stroke'
+import { getMatchPoint } from '../game/match'
 import { PERSONAS, getPersona, type PersonaId } from '../ai/personas'
 import { getLegalShots } from '../ai/tactical'
 import './ui.css'
@@ -42,6 +43,48 @@ const SHOT_CONTROLS: Record<ShotType, { key: string; condition: string }> = {
   NET_DROP: { key: 'I', condition: '网前低球' },
   LIFT: { key: 'O', condition: '低手来球' },
 }
+
+/** 球路配色：环上圆键、桌面球路条与"可打"高亮共用一套，一眼分辨球路家族。 */
+const SHOT_ACCENTS: Record<ShotType, string> = {
+  CLEAR: '#e4f279', DROP: '#7ee8b2', SMASH: '#ff7a6b', DRIVE: '#6fd8ff', NET_DROP: '#b39bff', LIFT: '#ffcf6b',
+}
+
+/**
+ * 力量条视图（纯函数，便于单测）：蓄力中按按住时长上涨，出拍后停在本次实际力量 swing.charge01 上，
+ * 挥拍结束回到 ready 就熄灭。UI 只负责把这三个字段写进 DOM。
+ */
+export function chargeView(swing: PlayerState['swing'] | undefined): { active: boolean; value: number; label: string } {
+  if (!swing || swing.phase === 'ready') return { active: false, value: 0, label: '力量' }
+  const value = swing.phase === 'preparing' ? charge01(swing.elapsed) : swing.charge01
+  return { active: true, value, label: `${swing.phase === 'preparing' ? '蓄力' : '力量'} ${Math.round(value * 100)}%` }
+}
+
+/** 触屏瞄准读数（纯函数）：把连续落点翻译成拇指能读的一句话，写在瞄准区上方。 */
+export function aimReadoutView(shot: ShotType, aim: ShotAim): string {
+  const lateral = Math.abs(aim.lateral) < 0.02 ? '中路' : `${aim.lateral < 0 ? '左路' : '右路'} ${Math.round(Math.abs(aim.lateral) * 100)}%`
+  const depth = aim.depth <= 0.02 ? '标准深度' : `深 ${Math.round(aim.depth * 100)}%`
+  return `${SHOT_NAMES[shot]} · ${lateral} · ${depth}`
+}
+
+/** 得分横幅文案（纯函数）：得分方与失分方口径和记分牌一致。 */
+export function pointBannerView(point: GameState['lastPoint']): { side: 'home' | 'away'; title: string; reason: string } | null {
+  if (!point) return null
+  const own = point.winner === 0
+  return {
+    side: own ? 'home' : 'away',
+    title: own ? '你得分' : '对手得分',
+    reason: `${point.reason === 'in' ? '' : own ? '对手' : '你'}${POINT_REASON[point.reason]}`,
+  }
+}
+
+/** 触屏球路键的排布：上排是击球点高的上手球，下排是下手球（分界与 canPlayShot 的高度区间一致）。
+ *  一行三个、位置固定，拇指不用看屏幕就能盲按；按钮顺序即 SHOT_ORDER 之外唯一的一处排布真相。 */
+export const TOUCH_SHOT_ROWS: readonly (readonly ShotType[])[] = [
+  ['CLEAR', 'DROP', 'SMASH'],
+  ['DRIVE', 'NET_DROP', 'LIFT'],
+]
+/** 触屏状态行是漂浮的短促 toast：文案最后一次变化之后这么久开始淡出。 */
+const TOAST_MS = 2600
 const POINT_REASON: Record<PointReason, string> = {
   in: '球落界内', out: '击球出界', net: '触网失分', service: '发球违例',
 }
@@ -84,13 +127,20 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
   if (touch) root.dataset.input = 'touch'
   root.innerHTML = `
     <div class="play-hud" data-ui="hud" hidden>
+      <div class="play-vignette" aria-hidden="true"></div>
       <div class="play-court-brand" aria-hidden="true"><b>COURT / 01</b><span>单人 · 离线 · 羽毛球</span></div>
       <header class="play-scoreboard" aria-label="比赛记分牌">
-        <div class="play-eyebrow" data-ui="mode-label">单打比赛</div>
+        <div class="play-score-top">
+          <span class="play-eyebrow" data-ui="mode-label">单打比赛</span>
+          <span class="play-badge" data-ui="match-badge" hidden></span>
+        </div>
         <div id="score-overlay" class="play-score"><span>你 <strong data-ui="home-score">0</strong></span><i aria-hidden="true">:</i><span><strong data-ui="away-score">0</strong> <span data-ui="away-name">对手</span></span></div>
         <div id="set-overlay" class="play-set-score">局比分 0 : 0 · 第 1 局</div>
-        <div class="play-score-meta"><span data-ui="server">你发球 · 右区</span><span id="rally-overlay">本回合 0 拍</span></div>
+        <div class="play-score-meta"><span data-ui="server">你发球 · 右区</span><span class="play-rally" id="rally-overlay" data-heat="0">本回合 0 拍</span></div>
+        <div class="play-charge" data-ui="charge" data-active="false"><span data-ui="charge-label">力量</span><i aria-hidden="true"><b data-ui="charge-fill"></b></i></div>
       </header>
+      <div class="play-point-banner" data-ui="point-banner" data-active="false" data-side="home" aria-hidden="true"><strong data-ui="point-title"></strong><span data-ui="point-reason"></span></div>
+      <div class="play-flash" data-ui="flash" data-active="false" data-side="home" aria-hidden="true"></div>
       <nav class="play-tools" aria-label="比赛工具">
         <button type="button" data-ui="pause" title="暂停比赛（Esc）">暂停 <small>Esc</small></button>
         <button type="button" data-ui="menu">菜单</button>
@@ -111,7 +161,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
         <p data-ui="training-summary">最长 0 拍 · 球路 0 / 6</p>
         <p class="play-training-note">先到位再起跳，高点按击球键。空中不能二次起跳，落地要恢复。预测标记仅作落点参考。</p>
       </aside>
-      <footer class="play-console">
+      <footer id="play-console" class="play-console">
         <div id="status" class="play-feedback" role="status" aria-live="polite" aria-atomic="true"><strong data-ui="status-title">准备上场</strong><span data-ui="feedback">提前到位，留出引拍时间。</span></div>
         <div class="play-player-readout">
           <div class="play-stamina"><label for="play-stamina">体力 <span data-ui="stamina-value">100%</span></label><progress id="play-stamina" max="100" value="100">100%</progress></div>
@@ -123,7 +173,6 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
           <span><kbd>W A S D</kbd> 移动</span><span><kbd>J K I L</kbd> 直接发球</span><span><kbd>Space</kbd> 起跳</span><span><kbd>Q</kbd> 蹬转</span><span>击球按住蓄力 · <kbd>WASD</kbd> 定方向 · 松开出拍</span><span><kbd>Esc</kbd> 暂停</span>
           <span><kbd>Space</kbd> → <kbd>L</kbd> 跳杀</span><span><kbd>Q</kbd> → <kbd>L</kbd> 蹬转杀</span><span><kbd>Shift + J</kbd> 滑板高远</span><span><kbd>Shift + K</kbd> 切削吊球</span>
         </div>
-        <p class="play-touch-hint">左摇杆移动 · 按住球路蓄力 · 按住时拖动瞄准 · 松开出拍 · 右下角发球 / 起跳 / 蹬转 / 暂停</p>
       </footer>
       <p class="play-mobile-hint">小窗口建议横屏或全屏游玩；键盘操作不受影响。</p>
       <div class="play-touch" data-ui="touch" aria-label="触屏操作">
@@ -131,12 +180,14 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
           <span class="play-touch-stick-ring" aria-hidden="true"></span>
           <i class="play-touch-stick-knob" data-touch="stick-knob" aria-hidden="true"></i>
         </div>
-        <div class="play-touch-actions" aria-label="功能按钮">
-          <button type="button" class="play-touch-button" data-touch="action" data-action="serve">发球<small>起跳</small></button>
-          <button type="button" class="play-touch-button" data-touch="action" data-action="scissor">蹬转</button>
-          <button type="button" class="play-touch-button" data-touch="action" data-action="pause">暂停</button>
+        <button type="button" class="play-touch-pause" data-touch="action" data-action="pause" aria-label="暂停比赛">暂停</button>
+        <div class="play-touch-shoot">
+          <div class="play-touch-charge" data-ui="touch-charge"></div>
+          <span class="play-touch-readout" data-ui="touch-aim-readout" aria-hidden="true">按住拖动瞄准</span>
+          <button type="button" class="play-touch-jump" data-touch="jump" aria-label="起跳，按住不放是蹬转">起跳<small>按住蹬转</small></button>
+          <div class="play-touch-shots" data-touch="shots" data-ui="touch-shots" role="group"
+            aria-label="球路键：短按直接打，按住拖动瞄准落点"></div>
         </div>
-        <div class="play-touch-shots" data-ui="touch-shots" aria-label="按住蓄力、拖动瞄准、松开出拍"></div>
       </div>
     </div>
     <div class="play-modal-layer" data-ui="layer">
@@ -174,7 +225,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
           <p class="play-keyboard-note">球路键按下即击球，数字 1–6 同效；等待发球时仅选球。Shift 单独不挥拍。</p>
           <p class="play-keyboard-note">先到位再起跳，空中不能二次起跳，落地要恢复。推荐桌面 + 键盘 · 支持 Tab / Enter 操作菜单</p>
           <div class="play-touch-controls" data-ui="touch-controls">
-            <span>左摇杆移动（推到底冲刺）</span><span>右下 6 个球路按钮：按住蓄力，松开出拍</span><span>按住球路时在按钮或摇杆上拖动 = 调整落点</span><span>右下角另有 发球 / 起跳、蹬转、暂停</span><span>等待发球时按住球路按钮即可直接发球</span><span>先到位再起跳，空中不能二次起跳</span>
+            <span>左摇杆移动（推到底冲刺）</span><span>右下击球盘：按住即蓄力，松手出拍</span><span>拖动距离定球路——推向对方：放网 / 吊球 / 高远；向回拉：挑球 / 平抽 / 杀球</span><span>拖动方向定左右落点，盘面会实时点亮当前球路</span><span>盘上方起跳键：轻点起跳 / 发球，按住不放是蹬转</span><span>等待发球时按住击球盘拖出球路再松手发球</span><span>右上角暂停键：声音 / 预测 / 录像都在暂停里</span>
           </div>
         </footer>
       </section>
@@ -185,6 +236,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
         <div class="play-result-score" data-ui="result-score"></div>
         <table class="play-results" data-ui="results"><caption>本场实际局分</caption><thead><tr><th scope="col">局次</th><th scope="col">你</th><th scope="col">对手</th></tr></thead><tbody data-ui="result-rows"></tbody></table>
         <p class="play-result-point" data-ui="result-point"></p>
+        <div class="play-pause-settings" data-ui="pause-settings" aria-label="声音 / 预测 / 录像"></div>
         <div class="play-dialog-actions"><button type="button" class="play-button-primary" data-ui="resume">继续比赛 <small>Esc</small></button><button type="button" class="play-button-primary" data-ui="next-set" hidden>开始下一局</button><button type="button" class="play-button-paper" data-ui="restart">重新开始</button><button type="button" class="play-button-quiet" data-ui="return-menu">返回菜单</button></div>
         <p class="play-dialog-note" data-ui="dialog-note">重新开始将清空本场进度。</p>
       </section>
@@ -229,7 +281,17 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
   const body = ui('body')
   const aim = ui('aim')
   const stamina = element<HTMLProgressElement>('#play-stamina')
+  const staminaBlock = stamina.closest<HTMLElement>('.play-stamina')!
   const staminaValue = ui('stamina-value')
+  const consolePanel = element('#play-console')
+  const matchBadge = ui('match-badge')
+  const chargePanel = ui('charge')
+  const chargeFill = ui('charge-fill')
+  const chargeLabel = ui('charge-label')
+  const pointBanner = ui('point-banner')
+  const pointTitle = ui('point-title')
+  const pointReason = ui('point-reason')
+  const flash = ui('flash')
   const pauseButton = ui<HTMLButtonElement>('pause')
   const soundButton = ui<HTMLButtonElement>('sound')
   const predictionButton = ui<HTMLButtonElement>('prediction')
@@ -258,22 +320,24 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     item.append(key, name, condition)
     item.title = `${control.key} / ${index + 1} 直接${SHOT_NAMES[shot]} · ${control.condition}且球在身前可达；等待发球时仅选球`
     item.dataset.shot = shot
+    item.style.setProperty('--shot-accent', SHOT_ACCENTS[shot])
     ui('shots').append(item)
     return item
   })
-  const touchShotButtons = SHOT_ORDER.map(shot => {
+  // 触屏球路键：六个固定键（上排上手球、下排下手球，见 TOUCH_SHOT_ROWS），位置由 CSS 排。
+  // 短按直接打出该球路，按住拖动只改落点（dataset 由 input/touchControls.ts 写入），落点读数写在键组上方。
+  const touchAimReadout = ui('touch-aim-readout')
+  const touchShots = ui('touch-shots')
+  const touchShotButtons = TOUCH_SHOT_ROWS.flat().map(shot => {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'play-touch-shot'
     button.dataset.touch = 'shot'
     button.dataset.shot = shot
-    const name = document.createElement('span')
-    name.textContent = SHOT_NAMES[shot]
-    const condition = document.createElement('small')
-    condition.textContent = SHOT_CONTROLS[shot].condition
-    button.append(name, condition)
-    button.title = `按住${SHOT_NAMES[shot]}蓄力（${SHOT_CONTROLS[shot].condition}），拖动瞄准，松开出拍；等待发球时直接发出`
-    ui('touch-shots').append(button)
+    button.style.setProperty('--shot-accent', SHOT_ACCENTS[shot])
+    button.textContent = SHOT_NAMES[shot]
+    button.setAttribute('aria-label', `${SHOT_NAMES[shot]}：短按直接打，按住拖动瞄准落点`)
+    touchShots.append(button)
     return button
   })
   const resultRows = Array.from({ length: 3 }, (_, index) => {
@@ -289,6 +353,12 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
   })
 
   let menuOpen = true
+  /** 触屏下常驻说明换成漂浮 toast：文案变了才计时，TOAST_MS 之后淡出（真机实测常驻说明吃掉近半屏）。 */
+  let toastText = ''
+  let toastStamp = Number.NEGATIVE_INFINITY
+  /** 得分横幅去重键与收起定时器（destroy 时必须清掉，避免销毁后写 DOM）。 */
+  let lastPointKey = ''
+  let bannerTimer: ReturnType<typeof setTimeout> | null = null
   let latestState: GameState | null = null
   let activeDialog: DialogKind = null
   let returnFocus: HTMLElement | null = null
@@ -359,6 +429,26 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     text(predictionButton, `预测 ${prediction ? '开' : '关'}`)
   }
 
+  /** 触屏状态下重新安置三个常驻面板，让 3D 画面成为整个屏幕、其余都是悬浮件：
+   *  力量条跟手到击球盘上方，体力条进记分牌，声音 / 预测 / 录像收进暂停对话框。
+   *  桌面布局不受影响（这些节点留在原位，由 ui.css 的 [data-input="touch"] 规则区分）。 */
+  function relocateTouchPanels(): void {
+    ui('touch-charge').append(chargePanel)
+    element('.play-scoreboard').append(staminaBlock)
+    ui('pause-settings').append(soundButton, predictionButton, recordButton)
+  }
+
+  /** 状态行与反馈是漂浮 toast：文案变化的瞬间起算，之后淡出，不再常驻占屏。 */
+  function refreshToast(now: number): void {
+    const next = `${feedback.textContent ?? ''}|${statusTitle.textContent ?? ''}`
+    if (next !== toastText) {
+      toastText = next
+      toastStamp = now
+    }
+    const fresh = String(now - toastStamp < TOAST_MS)
+    if (consolePanel.dataset.fresh !== fresh) consolePanel.dataset.fresh = fresh
+  }
+
   function start(selectedMode: SessionOptions['mode']): void {
     mode = selectedMode
     menuOpen = false
@@ -395,6 +485,45 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     return `${winner}得分 · ${point.reason === 'in' ? '' : loser}${POINT_REASON[point.reason]}`
   }
 
+  /** 局点 / 赛点徽标：规则来自 game/match.ts 的 getMatchPoint，这里只负责显示。 */
+  function refreshMatchBadge(state: GameState): void {
+    const phase = state.phase === 'paused' ? state.pausedPhase : state.phase
+    const point = state.match && state.mode !== 'training' && phase === 'playing' ? getMatchPoint(state.match) : null
+    matchBadge.hidden = point === null
+    if (!point) return
+    text(matchBadge, point.matchPoint ? 'MATCH POINT · 赛点' : 'GAME POINT · 局点')
+    matchBadge.dataset.side = point.side === 0 ? 'home' : 'away'
+  }
+
+  function refreshCharge(player: GameState['players'][number] | undefined): void {
+    const view = chargeView(player?.swing)
+    chargePanel.dataset.active = String(view.active)
+    chargeFill.style.transform = `scaleX(${view.value.toFixed(3)})`
+    text(chargeLabel, view.label)
+  }
+
+  /** 得分横幅：每出现一个新的一分就重放一次动画（1.5s 后自动收起），并闪一下同色全屏光。 */
+  function showPointBanner(state: GameState): void {
+    const point = state.lastPoint
+    const view = pointBannerView(point)
+    if (!point || !view) return
+    const key = `${state.rallyId}:${point.winner}:${point.reason}`
+    if (key === lastPointKey) return
+    lastPointKey = key
+    text(pointTitle, view.title)
+    text(pointReason, view.reason)
+    for (const element of [pointBanner, flash]) {
+      element.dataset.side = view.side
+      element.dataset.active = 'true'
+    }
+    if (bannerTimer !== null) clearTimeout(bannerTimer)
+    bannerTimer = setTimeout(() => {
+      bannerTimer = null
+      pointBanner.dataset.active = 'false'
+      flash.dataset.active = 'false'
+    }, 1500)
+  }
+
   function update(state: GameState): void {
     if (destroyed) return
     latestState = state
@@ -416,6 +545,11 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     const serving = training ? 0 : match?.server ?? 0
     text(server, `${serving === 0 ? '你' : opponent.name}发球 · ${match?.serviceSide === 'left' ? '左' : '右'}区${match?.isDeuce && !training ? ' · 加分阶段' : ''}`)
     text(rally, `本回合 ${state.rallyHits} 拍`)
+    // 多拍回合计热：字体与光晕随拍数升级，长回合看得见。
+    rally.dataset.heat = String(state.rallyHits >= 24 ? 3 : state.rallyHits >= 16 ? 2 : state.rallyHits >= 8 ? 1 : 0)
+    refreshMatchBadge(state)
+    refreshCharge(state.players[0])
+    showPointBanner(state)
     pauseButton.disabled = state.phase === 'set_end' || state.phase === 'match_end'
     refreshToggles()
 
@@ -475,22 +609,36 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
       if (selected) item.setAttribute('aria-current', 'true')
       else item.removeAttribute('aria-current')
     })
-    // 键盘提示在触屏下被触屏按钮取代，可打窗口的高亮镜像到触屏按钮上。
-    touchShotButtons.forEach((button, index) => {
-      const shot = SHOT_ORDER[index]
+    // 球路键：按住哪个键（dataset.aiming）就点亮哪个，落点读数取同一个键的 dataset；可打性与桌面球路条同源。
+    const heldButton = touchShotButtons.find(button => button.dataset.aiming === 'true') ?? null
+    let heldShotName = ''
+    for (const button of touchShotButtons) {
+      const shot = button.dataset.shot as ShotType
       const available = String(training && open && legalShots.includes(shot))
       if (button.dataset.available !== available) button.dataset.available = available
       const selected = String(shot === player?.selectedShot)
       if (button.dataset.selected !== selected) button.dataset.selected = selected
-    })
+      if (button === heldButton) heldShotName = shot
+    }
+    const readoutActive = String(!!heldButton)
+    if (touchAimReadout.dataset.active !== readoutActive) touchAimReadout.dataset.active = readoutActive
+    text(touchAimReadout, heldButton && heldShotName
+      ? aimReadoutView(heldShotName as ShotType, {
+        lateral: Number(heldButton.dataset.lateral ?? 0),
+        depth: Number(heldButton.dataset.depth ?? 0),
+      })
+      : '按住球路键拖动瞄准')
     const point = pointMessage(state)
-    text(statusTitle, state.phase === 'paused' ? '已暂停 · Esc 继续'
+    // 触屏下状态行不得出现键盘字母：改成按得到的盘面说法（发球由 SERVE_BY_SHOT 决定，见 character/serve.ts）。
+    text(statusTitle, state.phase === 'paused' ? (touch ? '已暂停 · 点「继续」回到场上' : '已暂停 · Esc 继续')
       : state.phase === 'match_end' ? '比赛结束'
       : state.phase === 'set_end' ? '本局结束'
       : point ? `${state.phase === 'idle' ? '上一分：' : ''}${point}`
-      : state.phase === 'idle' ? (serving === 0 ? '站进发球区 · J 高远 / K 小球 / I 反手小 / L 平射 直接发出' : '准备接发 · 对手即将发球')
-      : '回合进行中 · J / K / L / U / I / O 直接击球')
-    text(feedback, player?.feedback || '先到位再起跳，空中不能二次起跳，落地要恢复。')
+      : state.phase === 'idle' ? (serving !== 0 ? '准备接发 · 对手即将发球'
+        : touch ? '站进发球区 · 短按球路键直接发出' : '站进发球区 · J 高远 / K 小球 / I 反手小 / L 平射 直接发出')
+      : touch ? '短按球路键出招 · 按住拖动瞄准' : '回合进行中 · J / K / L / U / I / O 直接击球')
+    text(feedback, player?.feedback || (touch ? '先到位再起跳，落地要恢复。' : '先到位再起跳，空中不能二次起跳，落地要恢复。'))
+    if (touch) refreshToast(performance.now())
 
     if (menuOpen) {
       showDialog('menu')
@@ -596,7 +744,8 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
   if (touch) {
     // 训练任务里指向键盘的两处文案换成触屏说法，避免移动端给出按不到的键。
     text(ui('move-key'), '摇杆')
-    text(ui('serve-key'), '发球键')
+    text(ui('serve-key'), '起跳键')
+    relocateTouchPanels()
   }
   refreshSettings()
   refreshToggles()
@@ -616,6 +765,8 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     destroy(): void {
       if (destroyed) return
       destroyed = true
+      if (bannerTimer !== null) clearTimeout(bannerTimer)
+      bannerTimer = null
       events.abort()
       root.remove()
       if (returnFocus?.isConnected && !returnFocus.closest('[hidden], [inert]')) returnFocus.focus({ preventScroll: true })

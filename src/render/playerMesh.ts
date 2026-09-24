@@ -81,6 +81,11 @@ function material(color: number, roughness = 0.88): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness, metalness: 0, flatShading: true })
 }
 
+/** 霓虹饰件：饰边、鞋侧、拍框自带 emissive，在暗色球场上自己发亮，不额外加光源。 */
+function glow(color: number, intensity = 0.7): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: 0.45, metalness: 0, flatShading: true })
+}
+
 function mesh(parent: THREE.Object3D, name: string, geometry: THREE.BufferGeometry, mat: THREE.Material): THREE.Mesh {
   const object = new THREE.Mesh(geometry, mat)
   object.name = name
@@ -126,7 +131,7 @@ function torsoGeometry(): THREE.BufferGeometry {
 
 function addClothingAndHead(body: THREE.Group, colors: PlayerMeshColors, skin: THREE.Material, shorts: THREE.Material): void {
   const jersey = material(colors.body)
-  const accent = material(colors.marker)
+  const accent = glow(colors.marker)
   const hair = material(0x252a30)
   mesh(body, 'player-jersey', torsoGeometry(), jersey)
   const collar = mesh(body, 'jersey-collar', new THREE.TorusGeometry(0.056, 0.009, 6, 16), accent)
@@ -138,12 +143,25 @@ function addClothingAndHead(body: THREE.Group, colors: PlayerMeshColors, skin: T
   const waist = mesh(body, 'shorts-waist', new THREE.CylinderGeometry(0.145, 0.165, 0.18, 12), shorts)
   waist.position.y = 0.962
   waist.scale.z = 0.7
+  // 队服细节：两侧竖条 + 发光腰带 + 额带 + 脑后马尾（体积都留在既有包围盒内，见 playerMesh.test.ts）。
+  for (const side of [-1, 1] as const) {
+    const stripe = mesh(body, `jersey-side-stripe-${side}`, new THREE.BoxGeometry(0.016, 0.12, 0.03), material(colors.body, 0.55))
+    stripe.position.set(side * 0.196, 1.44, 0)
+  }
+  const waistband = mesh(body, 'shorts-waistband', new THREE.TorusGeometry(0.163, 0.012, 6, 20), accent)
+  waistband.position.y = 1.052
+  waistband.rotation.x = Math.PI / 2
+  waistband.scale.z = 0.7
   const neck = mesh(body, 'player-neck', new THREE.CylinderGeometry(0.041, 0.049, 0.085, 12), skin)
   neck.position.y = 1.555
   ellipsoid(body, 'player-head', skin, [0.11, 0.121, 0.104], [0, PLAYER_HEIGHT - 0.126, 0.007])
   const cap = mesh(body, 'player-hair', new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.43), hair)
   cap.scale.set(0.112, 0.122, 0.107)
   cap.position.set(0, PLAYER_HEIGHT - 0.122, 0.004)
+  const headband = mesh(body, 'player-headband', new THREE.TorusGeometry(0.104, 0.012, 6, 20), accent)
+  headband.position.set(0, PLAYER_HEIGHT - 0.086, 0.004)
+  headband.rotation.x = Math.PI / 2.06
+  ellipsoid(body, 'player-hair-tail', hair, [0.033, 0.05, 0.033], [0, PLAYER_HEIGHT - 0.155, -0.104])
   for (const side of [-1, 1]) {
     ellipsoid(body, `ear-${side}`, skin, [0.015, 0.025, 0.017], [side * 0.106, 1.646, 0.002])
     ellipsoid(body, `eye-${side}`, hair, [0.007, 0.006, 0.004], [side * 0.035, 1.677, 0.104])
@@ -151,7 +169,7 @@ function addClothingAndHead(body: THREE.Group, colors: PlayerMeshColors, skin: T
   ellipsoid(body, 'player-nose', skin, [0.015, 0.020, 0.020], [0, 1.65, 0.105])
 }
 
-function createChain(body: THREE.Group, side: 'right' | 'left', arm: boolean, skin: THREE.Material, shorts: THREE.Material): Chain {
+function createChain(body: THREE.Group, side: 'right' | 'left', arm: boolean, skin: THREE.Material, shorts: THREE.Material, accent: THREE.Material): Chain {
   const sign = side === 'right' ? -1 : 1
   const root = namedGroup(body, `${side}-${arm ? 'shoulder' : 'hip'}`,
     new THREE.Vector3(sign * (arm ? SHOULDER_HALF_WIDTH : 0.105), arm ? SHOULDER_HEIGHT : 0.94, arm ? 0.04 : 0))
@@ -167,22 +185,28 @@ function createChain(body: THREE.Group, side: 'right' | 'left', arm: boolean, sk
   const chain: Chain = { root, joint, end, upper, lower, lengths: arm ? [UPPER_ARM, FOREARM] : [THIGH, SHIN] }
   if (arm) {
     ellipsoid(root, `${side}-deltoid`, skin, [0.061, 0.063, 0.061], [0, 0, 0])
+    // 短袖袖口（发光肩甲）+ 手腕护腕：都在关节组上，不参与骨骼段的缩放。
+    ellipsoid(root, `${side}-sleeve`, accent, [0.068, 0.072, 0.068], [0, 0.014, 0])
+    const band = mesh(end, `${side}-wristband`, new THREE.TorusGeometry(0.032, 0.008, 6, 14), accent)
+    band.rotation.x = Math.PI / 2
   } else {
     chain.sleeve = mesh(root, `${side}-shorts-leg`, new THREE.CylinderGeometry(0.09, 0.096, 1, 10), shorts)
     const sock = mesh(end, `${side}-sock`, new THREE.CylinderGeometry(0.036, 0.034, 0.075, 10), material(0xf1f1e9))
     sock.position.y = 0.034
-    addShoe(end, side)
+    addShoe(end, side, accent)
   }
   return chain
 }
 
-function addShoe(ankle: THREE.Group, side: string): void {
+function addShoe(ankle: THREE.Group, side: string, accent: THREE.Material): void {
   const shoe = namedGroup(ankle, `${side}-shoe`)
-  const sole = mesh(shoe, `${side}-sole`, new THREE.CylinderGeometry(1, 1, 0.024, 12), material(0xcbd1cd))
+  const sole = mesh(shoe, `${side}-sole`, new THREE.CylinderGeometry(1, 1, 0.024, 12), material(0x1b2730))
   sole.scale.set(0.058, 1, 0.142)
   sole.position.set(0, -0.078, 0.042)
   ellipsoid(shoe, `${side}-shoe-upper`, material(0xf1f2e9), [0.054, 0.052, 0.131], [0, -0.036, 0.04])
-  ellipsoid(shoe, `${side}-shoe-laces`, material(0x555e65), [0.027, 0.007, 0.043], [0, 0.012, 0.044])
+  // 发光中底条与鞋带：整只鞋仍在原包围盒内（鞋底 min.y 由 ankle 高度决定，不能动）。
+  ellipsoid(shoe, `${side}-shoe-stripe`, accent, [0.0565, 0.007, 0.135], [0, -0.0555, 0.041])
+  ellipsoid(shoe, `${side}-shoe-laces`, accent, [0.027, 0.007, 0.043], [0, 0.012, 0.044])
 }
 
 class RacketOval extends THREE.Curve<THREE.Vector3> {
@@ -195,15 +219,21 @@ class RacketOval extends THREE.Curve<THREE.Vector3> {
 }
 
 /** Local origin is the grip/wrist, +Y points up the shaft, +Z is face normal. */
-function addRacket(wrist: THREE.Group, color: number): THREE.Group {
+function addRacket(wrist: THREE.Group, color: number, accent: THREE.Material): THREE.Group {
   const racket = namedGroup(wrist, 'player-racket')
-  mesh(racket, 'racket-grip', new THREE.CylinderGeometry(0.014, 0.015, 0.16, 10), material(0x333e43))
+  mesh(racket, 'racket-grip', new THREE.CylinderGeometry(0.014, 0.015, 0.16, 10), material(0x2a3339))
+  // 手胶缠两圈发光胶带：半径仍在拍框包围盒内，不改变 playerMesh.test.ts 断言的尺寸。
+  for (const y of [-0.045, 0.02]) {
+    const wrap = mesh(racket, `racket-grip-wrap-${y}`, new THREE.TorusGeometry(0.0165, 0.0035, 6, 16), accent)
+    wrap.rotation.x = Math.PI / 2
+    wrap.position.y = y
+  }
   const shaftStart = 0.08
   const shaftEnd = RACKET_STRING_CENTER_DISTANCE - 0.128
-  const shaft = mesh(racket, 'racket-shaft', new THREE.CylinderGeometry(0.0035, 0.004, shaftEnd - shaftStart, 8), material(color, 0.6))
+  const shaft = mesh(racket, 'racket-shaft', new THREE.CylinderGeometry(0.0035, 0.004, shaftEnd - shaftStart, 8), glow(color, 0.35))
   shaft.position.y = (shaftStart + shaftEnd) / 2
   const center = namedGroup(racket, 'racket-string-center', new THREE.Vector3(0, RACKET_STRING_CENTER_DISTANCE, 0))
-  mesh(center, 'racket-frame', new THREE.TubeGeometry(new RacketOval(), 64, 0.004, 8, true), material(color, 0.6))
+  mesh(center, 'racket-frame', new THREE.TubeGeometry(new RacketOval(), 64, 0.004, 8, true), glow(color, 0.5))
   const lines: number[] = []
   for (let i = -6; i <= 6; i++) {
     const x = i * 0.014
@@ -244,7 +274,7 @@ function addLabel(group: THREE.Group, text: string, color: number, scale: number
   group.add(sprite)
 }
 
-/** A small thin court ring, not an emissive disc. */
+/** 脚下能量环：细边线环 + 外发光晕 + 旋转的扫描弧，不是发光圆盘（尺寸见 playerMesh.test.ts）。 */
 export function createGroundMarker(color: number): THREE.Group {
   const group = new THREE.Group()
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.30, 0.315, 48),
@@ -252,8 +282,26 @@ export function createGroundMarker(color: number): THREE.Group {
   ring.name = 'ground-ring'
   ring.rotation.x = -Math.PI / 2
   ring.position.y = 0.008
-  group.add(ring)
+  const halo = new THREE.Mesh(new THREE.RingGeometry(0.315, 0.35, 48),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }))
+  halo.name = 'ground-halo'
+  halo.rotation.x = -Math.PI / 2
+  halo.position.y = 0.009
+  const sweep = new THREE.Mesh(new THREE.RingGeometry(0.24, 0.30, 32, 1, 0, Math.PI * 0.42),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }))
+  sweep.name = 'ground-sweep'
+  sweep.rotation.x = -Math.PI / 2
+  sweep.position.y = 0.01
+  group.add(ring, halo, sweep)
   return group
+}
+
+/** 能量环动效：扫描弧转圈，光晕随呼吸明暗。每帧由 frame.ts 调用。 */
+export function updateGroundMarker(group: THREE.Group, elapsed: number): void {
+  const sweep = group.getObjectByName('ground-sweep')
+  if (sweep) sweep.rotation.z = -elapsed * 1.5
+  const halo = group.getObjectByName('ground-halo') as THREE.Mesh | undefined
+  if (halo) (halo.material as THREE.MeshBasicMaterial).opacity = 0.12 + (0.5 + 0.5 * Math.sin(elapsed * 3.4)) * 0.14
 }
 
 export function createPlayerMesh(colors: PlayerMeshColors = DEFAULT_COLORS, label = 'P', options: PlayerMeshOptions = {}): THREE.Group {
@@ -262,12 +310,19 @@ export function createPlayerMesh(colors: PlayerMeshColors = DEFAULT_COLORS, labe
   const body = namedGroup(group, 'player-body')
   const skin = material(colors.head, 0.95)
   const shorts = material(new THREE.Color(colors.body).multiplyScalar(0.38).getHex())
+  const accent = glow(colors.marker)
   addClothingAndHead(body, colors, skin, shorts)
-  const rightArm = createChain(body, 'right', true, skin, shorts)
-  const leftArm = createChain(body, 'left', true, skin, shorts)
-  const rightLeg = createChain(body, 'right', false, skin, shorts)
-  const leftLeg = createChain(body, 'left', false, skin, shorts)
-  const rig: PlayerRig = { body, rightArm, leftArm, rightLeg, leftLeg, racket: addRacket(rightArm.end, colors.racket), contact: null }
+  const rightArm = createChain(body, 'right', true, skin, shorts, accent)
+  const leftArm = createChain(body, 'left', true, skin, shorts, accent)
+  const rightLeg = createChain(body, 'right', false, skin, shorts, accent)
+  const leftLeg = createChain(body, 'left', false, skin, shorts, accent)
+  const racket = addRacket(rightArm.end, colors.racket, accent)
+  const rig: PlayerRig = { body, rightArm, leftArm, rightLeg, leftLeg, racket, contact: null }
+  // 轮廓补光：从身后打一盏冷光，把球员从暗色球场里切出来（灯不进包围盒）。
+  const rim = new THREE.PointLight(colors.marker, 2.4, 4.2, 2)
+  rim.name = 'player-rim-light'
+  rim.position.set(0, 1.25, -0.6)
+  group.add(rim)
   rigs.set(group, rig)
   applyArmPose(rig, readyPose())
   poseChain(leftArm, new THREE.Vector3(0.36, 1.13, 0.16), new THREE.Vector3(1, -0.5, -0.25))

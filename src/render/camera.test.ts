@@ -96,6 +96,69 @@ describe('updateCamera framing stability', () => {
     expect(() => updateCamera(camera, undefined, 0, undefined)).not.toThrow()
     expect(() => updateCamera(camera, [3, 1, 2], 1)).not.toThrow()
   })
+
+  it('keeps the portrait camera near the landscape distance instead of backing off the whole court', () => {
+    const portrait = new THREE.PerspectiveCamera(50, 393 / 852, 0.1, 200)
+    const landscape = new THREE.PerspectiveCamera(50, 852 / 393, 0.1, 200)
+    for (let i = 0; i < 120; i++) {
+      updateCamera(portrait, undefined, 0, undefined, 1 / 60)
+      updateCamera(landscape, undefined, 0, undefined, 1 / 60)
+    }
+    // 竖屏横向视锥窄，但仍应贴着横屏机位；旧实现在 393x852 下退到 28（球场缩成中间一条）。
+    expect(portrait.fov).toBe(55)
+    expect(landscape.fov).toBe(50)
+    expect(currentDistance(landscape)).toBeLessThan(21)
+    expect(currentDistance(portrait)).toBeLessThanOrEqual(24)
+  })
+
+  it('places both baselines and the home player inside the portrait frustum', () => {
+    const camera = createGameCamera()
+    camera.aspect = 393 / 852
+    for (let i = 0; i < 120; i++) updateCamera(camera, undefined, 0, undefined, 1 / 60)
+    for (const point of [[7.5, 0, 0], [-6.7, 0, 0], [-4.2, 0.9, 2]] as const) {
+      const ndc = new THREE.Vector3(...point).project(camera)
+      expect(Math.abs(ndc.x)).toBeLessThan(1)
+      expect(Math.abs(ndc.y)).toBeLessThan(1)
+    }
+  })
+
+  it('fills the portrait width with the court and lifts it into the band between HUD and touch pad', () => {
+    const width = 360
+    const height = 630
+    const camera = createGameCamera()
+    camera.aspect = width / height
+    for (let i = 0; i < 120; i++) updateCamera(camera, undefined, 0, undefined, 1 / 60)
+    const project = (x: number, y: number, z: number) => {
+      const ndc = new THREE.Vector3(x, y, z).project(camera)
+      return { x: (ndc.x * 0.5 + 0.5) * width, y: (1 - (ndc.y * 0.5 + 0.5)) * height }
+    }
+    const court = [[-6.7, 0, -3.05], [-6.7, 0, 3.05], [6.7, 0, -3.05], [6.7, 0, 3.05]] as const
+    const corners = court.map(([x, y, z]) => project(x, y, z))
+    const xs = corners.map(corner => corner.x)
+    const ys = corners.map(corner => corner.y)
+    // 球场横向铺满视口的七成以上，且四角都留在画面里（不留黑边也不裁线）。
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(width * 0.7)
+    expect(Math.min(...xs)).toBeGreaterThan(0)
+    expect(Math.max(...xs)).toBeLessThan(width)
+    // 顶部不再对着空天：球场远端要落到悬浮记分牌（约 88px）下方的可视带里，
+    // 近端留在触控层（击球盘上沿约 476px）上方——两条边界由 play/touchControls.css 定。
+    expect(Math.min(...ys)).toBeGreaterThan(90)
+    expect(Math.min(...ys)).toBeLessThan(210)
+    expect(Math.max(...ys)).toBeGreaterThan(330)
+    expect(Math.max(...ys)).toBeLessThan(470)
+  })
+
+  it('mirrors the portrait framing when the player changes ends', () => {
+    const side0 = new THREE.PerspectiveCamera(50, 393 / 852, 0.1, 200)
+    const side1 = new THREE.PerspectiveCamera(50, 393 / 852, 0.1, 200)
+    for (let i = 0; i < 120; i++) {
+      updateCamera(side0, undefined, 0, undefined, 1 / 60)
+      updateCamera(side1, undefined, 1, undefined, 1 / 60)
+    }
+    expect(side0.position.x).toBeLessThan(0)
+    expect(side1.position.x).toBeGreaterThan(0)
+    expect(Math.abs(side0.position.z)).toBeCloseTo(Math.abs(side1.position.z), 6)
+  })
 })
 
 describe('getShuttleShadow', () => {

@@ -61,7 +61,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (state.phase === 'idle') return serveFrom(selected, action.playerIndex)
       return updatePlayer(selected, action.playerIndex, p => {
         if (p.swing.phase !== 'ready') return p
-        const winding = beginSwing(p)
+        const winding = beginSwing(p, action.holdGrace)
         return {
           ...winding,
           movement: { ...winding.movement, targetDir: { x: 0, z: 0 } },
@@ -69,8 +69,16 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         }
       })
     }
+    case 'SWING_SELECT':
+      // 触屏击球盘在按住拖动时改选本次挥拍：只在蓄力阶段生效，不重开计时、不改发球选择。
+      return updatePlayer(state, action.playerIndex, p => p.swing.phase !== 'preparing' ? p : ({
+        ...p,
+        selectedShot: action.shot,
+        aim: { ...action.aim },
+        swing: { ...p.swing, shot: action.shot, aim: { ...action.aim } },
+      }))
     case 'SWING_RELEASE':
-      return updatePlayer(state, action.playerIndex, releaseSwing)
+      return updatePlayer(state, action.playerIndex, p => releaseSwing(p, action.minimumCharge))
     case 'PAUSE':
       if (state.phase === 'match_end' || state.phase === 'set_end') return state
       if (state.phase === 'paused') return { ...state, phase: state.pausedPhase ?? 'idle', pausedPhase: null }

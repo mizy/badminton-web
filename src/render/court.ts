@@ -22,9 +22,27 @@ const NET_SEGMENTS = 48
 
 /** 创建球场并添加到场景 */
 export function createCourt(scene: THREE.Scene): void {
+  addHallFloor(scene)
   addFloor(scene)
   addCourtLines(scene)
   addNet(scene)
+}
+
+/**
+ * 场地外的一圈馆内地板。没有它，球场远端之外直接露背景色：竖屏时屏幕上会空出
+ * 一整条"对着虚空"的死区（实测顶部 1/3 屏是这种黑带，真机上看着像画面被浪费了）。
+ * 用比草皮暗得多的绿，配合场景雾在远端淡出成背景，读起来是球馆进深而不是黑洞。
+ */
+function addHallFloor(scene: THREE.Scene): void {
+  // 铺得足够远：远端整片沉进场景雾里淡出成背景色，屏幕上就不会出现一条硬边的空洞。
+  const geo = new THREE.PlaneGeometry(COURT_LENGTH + 90, COURT_WIDTH + 44)
+  const mat = new THREE.MeshStandardMaterial({ color: 0x0e2a24 })
+  const floor = new THREE.Mesh(geo, mat)
+  floor.rotation.x = -Math.PI / 2
+  // 压在草皮下面一点点，避免与球场平面 z-fighting。
+  floor.position.y = -0.02
+  floor.receiveShadow = true
+  scene.add(floor)
 }
 
 function addFloor(scene: THREE.Scene): void {

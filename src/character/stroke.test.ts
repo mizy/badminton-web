@@ -27,6 +27,16 @@ describe('charged strokes', () => {
     expect(player.swing.phase).not.toBe('preparing')
     expect(player.swing.charge01).toBe(1)
   })
+  it('holds the aim open for the given grace, then still auto-strikes', () => {
+    const grace = 1.6
+    let player = beginSwing(createPlayer(0), grace)
+    expect(player.swing.holdLimit).toBeCloseTo(RACKETS.balanced.preparation + CHARGE.max + grace, 6)
+    player = advanceSwing(player, 0.6)
+    expect(player.swing.phase).toBe('preparing')
+    player = advanceSwing(player, grace + CHARGE.max)
+    expect(player.swing.phase).not.toBe('preparing')
+    expect(player.swing.charge01).toBe(1)
+  })
   it('charges depth only within the played shot range', () => {
     const player = createPlayer(0)
     const holdFull = { ...beginSwing(player).swing, elapsed: CHARGE.max }
@@ -45,6 +55,8 @@ describe('charged strokes', () => {
     expect(clear[2]).toBeGreaterThan(0)
     player.side = 1
     expect(getShotTarget(player, 'CLEAR', { lateral: 1, depth: 0 })).toEqual([-clear[0], 0, -clear[2]])
+    // 连续落点越界时钳在单打边线内侧（横向 1.2 × 1.85 ≈ 2.22 m）。
+    expect(getShotTarget(player, 'CLEAR', { lateral: 3, depth: 0 })[2]).toBeCloseTo(-2.22, 6)
     expect(canPlayShot('SMASH', [-3, 0.8, 0])).toBe(false)
     expect(canPlayShot('NET_DROP', [-5, 1, 0])).toBe(false)
     expect(canPlayShot('LIFT', [-3, 0.8, 0])).toBe(true)
