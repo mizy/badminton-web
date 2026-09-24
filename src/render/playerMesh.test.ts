@@ -195,13 +195,15 @@ describe('low-poly player rig', () => {
     player.body = { phase: 'airborne', action: 'scissor', elapsed: 0.08, verticalVelocity: 1.5 }
     player.pos[1] = 0.35
     syncPlayerMotion(mesh, player, 0.5)
-    const legSeparation = point(mesh, 'right-ankle').x - point(mesh, 'left-ankle').x
-    const initialTurn = mesh.getObjectByName('player-body')!.rotation.y
+    const hips = mesh.getObjectByName('player-hips')!
+    const legSeparation = hips.worldToLocal(point(mesh, 'right-ankle')).z - hips.worldToLocal(point(mesh, 'left-ankle')).z
+    const initialTurn = mesh.getObjectByName('player-hips')!.rotation.y
     expect(bounds(mesh, 'right-shoe').min.y).toBeGreaterThan(0)
     player.body.elapsed = 0.35
     syncPlayerMotion(mesh, player, 0.77)
-    expect(legSeparation * (point(mesh, 'right-ankle').x - point(mesh, 'left-ankle').x)).toBeLessThan(0)
-    expect(mesh.getObjectByName('player-body')!.rotation.y).not.toBeCloseTo(initialTurn, 3)
+    const swapped = hips.worldToLocal(point(mesh, 'right-ankle')).z - hips.worldToLocal(point(mesh, 'left-ankle')).z
+    expect(legSeparation * swapped).toBeLessThan(0)
+    expect(mesh.getObjectByName('player-hips')!.rotation.y).not.toBeCloseTo(initialTurn, 3)
     expectChains(mesh)
   })
 
@@ -275,6 +277,104 @@ describe('low-poly player rig', () => {
     const box = bounds(mesh)
     expect(box.min.y).toBeCloseTo(0, 5)
     expect(box.max.y).toBeCloseTo(PLAYER_HEIGHT, 4)
+  })
+
+  it('drives facing from the hips and increases shoulder-hip separation on the backswing', () => {
+    const mesh = makeMesh()
+    const player = createPlayer(0)
+    const hips = () => mesh.getObjectByName('player-hips')!.rotation.y
+    const separation = () => mesh.getObjectByName('player-chest')!.rotation.y - mesh.getObjectByName('player-hips')!.rotation.y
+
+    player.movement.targetDir = { x: 0, z: 1 }
+    syncPlayerMotion(mesh, player, 0)
+    const movingRight = hips()
+    player.movement.targetDir = { x: 0, z: -1 }
+    syncPlayerMotion(mesh, player, 0)
+    const movingLeft = hips()
+    expect(movingRight).not.toBeCloseTo(movingLeft, 3)
+
+    player.movement.targetDir = { x: 0, z: 0 }
+    player.swing = { ...player.swing, phase: 'ready', elapsed: 0 }
+    syncPlayerMotion(mesh, player, 0)
+    const readySeparation = Math.abs(separation())
+    player.swing = { ...player.swing, phase: 'preparing', elapsed: RACKETS[player.loadout].preparation }
+    syncPlayerMotion(mesh, player, 0)
+    expect(Math.abs(separation())).toBeGreaterThan(readySeparation + 0.1)
+  })
+
+  it.each([0, 1] as const)('turns side-on and keeps the off-hand raised on side %s', side => {
+    const mesh = makeMesh()
+    const player = createPlayer(side)
+    player.pos = [side === 0 ? -3 : 3, 0, 0.6]
+    syncPlayerMotion(mesh, player, 0)
+    const forward = side === 0 ? 1 : -1
+    const shoulderGap = (point(mesh, 'right-shoulder').x - point(mesh, 'left-shoulder').x) * forward
+    // 正手准备：持拍肩在后（-），非持拍肩朝网；反手时镜像。
+    expect(shoulderGap).toBeLessThan(-0.08)
+    const chest = mesh.getObjectByName('player-chest')!
+    const localWrist = () => chest.worldToLocal(point(mesh, 'left-wrist').clone())
+    expect(localWrist().y).toBeGreaterThan(1.15)
+    expect(localWrist().z).toBeGreaterThan(0.15)
+
+    player.grip = 'backhand'
+    syncPlayerMotion(mesh, player, 0)
+    expect((point(mesh, 'right-shoulder').x - point(mesh, 'left-shoulder').x) * forward).toBeGreaterThan(0.08)
+
+    // 前场跨步时辅助手向后展开配平，而非继续吊在胸前。
+    player.movement.footworkPoint = side === 0 ? 'front-right' : 'front-left'
+    player.movement.footwork = 'lunge'
+    player.movement.currentVel = { x: forward * 5, z: forward * 2 }
+    syncPlayerMotion(mesh, player, 0.05)
+    expect(localWrist().z).toBeLessThan(-0.2)
+  })
+
+  it('poses the six points differently: front lunge, mid chasse and rear cross step', () => {
+    const mesh = makeMesh()
+    const player = createPlayer(0)
+    player.pos = [-3, 0, 0.8]
+    // 侧身后脚踝挂在髋下，用髋局部坐标判断步型，避免混入躯干朝向。
+    const hips = mesh.getObjectByName('player-hips')!
+    const offset = (side: string) => hips.worldToLocal(point(mesh, `${side}-ankle`).clone())
+    const worldOffset = (side: string) => {
+      const value = point(mesh, `${side}-ankle`).clone()
+      value.x -= player.pos[0]
+      value.z -= player.pos[2]
+      return value
+    }
+    const pose = (pointName: NonNullable<PlayerState['movement']['footworkPoint']>, footwork: PlayerState['movement']['footwork'], vel: { x: number; z: number }, elapsed: number) => {
+      player.movement.footworkPoint = pointName
+      player.movement.footwork = footwork
+      player.movement.currentVel = vel
+      player.movement.targetDir = { x: Math.sign(vel.x), z: Math.sign(vel.z) }
+      syncPlayerMotion(mesh, player, elapsed)
+      return { right: offset('right'), left: offset('left') }
+    }
+
+    // 前场：持拍腿向前跨，并朝目标角一侧压；异侧腿在身后蹬地。
+    const frontRight = pose('front-right', 'lunge', { x: 5, z: 2 }, 0.06)
+    const frontRightWorld = worldOffset('right')
+    expect(frontRightWorld.x).toBeGreaterThan(0.25)
+    expect(frontRightWorld.z).toBeGreaterThan(0.2)
+    expect(frontRight.left.z).toBeLessThan(frontRight.right.z - 0.25)
+    pose('front-left', 'lunge', { x: 5, z: -2 }, 0.06)
+    const frontLeftWorld = worldOffset('right')
+    expect(frontLeftWorld.x).toBeGreaterThan(0.25)
+    expect(frontLeftWorld.z).toBeLessThan(-0.15)
+
+    // 中场：同侧腿领步，两脚整体沿目标方向并步移动。
+    const midRight = pose('mid-right', 'chasse', { x: 0, z: 5 }, 0.06)
+    expect(midRight.right.x - midRight.left.x).toBeLessThan(-0.22)
+    const midLeft = pose('mid-left', 'chasse', { x: 0, z: -5 }, 0.06)
+    expect(midLeft.left.x).toBeGreaterThan(0.2)
+
+    // 后场：异侧腿从身后越过身体中线。侧身后的世界坐标混入躯干旋转，
+    // 所以直接比较踝关节在人体局部坐标里的左右关系。
+    const phase = Math.PI / 2 / 14
+    const localAnkle = (side: string) => mesh.getObjectByName(`${side}-ankle`)!.position.x
+    pose('back-right', 'cross', { x: -4, z: 3 }, phase)
+    expect(localAnkle('left')).toBeLessThan(localAnkle('right'))
+    pose('back-left', 'cross', { x: -4, z: -3 }, phase)
+    expect(localAnkle('right')).toBeGreaterThan(localAnkle('left'))
   })
 
   it('retains legacy positioning/swing interfaces without detaching the right hand', () => {

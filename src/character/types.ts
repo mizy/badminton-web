@@ -1,3 +1,4 @@
+import type { FootworkPoint } from './footwork'
 import type { RacketState } from '../physics/racket'
 import type { ShotType } from './shotSynthesis'
 import type { ServeType } from './serve'
@@ -14,6 +15,8 @@ export interface MovementState {
   gait: Gait
   readiness: number
   footwork: Footwork
+  /** 当前移动指向的六点区域（前/中/后 × 左/右）；站定无输入时为 null。 */
+  footworkPoint: FootworkPoint | null
 }
 
 export interface TimingWindow {

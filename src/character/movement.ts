@@ -1,6 +1,7 @@
 /** 步法惯性系统 — 有限加减速、急停恢复与实际到位度，AI/人类共用。 */
 
 import { getSpeedMultiplier } from '../game/stamina'
+import { classifyFootworkPoint } from './footwork'
 import type { Footwork, PlayerState } from './types'
 
 export interface MovementConfig {
@@ -35,7 +36,8 @@ export function updateMovement(
     const x = Math.max(player.side === 0 ? -7.5 : 0.1, Math.min(player.side === 0 ? -0.1 : 7.5, player.pos[0] + vx * dt))
     const z = Math.max(-3.6, Math.min(3.6, player.pos[2] + vz * dt))
     return { ...player, pos: [x, player.pos[1], z], movement: { ...player.movement,
-      currentVel: { x: vx, z: vz }, readiness: Math.min(player.movement.readiness, 0.85), footwork: 'cross' } }
+      currentVel: { x: vx, z: vz }, readiness: Math.min(player.movement.readiness, 0.85), footwork: 'cross',
+      footworkPoint: classifyFootworkPoint({ x, z }, player.movement.targetDir, player.side) } }
   }
   const movement = player.movement
   const targetLength = Math.hypot(movement.targetDir.x, movement.targetDir.z)
@@ -101,11 +103,13 @@ export function updateMovement(
     readiness += (desiredReadiness - readiness) * (1 - Math.exp(-recoveryRate * step))
     if (desiredReadiness === 1 && readiness > 0.999) readiness = 1
 
+    const zone = hasInput ? classifyFootworkPoint({ x, z }, movement.targetDir, player.side) : null
     if (recoveringSwing || settling || (!hasInput && readiness < 0.94)) footwork = 'recover'
     else if (!hasInput && speed < 0.1) footwork = 'ready'
     else if (hasInput && speed < maxSpeed * 0.45 && speed < desiredSpeed - 0.1) footwork = 'start'
-    else if (forward < -0.25) footwork = 'retreat'
-    else if (forward > 0.5 && Math.abs(x) < 1.5) footwork = 'lunge'
+    // 后场左右角斜退用交叉步；只有接近直线的后退才归为退步。
+    else if (forward < -0.25 && !(zone?.startsWith('back') && Math.abs(nz) > 0.3)) footwork = 'retreat'
+    else if (zone?.startsWith('front')) footwork = 'lunge'
     else if (speedRatio > 0.65) footwork = 'cross'
     else footwork = 'chasse'
   }
@@ -122,6 +126,7 @@ export function updateMovement(
       gait,
       readiness: Math.max(0, Math.min(1, readiness)),
       footwork,
+      footworkPoint: classifyFootworkPoint({ x, z }, movement.targetDir, player.side),
     },
   }
 }

@@ -1,8 +1,8 @@
 /* 触屏操作层：整个屏幕交给 3D 画面，操作件都是漂浮在上面的半透明手柄。
-   左下虚拟摇杆移动；右下是王者荣耀 / 原神那套「技能键」——六个固定球路键排成两行
-   （上排上手球 高远/吊球/杀球，下排下手球 平抽/放网/挑球，排布见 ui.ts 的 TOUCH_SHOT_ROWS），
+   左半屏任意位置落指生成跟手摇杆；右侧是原神式拇指技能簇——六个球路沿拇指弧线分布，
+   最大的挑球键承担主击球，吊/高远/杀球和平抽/放网环绕，起跳键在技能簇左侧；
    短按直接打该球路，按住拖动只改落点（横向连续左右、向上更深），力量条与落点读数在键组上方；
-   键组上面一个起跳键（按住不放是蹬转）；右上角一个暂停键。触屏一共就这几个可点控件。
+   右上角一个暂停键。触屏一共就这几个可点控件。
 
    只在 .play-ui[data-input="touch"] 下显示，桌面键盘布局不受影响。
    触屏对记分牌 / 工具条 / 状态行的覆盖也集中在本文件末尾（真机竖屏最紧，改这些只看一个文件）。 */
@@ -10,9 +10,12 @@
 .play-touch { display: none; }
 
 .play-ui[data-input="touch"] {
-  --play-touch-stick: 108px;   /* 摇杆底盘直径 */
-  --play-touch-shot: 62px;     /* 单个球路键直径 */
-  --play-touch-jump: 58px;     /* 起跳键直径 */
+  --play-touch-stick: 108px;   /* 待机可见、落指后跟手的摇杆底盘直径 */
+  --play-touch-shot: 48px;      /* 低频球路小键直径 */
+  --play-touch-mid: 62px;       /* 中频球路直径 */
+  --play-touch-common: 68px;    /* 常用球路高远键直径 */
+  --play-touch-primary: 80px;   /* 最常用的挑球主键直径 */
+  --play-touch-jump: 60px;      /* 起跳键直径 */
   --play-touch-edge: 14px;     /* 控件离屏幕边缘的距离（真机上按键贴边就按不到） */
   --play-safe-left: env(safe-area-inset-left, 0px);
   --play-safe-right: env(safe-area-inset-right, 0px);
@@ -33,7 +36,15 @@
 .play-ui[data-input="touch"] .play-touch-shot,
 .play-ui[data-input="touch"] .play-touch-stick { touch-action: none; -webkit-tap-highlight-color: transparent; }
 
-/* ---- 左摇杆：底盘刻线 + 虚线行程圈 + 跟手的高光摇杆头（transform 由 touchControls.ts 写入）。 ---- */
+/* ---- 左摇杆：左半屏落指生成，不要求先摸到固定底盘；控件本体不截获事件。 ---- */
+.play-ui[data-input="touch"] .play-touch-stick-zone {
+  position: absolute;
+  top: calc(24% + var(--play-safe-top));
+  bottom: 0;
+  left: 0;
+  width: 48%;
+  pointer-events: auto;
+}
 .play-ui[data-input="touch"] .play-touch-stick {
   position: absolute;
   left: calc(var(--play-touch-edge) + var(--play-safe-left));
@@ -44,9 +55,16 @@
   border-radius: 50%;
   background: radial-gradient(circle at 50% 36%, rgb(23 66 51 / 62%), rgb(6 26 21 / 72%));
   box-shadow: inset 0 0 22px rgb(0 0 0 / 30%), 0 6px 18px rgb(0 0 0 / 24%);
-  pointer-events: auto;
+   pointer-events: none;
+  opacity: 1;
+  transform-origin: center;
+  transition: opacity 120ms ease, border-color 120ms ease;
 }
-.play-touch-stick::before {
+.play-ui[data-input="touch"] .play-touch-stick[data-active="true"] {
+  border-color: rgb(242 239 223 / 52%);
+  opacity: 1;
+}
+.play-ui[data-input="touch"] .play-touch-stick::before {
   content: "";
   position: absolute;
   inset: 9%;
@@ -55,8 +73,8 @@
     linear-gradient(rgb(242 239 223 / 12%) 0 0) center / 100% 1px no-repeat,
     linear-gradient(rgb(242 239 223 / 12%) 0 0) center / 1px 100% no-repeat;
 }
-.play-touch-stick-ring { position: absolute; inset: 16%; border: 1px dashed rgb(242 239 223 / 22%); border-radius: 50%; }
-.play-touch-stick-knob {
+.play-ui[data-input="touch"] .play-touch-stick-ring { position: absolute; inset: 16%; border: 1px dashed rgb(242 239 223 / 22%); border-radius: 50%; }
+.play-ui[data-input="touch"] .play-touch-stick-knob {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -146,16 +164,28 @@
 }
 .play-ui[data-input="touch"] .play-touch-readout[data-active="true"] { opacity: 1; }
 
-/* ---- 球路键：六个固定圆键排两行（上排上手球 / 下排下手球），王者荣耀那套技能键的按法。
-        待机是深底 + 球路色字；训练模式下可打的球路描一圈；按住的键整块点亮成球路色。 ---- */
+/* ---- 球路键：原神式非对称拇指簇。挑球主键 80px、高远常用键 68px、
+        中频球路 62px、低频 48px；起跳 60px 独立占左翼，四档尺寸一眼可辨。 ---- */
+.play-ui[data-input="touch"] .play-touch-actions {
+  position: relative;
+  width: calc(var(--play-touch-primary) + var(--play-touch-mid) + 48px);
+  height: calc(var(--play-touch-primary) + var(--play-touch-mid) + var(--play-touch-shot) + 16px);
+}
 .play-ui[data-input="touch"] .play-touch-shots {
-  display: grid;
-  grid-template-columns: repeat(3, var(--play-touch-shot));
-  gap: 8px;
+  position: absolute;
+  inset: 0;
+}
+.play-ui[data-input="touch"] .play-touch-jump {
+  position: absolute;
+  left: 0;
+  top: calc(100% - var(--play-touch-jump) - 28px);
 }
 .play-ui[data-input="touch"] .play-touch-shot {
-  display: grid;
-  place-items: center;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   width: var(--play-touch-shot);
   height: var(--play-touch-shot);
   padding: 0;
@@ -166,7 +196,50 @@
   box-shadow: 0 3px 10px rgb(0 0 0 / 30%), inset 0 -3px 6px rgb(0 0 0 / 20%);
   font-size: 12px;
   letter-spacing: .04em;
+  line-height: 1.05;
   pointer-events: auto;
+}
+.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="upper-left"] { left: 0; top: 4px; }
+.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="upper-center"] {
+  left: calc(var(--play-touch-shot) + 8px);
+  top: 0;
+  width: var(--play-touch-common);
+  height: var(--play-touch-common);
+  font-size: 13px;
+  font-weight: 700;
+}
+.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="upper-right"] {
+  right: 0;
+  top: 10px;
+  width: var(--play-touch-mid);
+  height: var(--play-touch-mid);
+  font-size: 13px;
+}
+.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="lower-left"] { left: 6px; top: calc(var(--play-touch-shot) + 14px); }
+.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="lower-center"] {
+  left: calc(var(--play-touch-shot) + 16px);
+  top: calc(var(--play-touch-shot) + 20px);
+  width: var(--play-touch-mid);
+  height: var(--play-touch-mid);
+}
+.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="primary"] {
+  right: 0;
+  bottom: 0;
+  width: var(--play-touch-primary);
+  height: var(--play-touch-primary);
+  border-width: 2px;
+  border-color: rgb(242 239 223 / 42%);
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 38%), inset 0 -4px 10px rgb(0 0 0 / 24%);
+}
+.play-ui[data-input="touch"] .play-touch-shot-tag {
+  margin-top: 2px;
+  color: var(--play-lemon);
+  font-size: 8px;
+  font-weight: 400;
+  letter-spacing: .12em;
+  opacity: .9;
 }
 /* 可打：描一圈自己的颜色（用 inset 阴影而不是 border，免得按下时尺寸跳动）。 */
 .play-ui[data-input="touch"] .play-touch-shot[data-available="true"] {
@@ -301,7 +374,10 @@
 @media (orientation: landscape) and (max-height: 520px) {
   .play-ui[data-input="touch"] {
     --play-touch-stick: 96px;
-    --play-touch-shot: 54px;
+    --play-touch-shot: 44px;
+    --play-touch-mid: 54px;
+    --play-touch-common: 58px;
+    --play-touch-primary: 70px;
     --play-touch-jump: 52px;
     --play-touch-edge: 10px;
   }
@@ -326,8 +402,11 @@
 /* 短屏竖机（宽 ≤ 380px）：再缩一点，保证球路键组不顶到状态 toast。 */
 @media (orientation: portrait) and (max-width: 380px) {
   .play-ui[data-input="touch"] {
-    --play-touch-stick: 100px;
-    --play-touch-shot: 58px;
+    --play-touch-stick: 104px;
+    --play-touch-shot: 44px;
+    --play-touch-mid: 54px;
+    --play-touch-common: 58px;
+    --play-touch-primary: 70px;
     --play-touch-jump: 54px;
   }
 }

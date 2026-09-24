@@ -69,6 +69,8 @@ for (const result of results) {
     `${result.device} 顶部常驻 HUD 占屏高 ${(result.residentHudRatio * 100).toFixed(1)}%（上限 ${MAX_RESIDENT_HUD_RATIO * 100}%）`,
   )
   assert.ok(result.stickMoved, `${result.device} 摇杆拖动没有反馈`)
+  assert.equal(result.floatingStick.active, 'true', `${result.device} 左半屏落指没有唤出浮动摇杆`)
+  assert.equal(result.floatingStick.opacity, '1', `${result.device} 浮动摇杆按下后没有显示`)
   // 球路键：六个键短按都要真的把球路送进 reducer（按住时键点亮，松开后选中球路跟着变）。
   for (const probe of result.shotProbes) {
     assert.equal(probe.selectedShot, probe.expected, `${result.device} 短按「${probe.expected}」没有选中该球路：${probe.selectedShot}`)
@@ -152,11 +154,14 @@ async function checkDevice(device) {
   }))
 
   const statusBefore = await page.$eval('[data-ui="status-title"]', element => element.textContent)
-  const stickBox = await (await page.$('[data-touch="stick"]')).boundingBox()
+  const stickZone = await (await page.$('[data-touch="stick-zone"]')).boundingBox()
+  const stickDown = { x: stickZone.x + stickZone.width * 0.5, y: stickZone.y + stickZone.height * 0.78 }
   const knobBefore = await page.$eval('[data-touch="stick-knob"]', element => getComputedStyle(element).transform)
-  await page.mouse.move(stickBox.x + stickBox.width / 2, stickBox.y + stickBox.height / 2)
+  await page.mouse.move(stickDown.x, stickDown.y)
   await page.mouse.down()
-  await page.mouse.move(stickBox.x + stickBox.width / 2, stickBox.y + stickBox.height * 0.2, { steps: 5 })
+  await new Promise(resolve => setTimeout(resolve, 160))
+  const activeStick = await page.$eval('[data-touch="stick"]', element => ({ active: element.dataset.active, opacity: getComputedStyle(element).opacity }))
+  await page.mouse.move(stickDown.x, stickDown.y - 50, { steps: 5 })
   const knobAfter = await page.$eval('[data-touch="stick-knob"]', element => getComputedStyle(element).transform)
   await page.mouse.up()
 
@@ -326,6 +331,7 @@ async function checkDevice(device) {
     statusAfter,
     serveFired: statusAfter !== statusBefore,
     stickMoved: knobBefore !== knobAfter,
+    floatingStick: activeStick,
     shotProbes,
     tapCharge,
     lateral: { right: lateralRight, left: lateralLeft },
@@ -363,9 +369,10 @@ async function readLayout(page) {
         overflow.push({ name, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom })
       }
     }
-    for (const element of document.querySelectorAll('button, .play-touch-stick, .play-touch-shot')) {
+    for (const element of document.querySelectorAll('button, .play-touch-stick-zone, .play-touch-shot')) {
+      const style = getComputedStyle(element)
       const rect = element.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) continue
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0' || style.pointerEvents === 'none' || rect.width === 0 || rect.height === 0) continue
       interactive.push({ element, name: (element.getAttribute('data-ui') ?? element.dataset.action ?? element.className ?? '?').trim().slice(0, 12), rect })
       if (rect.width < 40 || rect.height < 40) small.push(`${element.textContent?.trim().slice(0, 6)} ${Math.round(rect.width)}x${Math.round(rect.height)}`)
     }
@@ -376,7 +383,7 @@ async function readLayout(page) {
       const { x, y, width, height } = item.rect
       for (const [fx, fy] of [[0, 0], [-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) {
         const hit = document.elementFromPoint(x + width / 2 + fx * width, y + height / 2 + fy * height)
-        const owner = hit?.closest('button, .play-touch-stick, .play-touch-shot') ?? null
+        const owner = hit?.closest('button, .play-touch-stick-zone, .play-touch-shot') ?? null
         if (owner !== item.element) overlaps.add(`${item.name}|${owner?.dataset.action ?? owner?.dataset.ui ?? owner?.className ?? 'none'}`)
       }
     }

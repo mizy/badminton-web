@@ -137,6 +137,7 @@ export function createTouchControlsAdapter(
   const { root } = options
   const getSide = options.getSide ?? (() => playerIndex)
   const isAwaitingServe = options.isAwaitingServe ?? (() => false)
+  const stickZone = root.querySelector<HTMLElement>('[data-touch="stick-zone"]')
   const stick = root.querySelector<HTMLElement>('[data-touch="stick"]')
   const knob = root.querySelector<HTMLElement>('[data-touch="stick-knob"]')
   /** 固定球路键：一次只允许一根手指按住其中一个。 */
@@ -180,6 +181,15 @@ export function createTouchControlsAdapter(
     if (node) node.style.transform = `translate(${x}px, ${y}px)`
   }
 
+  function resetStickVisual(): void {
+    if (!stick) return
+    delete stick.dataset.active
+    stick.style.removeProperty('left')
+    stick.style.removeProperty('top')
+    stick.style.removeProperty('right')
+    stick.style.removeProperty('bottom')
+  }
+
   function centerOf(element: HTMLElement): Point {
     const rect = element.getBoundingClientRect()
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
@@ -212,6 +222,7 @@ export function createTouchControlsAdapter(
       stickPointer = null
       stickOffset = { x: 0, y: 0 }
       setKnob(knob, 0, 0)
+      resetStickVisual()
       emitMove(null)
     }
     if (shotPointer !== null) {
@@ -295,8 +306,19 @@ export function createTouchControlsAdapter(
     if (!listener || stickPointer !== null || isEditableTarget(event.target)) return
     event.preventDefault()
     stickPointer = event.pointerId
-    stickCenter = stick ? centerOf(stick) : { x: event.clientX, y: event.clientY }
-    if (stick) capture(stick, event.pointerId)
+    stickCenter = { x: event.clientX, y: event.clientY }
+    if (stick && stickZone) {
+      const bounds = stickZone.getBoundingClientRect()
+      const radius = stickRadius()
+      const x = Math.max(bounds.left + radius, Math.min(bounds.right - radius, event.clientX))
+      const y = Math.max(bounds.top + radius, Math.min(bounds.bottom - radius, event.clientY))
+      stick.style.left = `${x}px`
+      stick.style.top = `${y}px`
+      stick.style.right = 'auto'
+      stick.style.bottom = 'auto'
+      stick.dataset.active = 'true'
+      capture(stickZone, event.pointerId)
+    }
     updateStick(event.clientX, event.clientY)
   }
 
@@ -311,6 +333,7 @@ export function createTouchControlsAdapter(
     stickPointer = null
     stickOffset = { x: 0, y: 0 }
     setKnob(knob, 0, 0)
+    resetStickVisual()
     emitMove(null)
   }
 
@@ -356,11 +379,12 @@ export function createTouchControlsAdapter(
   }
 
   function bind(): void {
-    if (stick) {
-      listen(stick, 'pointerdown', onStickDown)
-      listen(stick, 'pointermove', onStickMove)
-      listen(stick, 'pointerup', onStickUp)
-      listen(stick, 'pointercancel', onStickUp)
+    const stickSurface = stickZone ?? stick
+    if (stickSurface) {
+      listen(stickSurface, 'pointerdown', onStickDown)
+      listen(stickSurface, 'pointermove', onStickMove)
+      listen(stickSurface, 'pointerup', onStickUp)
+      listen(stickSurface, 'pointercancel', onStickUp)
     }
     for (const button of shotButtons) {
       listen(button, 'pointerdown', event => onShotDown(event, button))

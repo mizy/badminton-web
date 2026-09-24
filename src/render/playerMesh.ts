@@ -37,6 +37,8 @@ const THIGH = 0.43
 const SHIN = 0.43
 const ANKLE_HEIGHT = 0.09
 const SWING_DURATION = 0.16
+/** 单打准备站位的侧身角：持拍肩后撤，非持拍肩朝向来球。反手时镜像。 */
+const SIDE_ON_YAW = 0.70
 
 interface Chain {
   root: THREE.Group
@@ -54,7 +56,12 @@ interface ArmPose {
 }
 
 interface PlayerRig {
+  /** 整体朝位锚点（不含身体旋转），髋、上身都以它为基准。 */
   body: THREE.Group
+  /** 髋：带动双腿、短裤，是转髋和步法的根。 */
+  hips: THREE.Group
+  /** 上身：头、球衣、双臂，可相对髋产生肩髋分离。 */
+  chest: THREE.Group
   rightArm: Chain
   leftArm: Chain
   rightLeg: Chain
@@ -129,50 +136,50 @@ function torsoGeometry(): THREE.BufferGeometry {
   return geometry
 }
 
-function addClothingAndHead(body: THREE.Group, colors: PlayerMeshColors, skin: THREE.Material, shorts: THREE.Material): void {
+function addClothingAndHead(hips: THREE.Group, chest: THREE.Group, colors: PlayerMeshColors, skin: THREE.Material, shorts: THREE.Material): void {
   const jersey = material(colors.body)
   const accent = glow(colors.marker)
   const hair = material(0x252a30)
-  mesh(body, 'player-jersey', torsoGeometry(), jersey)
-  const collar = mesh(body, 'jersey-collar', new THREE.TorusGeometry(0.056, 0.009, 6, 16), accent)
+  mesh(chest, 'player-jersey', torsoGeometry(), jersey)
+  const collar = mesh(chest, 'jersey-collar', new THREE.TorusGeometry(0.056, 0.009, 6, 16), accent)
   collar.position.y = 1.53
   collar.rotation.x = Math.PI / 2
-  const chest = mesh(body, 'jersey-trim', new THREE.CylinderGeometry(0.193, 0.19, 0.026, 8), accent)
-  chest.position.y = 1.394
-  chest.scale.z = 0.59
-  const waist = mesh(body, 'shorts-waist', new THREE.CylinderGeometry(0.145, 0.165, 0.18, 12), shorts)
-  waist.position.y = 0.962
+  const trim = mesh(chest, 'jersey-trim', new THREE.CylinderGeometry(0.193, 0.19, 0.026, 8), accent)
+  trim.position.y = 1.394
+  trim.scale.z = 0.59
+  // 短裤和腰带归髋，转身时跟着髋走；球衣以上归上身，可再叠加肩髋分离。
+  const waist = mesh(hips, 'shorts-waist', new THREE.CylinderGeometry(0.145, 0.165, 0.18, 12), shorts)
+  waist.position.y = 0.022
   waist.scale.z = 0.7
-  // 队服细节：两侧竖条 + 发光腰带 + 额带 + 脑后马尾（体积都留在既有包围盒内，见 playerMesh.test.ts）。
   for (const side of [-1, 1] as const) {
-    const stripe = mesh(body, `jersey-side-stripe-${side}`, new THREE.BoxGeometry(0.016, 0.12, 0.03), material(colors.body, 0.55))
+    const stripe = mesh(chest, `jersey-side-stripe-${side}`, new THREE.BoxGeometry(0.016, 0.12, 0.03), material(colors.body, 0.55))
     stripe.position.set(side * 0.196, 1.44, 0)
   }
-  const waistband = mesh(body, 'shorts-waistband', new THREE.TorusGeometry(0.163, 0.012, 6, 20), accent)
-  waistband.position.y = 1.052
+  const waistband = mesh(hips, 'shorts-waistband', new THREE.TorusGeometry(0.163, 0.012, 6, 20), accent)
+  waistband.position.y = 0.112
   waistband.rotation.x = Math.PI / 2
   waistband.scale.z = 0.7
-  const neck = mesh(body, 'player-neck', new THREE.CylinderGeometry(0.041, 0.049, 0.085, 12), skin)
+  const neck = mesh(chest, 'player-neck', new THREE.CylinderGeometry(0.041, 0.049, 0.085, 12), skin)
   neck.position.y = 1.555
-  ellipsoid(body, 'player-head', skin, [0.11, 0.121, 0.104], [0, PLAYER_HEIGHT - 0.126, 0.007])
-  const cap = mesh(body, 'player-hair', new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.43), hair)
+  ellipsoid(chest, 'player-head', skin, [0.11, 0.121, 0.104], [0, PLAYER_HEIGHT - 0.126, 0.007])
+  const cap = mesh(chest, 'player-hair', new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.43), hair)
   cap.scale.set(0.112, 0.122, 0.107)
   cap.position.set(0, PLAYER_HEIGHT - 0.122, 0.004)
-  const headband = mesh(body, 'player-headband', new THREE.TorusGeometry(0.104, 0.012, 6, 20), accent)
+  const headband = mesh(chest, 'player-headband', new THREE.TorusGeometry(0.104, 0.012, 6, 20), accent)
   headband.position.set(0, PLAYER_HEIGHT - 0.086, 0.004)
   headband.rotation.x = Math.PI / 2.06
-  ellipsoid(body, 'player-hair-tail', hair, [0.033, 0.05, 0.033], [0, PLAYER_HEIGHT - 0.155, -0.104])
+  ellipsoid(chest, 'player-hair-tail', hair, [0.033, 0.05, 0.033], [0, PLAYER_HEIGHT - 0.155, -0.104])
   for (const side of [-1, 1]) {
-    ellipsoid(body, `ear-${side}`, skin, [0.015, 0.025, 0.017], [side * 0.106, 1.646, 0.002])
-    ellipsoid(body, `eye-${side}`, hair, [0.007, 0.006, 0.004], [side * 0.035, 1.677, 0.104])
+    ellipsoid(chest, `ear-${side}`, skin, [0.015, 0.025, 0.017], [side * 0.106, 1.646, 0.002])
+    ellipsoid(chest, `eye-${side}`, hair, [0.007, 0.006, 0.004], [side * 0.035, 1.677, 0.104])
   }
-  ellipsoid(body, 'player-nose', skin, [0.015, 0.020, 0.020], [0, 1.65, 0.105])
+  ellipsoid(chest, 'player-nose', skin, [0.015, 0.020, 0.020], [0, 1.65, 0.105])
 }
 
-function createChain(body: THREE.Group, side: 'right' | 'left', arm: boolean, skin: THREE.Material, shorts: THREE.Material, accent: THREE.Material): Chain {
+function createChain(parent: THREE.Group, side: 'right' | 'left', arm: boolean, skin: THREE.Material, shorts: THREE.Material, accent: THREE.Material): Chain {
   const sign = side === 'right' ? -1 : 1
-  const root = namedGroup(body, `${side}-${arm ? 'shoulder' : 'hip'}`,
-    new THREE.Vector3(sign * (arm ? SHOULDER_HALF_WIDTH : 0.105), arm ? SHOULDER_HEIGHT : 0.94, arm ? 0.04 : 0))
+  const root = namedGroup(parent, `${side}-${arm ? 'shoulder' : 'hip'}`,
+    new THREE.Vector3(sign * (arm ? SHOULDER_HALF_WIDTH : 0.105), arm ? SHOULDER_HEIGHT : 0, arm ? 0.04 : 0))
   const joint = namedGroup(root, `${side}-${arm ? 'elbow' : 'knee'}`)
   const end = namedGroup(joint, `${side}-${arm ? 'wrist' : 'ankle'}`)
   const upper = mesh(root, `${side}-${arm ? 'upper-arm' : 'thigh'}`,
@@ -308,16 +315,18 @@ export function createPlayerMesh(colors: PlayerMeshColors = DEFAULT_COLORS, labe
   const group = new THREE.Group()
   group.name = 'player'
   const body = namedGroup(group, 'player-body')
+  const hips = namedGroup(body, 'player-hips', new THREE.Vector3(0, 0.94, 0))
+  const chest = namedGroup(body, 'player-chest')
   const skin = material(colors.head, 0.95)
   const shorts = material(new THREE.Color(colors.body).multiplyScalar(0.38).getHex())
   const accent = glow(colors.marker)
-  addClothingAndHead(body, colors, skin, shorts)
-  const rightArm = createChain(body, 'right', true, skin, shorts, accent)
-  const leftArm = createChain(body, 'left', true, skin, shorts, accent)
-  const rightLeg = createChain(body, 'right', false, skin, shorts, accent)
-  const leftLeg = createChain(body, 'left', false, skin, shorts, accent)
+  addClothingAndHead(hips, chest, colors, skin, shorts)
+  const rightArm = createChain(chest, 'right', true, skin, shorts, accent)
+  const leftArm = createChain(chest, 'left', true, skin, shorts, accent)
+  const rightLeg = createChain(hips, 'right', false, skin, shorts, accent)
+  const leftLeg = createChain(hips, 'left', false, skin, shorts, accent)
   const racket = addRacket(rightArm.end, colors.racket, accent)
-  const rig: PlayerRig = { body, rightArm, leftArm, rightLeg, leftLeg, racket, contact: null }
+  const rig: PlayerRig = { body, hips, chest, rightArm, leftArm, rightLeg, leftLeg, racket, contact: null }
   // 轮廓补光：从身后打一盏冷光，把球员从暗色球场里切出来（灯不进包围盒）。
   const rim = new THREE.PointLight(colors.marker, 2.4, 4.2, 2)
   rim.name = 'player-rim-light'
@@ -325,18 +334,18 @@ export function createPlayerMesh(colors: PlayerMeshColors = DEFAULT_COLORS, labe
   group.add(rim)
   rigs.set(group, rig)
   applyArmPose(rig, readyPose())
-  poseChain(leftArm, new THREE.Vector3(0.36, 1.13, 0.16), new THREE.Vector3(1, -0.5, -0.25))
-  poseChain(rightLeg, new THREE.Vector3(-0.14, ANKLE_HEIGHT, 0), new THREE.Vector3(0, 0, 1))
-  poseChain(leftLeg, new THREE.Vector3(0.14, ANKLE_HEIGHT, 0), new THREE.Vector3(0, 0, 1))
+  poseChain(leftArm, new THREE.Vector3(0.30, 1.34, 0.30), new THREE.Vector3(1, -0.5, -0.25))
+  poseChain(rightLeg, new THREE.Vector3(-0.14, ANKLE_HEIGHT - 0.94, 0), new THREE.Vector3(0, 0, 1))
+  poseChain(leftLeg, new THREE.Vector3(0.14, ANKLE_HEIGHT - 0.94, 0), new THREE.Vector3(0, 0, 1))
   const glowScale = options.glowScale ?? 0
   if (glowScale > 0) {
-    const ring = mesh(body, 'player-marker', new THREE.TorusGeometry(0.13, 0.005, 6, 32),
+    const ring = mesh(chest, 'player-marker', new THREE.TorusGeometry(0.13, 0.005, 6, 32),
       new THREE.MeshBasicMaterial({ color: colors.marker, transparent: true, opacity: 0.35 }))
     ring.rotation.x = Math.PI / 2
     ring.position.y = PLAYER_HEIGHT + 0.06
     ring.scale.setScalar(Math.min(glowScale, 1))
   }
-  addLabel(body, label, colors.marker, options.labelScale ?? 0.18)
+  addLabel(chest, label, colors.marker, options.labelScale ?? 0.18)
   return group
 }
 
@@ -400,10 +409,10 @@ function blendPose(from: ArmPose, to: ArmPose, progress: number): ArmPose {
   return { grip: from.grip.clone().lerp(to.grip, t), rotation: from.rotation.clone().slerp(to.rotation, t) }
 }
 
-function localContactPose(body: THREE.Group, pose: RacketContactPose): ArmPose {
-  const grip = body.worldToLocal(new THREE.Vector3(...pose.gripPoint))
-  const center = body.worldToLocal(new THREE.Vector3(...pose.stringCenter))
-  const inverse = body.getWorldQuaternion(new THREE.Quaternion()).invert()
+function localContactPose(parent: THREE.Group, pose: RacketContactPose): ArmPose {
+  const grip = parent.worldToLocal(new THREE.Vector3(...pose.gripPoint))
+  const center = parent.worldToLocal(new THREE.Vector3(...pose.stringCenter))
+  const inverse = parent.getWorldQuaternion(new THREE.Quaternion()).invert()
   const normal = new THREE.Vector3(...pose.faceNormal).applyQuaternion(inverse)
   return { grip, rotation: racketRotation(center.sub(grip), normal) }
 }
@@ -424,36 +433,134 @@ function bodyCrouch(player: PlayerState, speed: number): number {
   if (player.body.phase === 'loading') return 0.12 * smooth(player.body.elapsed / (player.body.action === 'scissor' ? 0.075 : 0.1))
   if (player.body.phase === 'landing') return 0.12 * (1 - smooth(player.body.elapsed / (player.body.action === 'scissor' ? 0.18 : 0.24)))
   if (player.body.phase === 'airborne') return 0
-  return Math.min(speed / 5, 1) * 0.065 + (player.movement.footwork === 'start' ? 0.035 : 0)
+  const base = Math.min(speed / 5, 1) * 0.065 + (player.movement.footwork === 'start' ? 0.035 : 0)
+  const depth = player.movement.footworkPoint?.split('-')[0]
+  // 前场跨步把重心压得更低；中场并步和后场交叉步只是轻微降重心，避免像蹲跑。
+  const posture = depth === 'front' ? 0.15 : depth === 'back' ? 0.07 : depth === 'mid' ? 0.05 : 0
+  return Math.max(base, posture)
+}
+
+/** 六点步法的单腿偏移：局部坐标 +Z 朝网、解剖学右腿 sign=1（局部 -X 侧）。 */
+function footworkLegOffset(player: PlayerState, elapsed: number, speed: number, direction: THREE.Vector3, sign: 1 | -1) {
+  const point = player.movement.footworkPoint
+  const depth = point?.split('-')[0]
+  const pointSide = point?.endsWith('right') ? 1 : point?.endsWith('left') ? -1 : 0
+  const footwork = player.movement.footwork
+  const amount = Math.max(Math.min(speed / 5, 1), footwork === 'start' ? 0.3 : 0)
+  const cycle = elapsed * (speed > 3 ? 14 : 9)
+  const baseX = -sign * 0.14
+  let x = baseX
+  let z = 0
+  let lift = Math.max(0, Math.cos(cycle) * sign) * amount * 0.10
+
+  if (footwork === 'start') {
+    // 启动分腿：持拍腿外摆抬起、支撑脚擦地蹬出。真人的分腿跳虽会短暂腾空，
+    // 但这里的约束是移动中始终留一只支撑脚，保证急停和变向不会悬空。
+    const pulse = Math.max(0, Math.sin(Math.PI * Math.min(elapsed / 0.18, 1)))
+    return { x: baseX - sign * 0.10 * pulse, z: sign * 0.04 * pulse, lift: sign === 1 ? 0.05 * pulse : 0 }
+  }
+  if (depth === 'front' || footwork === 'lunge') {
+    // 网前两角统一由持拍腿（右腿）跨出，异侧腿后蹬撑住重心，是单打最常见的上网步。
+    const reach = 0.42 * Math.max(amount, 0.55)
+    const lateral = pointSide || (direction.x < 0 ? 1 : -1)
+    if (sign === 1) {
+      // 持拍腿沿实际移动方向跨出，并额外压向目标角，正手右前和反手左前都指到真实角落。
+      x = direction.x * reach - lateral * 0.12
+      z = direction.z * reach
+    } else {
+      // 异侧腿反方向蹬伸，形成前后开立的跨步而不是并排站立。
+      x = baseX * 0.4 - direction.x * 0.20
+      z = -direction.z * 0.20
+    }
+    return { x, z, lift: 0 }
+  }
+  if (depth === 'back' || footwork === 'cross') {
+    // 后场两角：异侧腿从身后交叉过去，同侧腿随后退出，形成交叉步而非并排跑步。
+    const lateral = pointSide || (direction.x < 0 ? 1 : -1)
+    const crossing = sign === -lateral
+    const phase = Math.sin(cycle)
+    // 交叉腿那一步先横移越线，纯后撤幅度收小，避免腿长约束把交叉量缩回去。
+    z = phase * sign * amount * (crossing ? 0.22 : 0.30) - 0.10 * Math.max(amount, 0.3)
+    if (crossing) x = baseX - lateral * Math.max(0, phase) * 0.38
+    // 支撑腿收到身体中线附近，交叉腿才有清晰的越线视觉效果。
+    else x = baseX * 0.5 - lateral * 0.02
+    lift = Math.max(0, phase * sign) * amount * 0.075
+    return { x, z, lift }
+  }
+  if (depth === 'mid' || footwork === 'chasse') {
+    // 中场两侧：同侧腿先出、异侧腿跟随并步，双脚始终朝同一方向移动。
+    const lateral = pointSide || (direction.x < 0 ? 1 : -1)
+    const lead = sign === lateral
+    const shuffle = Math.sin(cycle)
+    x = baseX - lateral * (lead ? 0.20 : 0.075) - lateral * shuffle * (lead ? 0.04 : 0.02)
+    z = lead ? 0.045 : 0.015
+    lift = Math.max(0, Math.cos(cycle) * sign) * amount * 0.055
+    return { x, z, lift }
+  }
+  if (footwork === 'retreat') {
+    // 后退：向后小步快退，脚掌交替擦地，不把身体转向侧面。
+    z = Math.sin(cycle) * sign * amount * 0.24 - 0.08 * Math.max(amount, 0.25)
+    return { x, z, lift: Math.max(0, Math.cos(cycle) * sign) * amount * 0.075 }
+  }
+  if (footwork === 'recover') {
+    z = Math.sin(cycle) * sign * Math.min(amount, 0.4) * 0.16
+    lift = Math.max(0, Math.cos(cycle) * sign) * amount * 0.05
+    return { x, z, lift }
+  }
+  if (footwork === 'ready') {
+    // 单打准备站位：非持拍脚在前、持拍脚在后，配合侧身形成可向六点启动的站位。
+    return { x: baseX + sign * 0.015, z: sign === 1 ? -0.12 : 0.10, lift: 0 }
+  }
+  // 普通移动仍沿速度方向迈步（六点状态尚未生成时，例如纯物理测试或外部动画）。
+  const generic = Math.sin(cycle) * amount * 0.24 * sign
+  x += direction.x * generic
+  z = direction.z * generic
+  return { x, z, lift }
+}
+
+/** 非持拍辅助手：准备时抬在胸前，前场上网向后展开配平，后场 / 击球时上举指向来球。 */
+function leftArmTarget(player: PlayerState, elapsed: number, speed: number): THREE.Vector3 {
+  if (player.body.phase === 'airborne') return new THREE.Vector3(0.40, 1.54, 0.08)
+  const depth = player.movement.footworkPoint?.split('-')[0]
+  if (depth === 'front') return new THREE.Vector3(0.40, 1.22, -0.48)
+  if (player.swing.phase !== 'ready' || depth === 'back') return new THREE.Vector3(0.34, 1.56, 0.14)
+  const sway = Math.sin(elapsed * 9) * Math.min(speed / 5, 1) * 0.05
+  return new THREE.Vector3(0.30, 1.34, 0.30 + sway)
 }
 
 function poseLegs(group: THREE.Group, rig: PlayerRig, player: PlayerState, elapsed: number, speed: number): void {
   const airborne = player.body.phase === 'airborne'
-  const starting = player.movement.footwork === 'start'
-  const amount = Math.max(Math.min(speed / 5, 1), starting ? 0.3 : 0)
   const direction = new THREE.Vector3(player.movement.currentVel.x, 0, player.movement.currentVel.z)
   if (direction.lengthSq() < 0.01) direction.set(player.movement.targetDir.x, 0, player.movement.targetDir.z)
-  direction.applyAxisAngle(UP, -group.rotation.y)
+  // 侧身后躯干局部前向不再等于球网方向：落脚方向必须先换到躯干局部坐标，
+  // 再由 body.quaternion 换回世界，否则脚会落在侧身角外面。
+  direction.applyAxisAngle(UP, -group.rotation.y - rig.hips.rotation.y)
   if (direction.lengthSq() < 0.01) direction.set(0, 0, 1)
   direction.normalize()
-  const cycle = elapsed * (speed > 3 ? 14 : 9)
+
+  const hipsQuaternion = new THREE.Quaternion()
+  const hipsCenter = new THREE.Vector3()
+  rig.hips.updateWorldMatrix(true, false)
+  rig.hips.getWorldQuaternion(hipsQuaternion)
+  rig.hips.getWorldPosition(hipsCenter)
   for (const [chain, sign] of [[rig.rightLeg, 1], [rig.leftLeg, -1]] as const) {
-    const hip = chain.root.position.clone().applyQuaternion(rig.body.quaternion).add(rig.body.position)
-    const ankle = hip.clone()
-    let stride = Math.sin(cycle) * amount * 0.24 * sign
-    let lift = Math.max(0, Math.cos(cycle) * sign) * amount * 0.10
+    const hip = chain.root.getWorldPosition(new THREE.Vector3())
+    // 先按六点步型给出髋坐标系中的落脚点，再换算到世界坐标并做腿长约束。
+    const offset = footworkLegOffset(player, elapsed, speed, direction, sign)
+    let localZ = offset.z
+    let ankleHeight = ANKLE_HEIGHT + offset.lift
     if (airborne) {
       const tuck = Math.sin(Math.PI * THREE.MathUtils.clamp(player.body.elapsed / 0.65, 0, 1))
-      lift = 0.05 + 0.16 * tuck
-      stride = player.body.action === 'scissor'
+      localZ += player.body.action === 'scissor'
         ? Math.cos(Math.PI * Math.min(player.body.elapsed / 0.43, 1)) * 0.27 * sign
         : sign * 0.09
-      ankle.z += stride
-    } else {
-      ankle.addScaledVector(direction, stride)
+      // 腾空时脚跟着身体上收；若仍按地面高度，腿会完全伸直并把剪刀幅度吃光。
+      ankleHeight = player.pos[1] + ANKLE_HEIGHT + 0.05 + 0.16 * tuck
     }
-    ankle.x -= sign * 0.035
-    ankle.y = ANKLE_HEIGHT + lift
+    const ankle = hipsCenter.clone()
+      .add(new THREE.Vector3(offset.x, 0, localZ).applyQuaternion(hipsQuaternion))
+    // 踝高始终相对球场地面，身体压低只影响髋部，不把鞋踩进地板。
+    ankle.y = ankleHeight
     // A contact can raise the torso while running: shorten the step, not the leg,
     // and never let generic reach clamping lift the planted sole off the court.
     const horizontal = new THREE.Vector2(ankle.x - hip.x, ankle.z - hip.z)
@@ -461,7 +568,7 @@ function poseLegs(group: THREE.Group, rig: PlayerRig, player: PlayerState, elaps
     if (horizontal.length() > horizontalReach) horizontal.setLength(horizontalReach)
     ankle.x = hip.x + horizontal.x
     ankle.z = hip.z + horizontal.y
-    const localAnkle = ankle.sub(rig.body.position).applyQuaternion(rig.body.quaternion.clone().invert())
+    const localAnkle = rig.hips.worldToLocal(ankle)
     poseChain(chain, localAnkle, new THREE.Vector3(0, 0, 1))
   }
 }
@@ -485,23 +592,48 @@ export function syncPlayerMotion(group: THREE.Group, player: PlayerState, elapse
     if (player.body.phase === 'airborne') turn = -0.5 + smooth(player.body.elapsed / 0.43)
     if (player.body.phase === 'landing') turn = 0.5 * (1 - smooth(player.body.elapsed / 0.18))
   }
-  rig.body.rotation.y = turn
-  // Rotate around the shared right shoulder, rather than moving it to the left side.
-  group.updateWorldMatrix(true, false)
+  const depth = player.movement.footworkPoint?.split('-')[0]
+  const turnSign = player.grip === 'backhand' ? 1 : -1
+  const phase = player.swing.phase
+  // 转髋决定人物实际面相与下半身角度；上身在其上叠加肩髋分离。
+  const stanceYaw = turnSign * (SIDE_ON_YAW + (depth === 'front' ? 0.12 : 0) + (phase === 'ready' ? 0 : 0.10))
+  // 六点启动时髋随横向移动方向转开约 10°，面相跟着目标角变化，脚仍朝实际落点。
+  const targetLength = Math.hypot(player.movement.targetDir.x, player.movement.targetDir.z)
+  const anatomicalLateral = targetLength > 0.01
+    ? player.movement.targetDir.z / targetLength * (player.side === 0 ? 1 : -1)
+    : 0
+  const movementYaw = -anatomicalLateral * 0.18
+  const hipYaw = turn + stanceYaw + movementYaw
+  // 髋先转、肩后转：引拍逐帧加大分离，出拍时髋先回正、肩带再释放。
+  // 各阶段首尾取值相接（0.08 → 0.32 → -0.22 → 0.08），球拍不会在阶段切换时瞬跳。
+  const recoveryDuration = Math.max(SWING_DURATION + 1e-6, timing.recovery)
+  let separationAngle = 0.08
+  if (phase === 'preparing') separationAngle = 0.08 + 0.24 * THREE.MathUtils.clamp(player.swing.elapsed / timing.preparation, 0, 1)
+  else if (phase === 'swinging') separationAngle = 0.32 - 0.54 * THREE.MathUtils.clamp(player.swing.elapsed / SWING_DURATION, 0, 1)
+  else if (phase === 'recovery') separationAngle = -0.22 + 0.30 * THREE.MathUtils.clamp((player.swing.elapsed - SWING_DURATION) / (recoveryDuration - SWING_DURATION), 0, 1)
+  const shoulderSeparation = turn * 0.35 - turnSign * separationAngle
+  rig.body.rotation.y = 0
+  rig.hips.rotation.y = hipYaw
+  // 肩带角度 = 髋的实际朝向 + 肩髋分离角。
+  rig.chest.rotation.y = hipYaw + shoulderSeparation
   const visualPos: Vec3 = [player.pos[0], player.pos[1] - crouch, player.pos[2]]
-  const shoulder = group.worldToLocal(new THREE.Vector3(...getPlayerRightShoulder(visualPos, player.side)))
-  rig.body.position.copy(shoulder).sub(RIGHT_SHOULDER.clone().applyQuaternion(rig.body.quaternion))
-  rig.body.updateWorldMatrix(true, false)
+  // group 已经承担世界位置与朝网旋转；body 只是局部锚点，重复塞入世界坐标会二次变换。
+  rig.body.position.set(0, visualPos[1] - player.pos[1], 0)
+  group.updateWorldMatrix(true, true)
+  // 上身可以相对髋转，但持拍肩必须仍锚在物理肩点，保证拍面接触几何不漂移。
+  const desiredShoulder = new THREE.Vector3(...getPlayerRightShoulder(visualPos, player.side))
+  const shoulderLocal = rig.body.worldToLocal(desiredShoulder.clone())
+  const shoulderOffset = RIGHT_SHOULDER.clone().applyQuaternion(rig.chest.quaternion)
+  rig.chest.position.copy(shoulderLocal).sub(shoulderOffset)
+  group.updateWorldMatrix(true, true)
   poseLegs(group, rig, player, elapsed, speed)
-  const balance = player.body.phase === 'airborne' ? new THREE.Vector3(0.45, 1.41, 0.12)
-    : new THREE.Vector3(0.36, 1.13, 0.16 + Math.sin(elapsed * 10) * Math.min(speed / 5, 1) * 0.10)
-  poseChain(rig.leftArm, balance, new THREE.Vector3(1, -0.5, -0.25))
+  poseChain(rig.leftArm, leftArmTarget(player, elapsed, speed), new THREE.Vector3(1, -0.5, -0.25))
 
   const ready = readyPose()
   const shot = player.swing.phase === 'ready' ? player.selectedShot : player.swing.shot
   const { preparation, follow } = strokePoses(shot)
   if (newContact) {
-    rig.contact = { source: player.contactPose!, pose: localContactPose(rig.body, player.contactPose!), elapsed: player.swing.elapsed }
+    rig.contact = { source: player.contactPose!, pose: localContactPose(rig.chest, player.contactPose!), elapsed: player.swing.elapsed }
   }
   let pose = ready
   if (rig.contact && active) {
@@ -518,7 +650,7 @@ export function syncPlayerMotion(group: THREE.Group, player: PlayerState, elapse
       desiredContact: idealContactPoint(visualPos, player.side, shot),
       playerPos: visualPos, playerSide: player.side, racketFaceDeg: getTechniqueRacketFaceDeg(shot),
     })
-    const strike = localContactPose(rig.body, shared)
+    const strike = localContactPose(rig.chest, shared)
     const t = THREE.MathUtils.clamp(player.swing.elapsed / SWING_DURATION, 0, 1)
     pose = t < 0.45 ? blendPose(preparation, strike, t / 0.45) : blendPose(strike, follow, (t - 0.45) / 0.55)
   } else if (player.swing.phase === 'recovery') {

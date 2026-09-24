@@ -157,6 +157,19 @@ describe('movement dynamics', () => {
     expect(longFrame.movement.readiness).toBeCloseTo(normal.movement.readiness, 5)
   })
 
+  it('carries the six-point destination in movement state and clears it when standing', () => {
+    const midRight = { ...moving(0, 1), pos: [-3, 0, 0] as [number, number, number] }
+    expect(advance(midRight, 0.1).movement.footworkPoint).toBe('mid-right')
+    const backLeft = { ...moving(-1, -1), pos: [-6.4, 0, -1.4] as [number, number, number] }
+    expect(advance(backLeft, 0.1).movement.footworkPoint).toBe('back-left')
+    const backLeftRun = advance({ ...backLeft, pos: [-5.8, 0, -0.8] as [number, number, number] }, 0.35)
+    expect(backLeftRun.movement.footwork).toBe('cross')
+    expect(backLeftRun.movement.footworkPoint).toBe('back-left')
+    expect(advance(moving(-1), 0.5).movement.footwork).toBe('retreat')
+    const stopped = { ...midRight, movement: { ...midRight.movement, targetDir: { x: 0, z: 0 } } }
+    expect(advance(stopped, 0.3).movement.footworkPoint).toBeNull()
+  })
+
   it.each([0, -1, NaN, Infinity])('ignores invalid/non-positive dt %s', dt => {
     const player = moving()
     expect(updateMovement(player, dt)).toBe(player)

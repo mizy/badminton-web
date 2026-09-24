@@ -1,4 +1,5 @@
 import type { GameState, PointReason } from '../game/types'
+import type { FootworkPoint } from '../character/footwork'
 import type { BodyState, Footwork, PlayerState, ShotAim } from '../character/types'
 import type { ShotType } from '../character/shotSynthesis'
 import { RACKETS, SHOT_NAMES, SHOT_ORDER, charge01 } from '../character/stroke'
@@ -30,6 +31,11 @@ interface PlayCallbacks {
 const FOOTWORK: Record<Footwork, string> = {
   ready: '准备', start: '启动', chasse: '并步', cross: '交叉步',
   lunge: '跨步', retreat: '后退', recover: '回位',
+}
+const FOOTWORK_POINT: Record<FootworkPoint, string> = {
+  'front-left': '左前场', 'front-right': '右前场',
+  'mid-left': '左中场', 'mid-right': '右中场',
+  'back-left': '左后场', 'back-right': '右后场',
 }
 const BODY_PHASE: Record<BodyState['phase'], string> = {
   grounded: '站稳', loading: '蓄力', airborne: '腾空', landing: '落地恢复',
@@ -77,12 +83,14 @@ export function pointBannerView(point: GameState['lastPoint']): { side: 'home' |
   }
 }
 
-/** 触屏球路键的排布：上排是击球点高的上手球，下排是下手球（分界与 canPlayShot 的高度区间一致）。
- *  一行三个、位置固定，拇指不用看屏幕就能盲按；按钮顺序即 SHOT_ORDER 之外唯一的一处排布真相。 */
+/** 触屏球路槽位：按拇指自然扫过的弧线排布，最大主键留给最常用的挑球。
+ *  每个球路仍恰好占一个固定槽位；CSS 依据 data-touch-slot 放置按钮。 */
 export const TOUCH_SHOT_ROWS: readonly (readonly ShotType[])[] = [
-  ['CLEAR', 'DROP', 'SMASH'],
-  ['DRIVE', 'NET_DROP', 'LIFT'],
+  ['DROP', 'CLEAR', 'SMASH'],
+  ['NET_DROP', 'DRIVE', 'LIFT'],
 ]
+/** 常用球路：给主键尺寸和“常用”角标，拇指不必在六个同权按钮里逐个找。 */
+export const TOUCH_COMMON_SHOTS: readonly ShotType[] = ['CLEAR', 'LIFT']
 /** 触屏状态行是漂浮的短促 toast：文案最后一次变化之后这么久开始淡出。 */
 const TOAST_MS = 2600
 const POINT_REASON: Record<PointReason, string> = {
@@ -176,6 +184,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
       </footer>
       <p class="play-mobile-hint">小窗口建议横屏或全屏游玩；键盘操作不受影响。</p>
       <div class="play-touch" data-ui="touch" aria-label="触屏操作">
+        <div class="play-touch-stick-zone" data-touch="stick-zone" aria-label="移动摇杆区域"></div>
         <div class="play-touch-stick" data-touch="stick" role="group" aria-label="移动摇杆">
           <span class="play-touch-stick-ring" aria-hidden="true"></span>
           <i class="play-touch-stick-knob" data-touch="stick-knob" aria-hidden="true"></i>
@@ -184,9 +193,11 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
         <div class="play-touch-shoot">
           <div class="play-touch-charge" data-ui="touch-charge"></div>
           <span class="play-touch-readout" data-ui="touch-aim-readout" aria-hidden="true">按住拖动瞄准</span>
-          <button type="button" class="play-touch-jump" data-touch="jump" aria-label="起跳，按住不放是蹬转">起跳<small>按住蹬转</small></button>
-          <div class="play-touch-shots" data-touch="shots" data-ui="touch-shots" role="group"
-            aria-label="球路键：短按直接打，按住拖动瞄准落点"></div>
+          <div class="play-touch-actions">
+            <button type="button" class="play-touch-jump" data-touch="jump" aria-label="起跳，按住不放是蹬转">起跳<small>按住蹬转</small></button>
+            <div class="play-touch-shots" data-touch="shots" data-ui="touch-shots" role="group"
+              aria-label="球路键：短按直接打，按住拖动瞄准落点"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -324,18 +335,28 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     ui('shots').append(item)
     return item
   })
-  // 触屏球路键：六个固定键（上排上手球、下排下手球，见 TOUCH_SHOT_ROWS），位置由 CSS 排。
+  // 触屏球路键：六个固定槽位（见 TOUCH_SHOT_ROWS），位置由 CSS 按拇指弧线排。
   // 短按直接打出该球路，按住拖动只改落点（dataset 由 input/touchControls.ts 写入），落点读数写在键组上方。
   const touchAimReadout = ui('touch-aim-readout')
   const touchShots = ui('touch-shots')
-  const touchShotButtons = TOUCH_SHOT_ROWS.flat().map(shot => {
+  const touchSlots = ['upper-left', 'upper-center', 'upper-right', 'lower-left', 'lower-center', 'primary']
+  const touchShotButtons = TOUCH_SHOT_ROWS.flat().map((shot, index) => {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'play-touch-shot'
     button.dataset.touch = 'shot'
     button.dataset.shot = shot
+    button.dataset.touchSlot = touchSlots[index]
     button.style.setProperty('--shot-accent', SHOT_ACCENTS[shot])
-    button.textContent = SHOT_NAMES[shot]
+    const label = document.createElement('span')
+    label.textContent = SHOT_NAMES[shot]
+    button.append(label)
+    if (TOUCH_COMMON_SHOTS.includes(shot)) {
+      const tag = document.createElement('small')
+      tag.className = 'play-touch-shot-tag'
+      tag.textContent = '常用'
+      button.append(tag)
+    }
     button.setAttribute('aria-label', `${SHOT_NAMES[shot]}：短按直接打，按住拖动瞄准落点`)
     touchShots.append(button)
     return button
@@ -573,7 +594,8 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     text(stamina, `${percent}%`)
     text(staminaValue, `${percent}%`)
     stamina.dataset.low = String(percent < 25)
-    text(footwork, `步法 · ${player ? FOOTWORK[player.movement.footwork] : '准备'}`)
+    const footworkZone = player?.movement.footworkPoint
+  text(footwork, `步法 · ${player ? FOOTWORK[player.movement.footwork] : '准备'}${footworkZone ? ` · ${FOOTWORK_POINT[footworkZone]}` : ''}`)
     text(grip, `握拍 · ${player?.grip === 'backhand' ? '反手' : '正手'}`)
     text(body, `身体 · ${player ? BODY_PHASE[player.body.phase] : '站稳'}${player?.body.action ? ` / ${BODY_ACTION[player.body.action]}` : ''}`)
     body.dataset.phase = player?.body.phase ?? 'grounded'

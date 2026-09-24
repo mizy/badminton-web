@@ -23,6 +23,7 @@ export function createPlayer(side: 0 | 1): PlayerState {
       gait: 'idle',
       readiness: 1,
       footwork: 'ready',
+      footworkPoint: null,
     },
     racket,
     stamina: 100,

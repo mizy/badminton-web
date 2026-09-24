@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { createPlayer } from '../game/playerFactory'
 import { gameReducer, type GameAction } from '../game/reducer'
 import { createFullGameState, type GameState } from '../game/types'
-import { createKeyboardAdapter, createTouchControlsAdapter, isTouchDevice, type InputAdapter, type InputEvent } from '../input'
+import { combineInputAdapters, createKeyboardAdapter, createTouchControlsAdapter, isTouchDevice, type InputAdapter, type InputEvent } from '../input'
 import { getAIConfig } from '../ai/difficulty'
 import { getPersona } from '../ai/personas'
 import { Recorder } from '../recording/recorder'
@@ -38,7 +38,7 @@ export function startGame(): () => void {
   let shakePower = 0
   let shakeUntil = 0
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  // 粗指针 / 有触点 = 触屏设备：只挂触屏层，不注册键盘，避免两套输入打架。
+  // 粗指针 / 有触点 = 同时提供触屏层；键盘始终挂载，触屏笔记本 / 外接键盘的 WASD 不能因此失效。
   const touchDevice = isTouchDevice()
   const ui = createPlayUI({
     start: startSession,
@@ -55,14 +55,16 @@ export function startGame(): () => void {
     sound: enabled => { soundEnabled = enabled; if (enabled) unlockAudio() },
     prediction: enabled => { prediction = enabled },
   }, { touch: touchDevice })
-  const input: InputAdapter = touchDevice
+  const getSide = () => state.players[0]?.side ?? 0
+  const input: InputAdapter = combineInputAdapters([
     // 等待发球时击球盘要按下-拖动选发球种类-松手才发出，所以把当前阶段告诉适配层（见 isAwaitingServe）。
-    ? createTouchControlsAdapter(0, {
+    ...(touchDevice ? [createTouchControlsAdapter(0, {
       root: ui.touchRoot,
-      getSide: () => state.players[0]?.side ?? 0,
+      getSide,
       isAwaitingServe: () => state.phase === 'idle',
-    })
-    : createKeyboardAdapter(0, undefined, () => state.players[0]?.side ?? 0)
+    })] : []),
+    createKeyboardAdapter(0, undefined, getSide),
+  ])
   const disconnectHotkeys = connectPlayHotkeys(() => { if (active) void toggleRecording() })
 
   function dispatch(action: GameAction): void {

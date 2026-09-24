@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SHOT_ORDER } from '../character/stroke'
 import type { PlayerState } from '../character/types'
-import { TOUCH_SHOT_ROWS, aimReadoutView, chargeView, pointBannerView } from './ui'
+import { TOUCH_COMMON_SHOTS, TOUCH_SHOT_ROWS, aimReadoutView, chargeView, pointBannerView } from './ui'
 
 describe('触屏球路键排布', () => {
   it('六个球路各占一个键，不重不漏', () => {
@@ -15,10 +15,11 @@ describe('触屏球路键排布', () => {
     expect(TOUCH_SHOT_ROWS.map(row => row.length)).toEqual([3, 3])
   })
 
-  it('上排是上手球、下排是下手球：和 canPlayShot 的高度分界一致', () => {
-    // 上手球要 1.35m 以上的击球点（杀球 1.85m），下手球在 1.65m 以下才成立。
-    expect(TOUCH_SHOT_ROWS[0]).toEqual(['CLEAR', 'DROP', 'SMASH'])
-    expect(TOUCH_SHOT_ROWS[1]).toEqual(['DRIVE', 'NET_DROP', 'LIFT'])
+  it('按拇指弧线排布，并把高远 / 挑球标为常用主键', () => {
+    expect(TOUCH_SHOT_ROWS[0]).toEqual(['DROP', 'CLEAR', 'SMASH'])
+    expect(TOUCH_SHOT_ROWS[1]).toEqual(['NET_DROP', 'DRIVE', 'LIFT'])
+    expect([...TOUCH_COMMON_SHOTS].sort()).toEqual(['CLEAR', 'LIFT'])
+    expect(TOUCH_COMMON_SHOTS.every(shot => TOUCH_SHOT_ROWS.flat().includes(shot))).toBe(true)
   })
 })
 

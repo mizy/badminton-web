@@ -12,6 +12,8 @@ export type {
 export { createKeyboardAdapter } from './keyboard'
 export type { KeyMapping } from './keyboard'
 
+export { combineInputAdapters } from './combined'
+
 export { createGamepadAdapter } from './gamepad'
 export type { GamepadMapping } from './gamepad'
 
