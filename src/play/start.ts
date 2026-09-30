@@ -265,8 +265,9 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   const shuttleGroup = createShuttlecockMesh()
   shuttleGroup.scale.setScalar(1.65)
   // 队服配色：主场电光蓝+青霓虹、客场猩红+琥珀，和绿色球场拉开对比。
-  const homeMesh = createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '你', { glowScale: 0, labelScale: 0.5 })
-  const awayMesh = createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, 'AI', { glowScale: 0, labelScale: 0.45 })
+  const modelUrl = new URLSearchParams(window.location.search).get('model') || undefined
+  const homeMesh = createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '你', { glowScale: 0, labelScale: 0.5, modelUrl })
+  const awayMesh = createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, 'AI', { glowScale: 0, labelScale: 0.45, modelUrl })
   const homeGroundMarker = createGroundMarker(0x5ce1ff)
   const awayGroundMarker = createGroundMarker(0xffa14f)
   const marker = (color: number, inner: number, outer: number, opacity: number) => {

@@ -3,6 +3,9 @@ import { RACKET_STRING_CENTER_DISTANCE as DOMAIN_STRING_CENTER_DISTANCE } from '
 
 type Vec3 = [number, number, number]
 
+/** SMPL/Mixamo neutral right-hand fingers are -X; palm normal is -Y. */
+export const RACKET_IN_RIGHT_HAND = new THREE.Quaternion(0.5, -0.5, 0.5, 0.5)
+
 const LOCAL_RACKET_FACE = new THREE.Vector3(0, 0, 1)
 const RACKET_HEAD_DISTANCE = DOMAIN_STRING_CENTER_DISTANCE
 export const RACKET_STRING_CENTER_DISTANCE = RACKET_HEAD_DISTANCE

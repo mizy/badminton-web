@@ -9,55 +9,27 @@ import type {
 } from './hdm05BadmintonMocap'
 import { applyHdm05Motion } from './hdm05BadmintonMocap'
 import { syncShuttlecockMesh } from './shuttlecockMesh'
-import { getRacketStringCenterWorld, syncRacketToGrip } from './skeletalRacket'
+import { getRacketStringCenterWorld, syncRacketToGrip, RACKET_IN_RIGHT_HAND } from './skeletalRacket'
 import type { HumanoidBones } from './skeletalBadminton'
 
 const RACKET_GRIP = new THREE.Vector3()
 const RACKET_DIRECTION = new THREE.Vector3()
 const RACKET_FACE = new THREE.Vector3()
-const ARM_PLANE = new THREE.Vector3()
-const UPPER_ARM = new THREE.Vector3()
-const FOREARM = new THREE.Vector3()
-const WORLD_FORWARD = new THREE.Vector3(1, 0, 0)
-const WORLD_UP = new THREE.Vector3(0, 1, 0)
-const WORLD_LATERAL = new THREE.Vector3(0, 0, 1)
+const HAND_ROTATION = new THREE.Quaternion()
 const INCOMING_CENTER = new THREE.Vector3()
 const INCOMING_VELOCITY = new THREE.Vector3()
 const STRIKE_HEAD = new THREE.Vector3()
 const PREVIOUS_STRIKE_HEAD = new THREE.Vector3()
 const HAND_POS = new THREE.Vector3()
-const WRIST_POS = new THREE.Vector3()
-const ELBOW_POS = new THREE.Vector3()
 
-/** @entry 以肩肘腕平面、前向和手腕扬角共同确定球拍轴与拍面（球拍挂假人右手骨骼）。 */
-export function syncHdm05Racket(
-  bones: HumanoidBones,
-  racket: THREE.Group,
-  action: Hdm05BadmintonAction,
-): void {
+/** @entry Racket axes follow the calibrated right hand throughout the captured stroke. */
+export function syncHdm05Racket(bones: HumanoidBones, racket: THREE.Group): void {
   const hand = bones.rightHand
-  const wrist = bones.rightForeArm
-  const elbow = bones.rightArm
-  if (!hand || !wrist || !elbow) return
+  if (!hand) return
   RACKET_GRIP.copy(hand.getWorldPosition(HAND_POS))
-  FOREARM.copy(hand.getWorldPosition(HAND_POS)).sub(wrist.getWorldPosition(WRIST_POS)).normalize()
-  UPPER_ARM.copy(wrist.getWorldPosition(WRIST_POS)).sub(elbow.getWorldPosition(ELBOW_POS)).normalize()
-  ARM_PLANE.crossVectors(UPPER_ARM, FOREARM)
-  if (ARM_PLANE.lengthSq() < 0.000001) ARM_PLANE.set(0, 0, 1)
-  ARM_PLANE.normalize()
-  if (ARM_PLANE.dot(WORLD_LATERAL) < 0) ARM_PLANE.multiplyScalar(-1)
-
-  const overhead = action !== 'low_serve'
-  RACKET_DIRECTION.copy(FOREARM)
-    .multiplyScalar(0.58)
-    .addScaledVector(WORLD_FORWARD, overhead ? 0.24 : 0.48)
-    .addScaledVector(WORLD_UP, overhead ? 0.38 : -0.16)
-    .addScaledVector(WORLD_LATERAL, action === 'smash' ? 0.12 : 0.06)
-    .normalize()
-  RACKET_FACE.copy(WORLD_FORWARD)
-    .addScaledVector(WORLD_UP, action === 'smash' ? -0.18 : action === 'low_serve' ? 0.14 : 0.28)
-    .addScaledVector(ARM_PLANE, 0.2)
-    .normalize()
+  HAND_ROTATION.copy(hand.getWorldQuaternion(HAND_ROTATION)).multiply(RACKET_IN_RIGHT_HAND)
+  RACKET_DIRECTION.set(0, 1, 0).applyQuaternion(HAND_ROTATION)
+  RACKET_FACE.set(0, 0, 1).applyQuaternion(HAND_ROTATION)
   syncRacketToGrip(racket, RACKET_GRIP, RACKET_DIRECTION, RACKET_FACE)
 }
 
@@ -74,7 +46,7 @@ export function findHdm05VisualStrikeFrame(
 
   for (let frame = 0; frame < motion.poseBody.length; frame += 1) {
     applyHdm05Motion(bones, motion, frame / motion.fps, options)
-    syncHdm05Racket(bones, racket, motion.action)
+    syncHdm05Racket(bones, racket)
     getRacketStringCenterWorld(racket, STRIKE_HEAD)
     if (frame > 0) {
       const speed = Math.min(STRIKE_HEAD.distanceTo(PREVIOUS_STRIKE_HEAD) * motion.fps, 20)

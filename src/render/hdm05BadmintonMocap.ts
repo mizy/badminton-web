@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { HumanoidBones } from './skeletalBadminton'
+import type { HumanoidBones } from './humanoidModel'
 
 export type Hdm05BadmintonAction = 'low_serve' | 'clear' | 'drop' | 'smash'
 
@@ -21,8 +21,8 @@ export interface Hdm05Manifest {
   source: string
 }
 
-export interface Hdm05Motion {
-  action: Hdm05BadmintonAction
+export interface Hdm05Motion<Action extends string = Hdm05BadmintonAction> {
+  action: Action
   actor: string
   fps: number
   id: string
@@ -42,6 +42,7 @@ export interface Hdm05PlaybackOptions {
 }
 
 export interface Hdm05PlaybackSample {
+  duration: number
   alpha: number
   cycle: number
   frame: number
@@ -110,6 +111,25 @@ export function applyHdm05Motion(
   return sample
 }
 
+export const HDM05_CLIPS = ['dg-04-smash', 'dg-02-clear', 'dg-03-drop', 'dg-01-low-serve',
+  'bk-02-clear', 'bk-03-drop', 'bk-01-low-serve', 'tr-02-clear', 'tr-03-drop', 'tr-01-low-serve'] as const
+
+/** @entry Loads the existing local recording, shared by both animation layers. */
+export async function loadHdm05Motion(id: string): Promise<Hdm05Motion> {
+  const response = await fetch(`/mocap/hdm05-badminton/${id}.json`)
+  if (!response.ok) throw new Error(`HDM05 ${id}: ${response.status}`)
+  return response.json() as Promise<Hdm05Motion>
+}
+
+/** A short inspection loop around peak right-arm motion, not a labelled ball contact. */
+export function createHdm05StrikeClip(motion: Hdm05Motion): Hdm05Motion {
+  const peak = findHdm05StrikeFrame(motion)
+  const start = Math.max(0, peak - Math.round(motion.fps * 0.9))
+  const end = Math.min(motion.poseBody.length, peak + Math.round(motion.fps * 1.2) + 1)
+  return { ...motion, poseBody: motion.poseBody.slice(start, end), root: motion.root.slice(start, end),
+    rootOrient: motion.rootOrient.slice(start, end) }
+}
+
 export function createDefaultPlaybackOptions(): Hdm05PlaybackOptions {
   return {
     poseScale: 0.68,
@@ -136,7 +156,7 @@ export function findHdm05StrikeFrame(motion: Hdm05Motion): number {
 }
 
 /** @entry 原片段末尾通过平滑 blend 回首帧，禁止末帧直接插值制造虚假拍头高速。 */
-export function sampleHdm05Playback(motion: Hdm05Motion, time: number): Hdm05PlaybackSample {
+export function sampleHdm05Playback(motion: Hdm05Motion<string>, time: number): Hdm05PlaybackSample {
   const lastFrame = Math.max(0, motion.poseBody.length - 1)
   const activeDuration = lastFrame / motion.fps
   const blendDuration = Math.min(LOOP_BLEND_SECONDS, Math.max(activeDuration * 0.2, 0.12))
@@ -149,6 +169,7 @@ export function sampleHdm05Playback(motion: Hdm05Motion, time: number): Hdm05Pla
     const frame = Math.min(Math.floor(frameValue), lastFrame)
     const nextFrame = Math.min(frame + 1, lastFrame)
     return {
+      duration: cycleDuration,
       alpha: nextFrame === frame ? 0 : frameValue - frame,
       cycle: localTime / cycleDuration,
       frame,
@@ -162,6 +183,7 @@ export function sampleHdm05Playback(motion: Hdm05Motion, time: number): Hdm05Pla
 
   const blend01 = smoothstep((localTime - activeDuration) / blendDuration)
   return {
+    duration: cycleDuration,
     alpha: blend01,
     cycle: localTime / cycleDuration,
     frame: lastFrame,

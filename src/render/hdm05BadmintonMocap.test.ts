@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createHdm05StrikeClip,
   findHdm05StrikeFrame,
   sampleHdm05Playback,
   type Hdm05Motion,
@@ -21,6 +22,20 @@ describe('HDM05 playback sampling', () => {
     expect(nextLoop.loopIndex).toBe(1)
     expect(nextLoop.frame).toBe(0)
     expect(nextLoop.loopBlend).toBe(false)
+  })
+
+  it('cuts around the arm-motion peak without changing the original arrays or root height', () => {
+    const motion = createMotion()
+    motion.poseBody = Array.from({ length: 60 }, () => createPose())
+    motion.root = Array.from({ length: 60 }, (_, frame) => [frame / 10, 0, 0.2])
+    motion.rootOrient = Array.from({ length: 60 }, () => [0, 0, 0])
+    motion.poseBody[30][48] = 2
+    const clip = createHdm05StrikeClip(motion)
+    expect(clip.poseBody).toHaveLength(22)
+    expect(clip.poseBody[0]).toBe(motion.poseBody[21])
+    expect(clip.root[0]).toEqual([2.1, 0, 0.2])
+    expect(motion.poseBody).toHaveLength(60)
+    expect(sampleHdm05Playback(clip, 0).duration).toBeCloseTo(2.52, 6)
   })
 
   it('detects the strike from adjacent source frames without a loop seam', () => {

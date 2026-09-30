@@ -182,7 +182,7 @@ describe('low-poly player rig', () => {
     const idleAnkle = point(mesh, 'right-ankle')
     player.movement.footwork = 'start'
     player.movement.targetDir.x = 1
-    syncPlayerMotion(mesh, player, 0.08)
+    for (let frame = 1; frame <= 8; frame++) syncPlayerMotion(mesh, player, frame / 60)
     expect(point(mesh, 'right-ankle').distanceTo(idleAnkle)).toBeGreaterThan(0.02)
     player.movement.currentVel = { x: 4.5, z: 1.5 }
     for (let frame = 0; frame < 30; frame++) {
@@ -259,21 +259,24 @@ describe('low-poly player rig', () => {
     expect(point(moving, 'right-shoulder').distanceTo(point(moving, 'right-wrist'))).toBeLessThan(0.5)
   })
 
-  it('霓虹饰件存在且自带自发光（队服饰边 / 额带 / 袖口 / 护腕 / 鞋侧 / 拍框 / 手胶）', () => {
+  it('uses smooth skin and fabric instead of glowing shoulder pads', () => {
     const mesh = makeMesh()
     const parts = [
       'jersey-trim', 'jersey-collar', 'player-headband', 'shorts-waistband',
       'right-sleeve', 'left-sleeve', 'right-wristband', 'right-shoe-stripe', 'right-shoe-laces',
-      'racket-frame', 'racket-shaft', 'racket-grip-wrap-0.02', 'player-rim-light',
+      'player-head', 'player-jersey',
     ]
     for (const name of parts) {
       const node = mesh.getObjectByName(name)
       expect(node, name).toBeDefined()
       if (node instanceof THREE.Mesh) {
-        expect((node.material as THREE.MeshStandardMaterial).emissiveIntensity, name).toBeGreaterThan(0)
+        const material = node.material as THREE.MeshStandardMaterial
+        expect(material.emissive.getHex(), name).toBe(0)
+        expect(material.flatShading, name).toBe(false)
       }
     }
-    // 身体包围盒仍由原骨架决定：饰件没有把身高撑高，也没有把鞋底压到地面以下。
+    expect((mesh.getObjectByName('right-sleeve') as THREE.Mesh).material)
+      .toBe((mesh.getObjectByName('player-jersey') as THREE.Mesh).material)
     const box = bounds(mesh)
     expect(box.min.y).toBeCloseTo(0, 5)
     expect(box.max.y).toBeCloseTo(PLAYER_HEIGHT, 4)
@@ -324,57 +327,90 @@ describe('low-poly player rig', () => {
     player.movement.footworkPoint = side === 0 ? 'front-right' : 'front-left'
     player.movement.footwork = 'lunge'
     player.movement.currentVel = { x: forward * 5, z: forward * 2 }
-    syncPlayerMotion(mesh, player, 0.05)
+    for (let frame = 1; frame <= 8; frame++) syncPlayerMotion(mesh, player, frame / 60)
     expect(localWrist().z).toBeLessThan(-0.2)
   })
 
-  it('poses the six points differently: front lunge, mid chasse and rear cross step', () => {
+  it('starts a tap from the visible wrist pose without snapping to a full backswing', () => {
+    const mesh = makeMesh()
+    const player = createPlayer(0)
+    syncPlayerMotion(mesh, player, 8)
+    const wrist = point(mesh, 'right-wrist')
+    const racket = point(mesh, 'racket-string-center')
+    player.swing = { ...player.swing, phase: 'swinging', elapsed: 0 }
+    syncPlayerMotion(mesh, player, 8 + 1 / 60)
+    expect(point(mesh, 'right-wrist').distanceTo(wrist)).toBeLessThan(0.12)
+    expect(point(mesh, 'racket-string-center').distanceTo(racket)).toBeLessThan(0.18)
+    expectChains(mesh)
+  })
+
+  it('keeps gait continuous when speed crosses the old 3 m/s cadence boundary', () => {
+    const mesh = makeMesh()
+    const player = createPlayer(0)
+    player.movement.footwork = 'retreat'
+    player.movement.currentVel = { x: -2.99, z: 0 }
+    syncPlayerMotion(mesh, player, 9.3)
+    const ankle = point(mesh, 'right-ankle')
+    player.movement.currentVel.x = -3.01
+    syncPlayerMotion(mesh, player, 9.3 + 1 / 120)
+    expect(point(mesh, 'right-ankle').distanceTo(ankle)).toBeLessThan(0.04)
+    expectChains(mesh)
+  })
+
+  it('holds the support shoe on the court as the body moves over it', () => {
+    const mesh = makeMesh()
+    const player = createPlayer(0)
+    player.movement.footwork = 'retreat'
+    player.movement.currentVel = { x: -2, z: 0 }
+    syncPlayerMotion(mesh, player, 0)
+    const planted = point(mesh, 'left-ankle')
+    for (let frame = 1; frame <= 7; frame++) {
+      player.pos[0] -= 2 / 60
+      syncPlayerMotion(mesh, player, frame / 60)
+      near(point(mesh, 'left-ankle'), planted, 0.01)
+      expect(bounds(mesh, 'left-shoe').min.y).toBeCloseTo(0, 5)
+      expectChains(mesh)
+    }
+  })
+
+  it('plays a fresh split step even when starting late in a session', () => {
+    const mesh = makeMesh()
+    const player = createPlayer(0)
+    syncPlayerMotion(mesh, player, 20)
+    player.movement.footwork = 'start'
+    player.movement.targetDir.x = 1
+    syncPlayerMotion(mesh, player, 20 + 1 / 60)
+    const ankle = point(mesh, 'right-ankle')
+    for (let frame = 2; frame <= 6; frame++) syncPlayerMotion(mesh, player, 20 + frame / 60)
+    expect(point(mesh, 'right-ankle').distanceTo(ankle)).toBeGreaterThan(0.04)
+    expectChains(mesh)
+  })
+
+  it('changes a planted stance through steps when switching six-point targets', () => {
     const mesh = makeMesh()
     const player = createPlayer(0)
     player.pos = [-3, 0, 0.8]
-    // 侧身后脚踝挂在髋下，用髋局部坐标判断步型，避免混入躯干朝向。
-    const hips = mesh.getObjectByName('player-hips')!
-    const offset = (side: string) => hips.worldToLocal(point(mesh, `${side}-ankle`).clone())
-    const worldOffset = (side: string) => {
-      const value = point(mesh, `${side}-ankle`).clone()
-      value.x -= player.pos[0]
-      value.z -= player.pos[2]
-      return value
+    syncPlayerMotion(mesh, player, 0)
+    const first = point(mesh, 'right-ankle')
+    player.movement.footworkPoint = 'front-right'
+    player.movement.footwork = 'lunge'
+    player.movement.currentVel = { x: 1, z: 0.4 }
+    player.movement.targetDir = { x: 1, z: 0.4 }
+    syncPlayerMotion(mesh, player, 1 / 60)
+    expect(point(mesh, 'right-ankle').distanceTo(first)).toBeLessThan(0.025)
+    for (let frame = 2; frame <= 30; frame++) {
+      syncPlayerMotion(mesh, player, frame / 60)
+      expectChains(mesh)
+      expect(Math.min(bounds(mesh, 'right-shoe').min.y, bounds(mesh, 'left-shoe').min.y)).toBeCloseTo(0, 5)
     }
-    const pose = (pointName: NonNullable<PlayerState['movement']['footworkPoint']>, footwork: PlayerState['movement']['footwork'], vel: { x: number; z: number }, elapsed: number) => {
-      player.movement.footworkPoint = pointName
-      player.movement.footwork = footwork
-      player.movement.currentVel = vel
-      player.movement.targetDir = { x: Math.sign(vel.x), z: Math.sign(vel.z) }
-      syncPlayerMotion(mesh, player, elapsed)
-      return { right: offset('right'), left: offset('left') }
-    }
-
-    // 前场：持拍腿向前跨，并朝目标角一侧压；异侧腿在身后蹬地。
-    const frontRight = pose('front-right', 'lunge', { x: 5, z: 2 }, 0.06)
-    const frontRightWorld = worldOffset('right')
-    expect(frontRightWorld.x).toBeGreaterThan(0.25)
-    expect(frontRightWorld.z).toBeGreaterThan(0.2)
-    expect(frontRight.left.z).toBeLessThan(frontRight.right.z - 0.25)
-    pose('front-left', 'lunge', { x: 5, z: -2 }, 0.06)
-    const frontLeftWorld = worldOffset('right')
-    expect(frontLeftWorld.x).toBeGreaterThan(0.25)
-    expect(frontLeftWorld.z).toBeLessThan(-0.15)
-
-    // 中场：同侧腿领步，两脚整体沿目标方向并步移动。
-    const midRight = pose('mid-right', 'chasse', { x: 0, z: 5 }, 0.06)
-    expect(midRight.right.x - midRight.left.x).toBeLessThan(-0.22)
-    const midLeft = pose('mid-left', 'chasse', { x: 0, z: -5 }, 0.06)
-    expect(midLeft.left.x).toBeGreaterThan(0.2)
-
-    // 后场：异侧腿从身后越过身体中线。侧身后的世界坐标混入躯干旋转，
-    // 所以直接比较踝关节在人体局部坐标里的左右关系。
-    const phase = Math.PI / 2 / 14
-    const localAnkle = (side: string) => mesh.getObjectByName(`${side}-ankle`)!.position.x
-    pose('back-right', 'cross', { x: -4, z: 3 }, phase)
-    expect(localAnkle('left')).toBeLessThan(localAnkle('right'))
-    pose('back-left', 'cross', { x: -4, z: -3 }, phase)
-    expect(localAnkle('right')).toBeGreaterThan(localAnkle('left'))
+    expect(point(mesh, 'right-ankle').x).toBeGreaterThan(first.x + 0.15)
+    const beforeTurn = point(mesh, 'right-ankle')
+    player.movement.footworkPoint = 'back-left'
+    player.movement.footwork = 'cross'
+    player.movement.currentVel = { x: -1, z: -0.4 }
+    syncPlayerMotion(mesh, player, 31 / 60)
+    expect(point(mesh, 'right-ankle').distanceTo(beforeTurn)).toBeLessThan(0.04)
+    expectChains(mesh)
   })
 
   it('retains legacy positioning/swing interfaces without detaching the right hand', () => {

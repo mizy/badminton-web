@@ -166,7 +166,7 @@ const meta: Meta = {
         playerGroup.updateMatrixWorld(true)
       }
 
-      syncHdm05Racket(player.bones, racket, motion?.action ?? 'clear')
+      syncHdm05Racket(player.bones, racket)
       getRacketStringCenterWorld(racket, head)
       racketSpeed = controls.paused ? 0 : updateRacketHeadSpeed(dt, sample)
       if (!controls.paused && motion && sample) advanceMocapShuttle(dt, motion, sample)
@@ -274,7 +274,7 @@ const meta: Meta = {
     function measureStrikeAnchor(nextMotion: Hdm05Motion): void {
       applyHdm05Motion(player.bones, nextMotion, strikeFrame / nextMotion.fps, playback)
       playerGroup.updateMatrixWorld(true)
-      syncHdm05Racket(player.bones, racket, nextMotion.action)
+      syncHdm05Racket(player.bones, racket)
       getRacketStringCenterWorld(racket, strikeAnchor)
       incomingStart.copy(strikeAnchor).add(new THREE.Vector3(1.7, 0.42, 0.28))
     }
