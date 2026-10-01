@@ -243,23 +243,34 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(window.innerWidth, window.innerHeight)
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = 1.08
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.domElement.setAttribute('aria-label', '羽毛球单打球场')
   renderer.domElement.tabIndex = 0
   renderer.domElement.style.outline = 'none'
   document.body.appendChild(renderer.domElement)
   const camera = createGameCamera()
   createCourt(scene)
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(22, 16), new THREE.MeshStandardMaterial({ color: 0x143332 }))
-  floor.rotation.x = -Math.PI / 2
-  floor.position.y = -0.015
-  scene.add(floor)
-  scene.add(new THREE.HemisphereLight(0xe8fbff, 0x2f5148, 2))
-  const light = new THREE.DirectionalLight(0xffffff, 2.1)
+  scene.add(new THREE.HemisphereLight(0xdff5ff, 0x18342e, 1.35))
+  const light = new THREE.DirectionalLight(0xfff7e8, 2.45)
   light.position.set(-5, 12, 5)
-  // 冷暖双补光：青色的背光把球场边缘压出层次，暖色侧光让球员皮肤不至于发绿。
-  const rimLight = new THREE.DirectionalLight(0x6ff0d0, 0.7)
+  light.castShadow = true
+  light.shadow.mapSize.set(1024, 1024)
+  light.shadow.camera.left = -11
+  light.shadow.camera.right = 11
+  light.shadow.camera.top = 8
+  light.shadow.camera.bottom = -8
+  light.shadow.camera.near = 2
+  light.shadow.camera.far = 30
+  light.shadow.bias = -0.0002
+  light.shadow.normalBias = 0.025
+  // 冷暖双补光把球员与深色看台分开，同时维持白色边线和羽球的辨识度。
+  const rimLight = new THREE.DirectionalLight(0x75d9cf, 0.62)
   rimLight.position.set(7, 5, -9)
-  const warmFill = new THREE.DirectionalLight(0xffb073, 0.4)
+  const warmFill = new THREE.DirectionalLight(0xffb47c, 0.46)
   warmFill.position.set(-8, 3, -4)
   scene.add(light, rimLight, warmFill)
   const shuttleGroup = createShuttlecockMesh()
