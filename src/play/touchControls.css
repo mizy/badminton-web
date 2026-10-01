@@ -1,5 +1,5 @@
 /* 触屏操作层：整个屏幕交给 3D 画面，操作件都是漂浮在上面的半透明手柄。
-   左半屏任意位置落指生成跟手摇杆；右侧是原神式拇指技能簇——六个球路沿拇指弧线分布，
+   左下区域落指生成短行程摇杆，拖过外圈时底座跟随；右侧是拇指技能簇——六个球路沿拇指弧线分布，
    最大的挑球键承担主击球，吊/高远/杀球和平抽/放网环绕，起跳键在技能簇左侧；
    短按直接打该球路，按住拖动只改落点（横向连续左右、向上更深），力量条与落点读数在键组上方；
    右上角一个暂停键。触屏一共就这几个可点控件。
@@ -10,7 +10,8 @@
 .play-touch { display: none; }
 
 .play-ui[data-input="touch"] {
-  --play-touch-stick: 108px;   /* 待机可见、落指后跟手的摇杆底盘直径 */
+  --play-touch-stick: 120px;   /* 底盘比手柄大，实际推动行程由两者尺寸之差计算 */
+  --play-stick-bottom: 48px;  /* 竖握时拇指的自然落点，避开系统底部手势区 */
   --play-touch-shot: 48px;      /* 低频球路小键直径 */
   --play-touch-mid: 62px;       /* 中频球路直径 */
   --play-touch-common: 68px;    /* 常用球路高远键直径 */
@@ -36,57 +37,80 @@
 .play-ui[data-input="touch"] .play-touch-shot,
 .play-ui[data-input="touch"] .play-touch-stick { touch-action: none; -webkit-tap-highlight-color: transparent; }
 
-/* ---- 左摇杆：左半屏落指生成，不要求先摸到固定底盘；控件本体不截获事件。 ---- */
+/* ---- 左摇杆：左下区域落指生成，不要求先摸到固定底盘；控件本体不截获事件。 ---- */
 .play-ui[data-input="touch"] .play-touch-stick-zone {
   position: absolute;
-  top: calc(24% + var(--play-safe-top));
   bottom: 0;
   left: 0;
   width: 48%;
+  height: clamp(220px, 42%, 360px);
   pointer-events: auto;
+  touch-action: none;
 }
 .play-ui[data-input="touch"] .play-touch-stick {
   position: absolute;
-  left: calc(var(--play-touch-edge) + var(--play-safe-left));
-  bottom: calc(var(--play-touch-edge) + var(--play-safe-bottom));
+  left: calc(22px + var(--play-safe-left));
+  bottom: calc(var(--play-stick-bottom) + var(--play-safe-bottom));
   width: var(--play-touch-stick);
   height: var(--play-touch-stick);
-  border: 1px solid var(--play-line);
+  border: 1px solid rgb(242 239 223 / 18%);
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 36%, rgb(23 66 51 / 62%), rgb(6 26 21 / 72%));
-  box-shadow: inset 0 0 22px rgb(0 0 0 / 30%), 0 6px 18px rgb(0 0 0 / 24%);
-   pointer-events: none;
-  opacity: 1;
-  transform-origin: center;
-  transition: opacity 120ms ease, border-color 120ms ease;
+  background: radial-gradient(circle, rgb(242 239 223 / 6%), rgb(6 26 21 / 24%));
+  pointer-events: none;
+  opacity: .62;
+  transition: opacity 100ms ease, border-color 100ms ease;
 }
 .play-ui[data-input="touch"] .play-touch-stick[data-active="true"] {
-  border-color: rgb(242 239 223 / 52%);
+  /* 输入写入的是中心坐标，视觉与手指共用同一个原点。 */
+  transform: translate(-50%, -50%);
+  border-color: rgb(92 225 255 / 42%);
   opacity: 1;
 }
 .play-ui[data-input="touch"] .play-touch-stick::before {
   content: "";
   position: absolute;
-  inset: 9%;
+  inset: 18%;
   border-radius: 50%;
   background:
-    linear-gradient(rgb(242 239 223 / 12%) 0 0) center / 100% 1px no-repeat,
-    linear-gradient(rgb(242 239 223 / 12%) 0 0) center / 1px 100% no-repeat;
+    linear-gradient(rgb(242 239 223 / 14%) 0 0) center / 100% 1px no-repeat,
+    linear-gradient(rgb(242 239 223 / 14%) 0 0) center / 1px 100% no-repeat;
 }
-.play-ui[data-input="touch"] .play-touch-stick-ring { position: absolute; inset: 16%; border: 1px dashed rgb(242 239 223 / 22%); border-radius: 50%; }
+.play-ui[data-input="touch"] .play-touch-stick::after {
+  content: "滑动移动 · 推满冲刺";
+  position: absolute;
+  top: calc(100% + 9px);
+  left: -12px;
+  right: -12px;
+  color: var(--play-muted);
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+.play-ui[data-input="touch"] .play-touch-stick[data-active="true"]::after { opacity: 0; }
+.play-ui[data-input="touch"] .play-touch-stick-ring {
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  background: conic-gradient(from calc(var(--stick-angle, 0deg) - 30deg), var(--play-home) 0deg 60deg, transparent 60deg 360deg);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  opacity: var(--stick-strength, 0);
+}
 .play-ui[data-input="touch"] .play-touch-stick-knob {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 46%;
-  height: 46%;
-  margin: -23% 0 0 -23%;
-  border: 1px solid rgb(9 41 31 / 45%);
+  width: 40%;
+  height: 40%;
+  margin: -20% 0 0 -20%;
+  border: 1px solid rgb(242 239 223 / 50%);
   border-radius: 50%;
-  background: radial-gradient(circle at 50% 28%, rgb(240 250 170 / 96%), rgb(200 216 98 / 90%) 60%, rgb(150 168 60 / 92%));
-  box-shadow: 0 4px 10px rgb(0 0 0 / 34%), inset 0 -3px 6px rgb(0 0 0 / 18%);
+  background: radial-gradient(circle at 40% 32%, rgb(242 239 223 / 28%), rgb(173 205 195 / 12%));
+  box-shadow: 0 3px 10px rgb(0 0 0 / 20%);
 }
-.play-ui[data-input="touch"] .play-touch-stick:active .play-touch-stick-knob { background: var(--play-lemon); }
+.play-ui[data-input="touch"] .play-touch-stick[data-active="true"] .play-touch-stick-knob {
+  border-color: rgb(242 239 223 / 86%);
+  background: radial-gradient(circle at 40% 32%, rgb(242 239 223 / 46%), rgb(173 205 195 / 22%));
+}
 
 /* ---- 右上暂停键：HUD 上唯一的常驻工具键，其余工具搬进暂停对话框。 ---- */
 .play-ui[data-input="touch"] .play-touch-pause {
@@ -94,7 +118,7 @@
   top: calc(10px + var(--play-safe-top));
   right: calc(10px + var(--play-safe-right));
   min-width: 52px;
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--play-line);
   border-radius: 10px;
@@ -352,7 +376,7 @@
   justify-content: center;
 }
 .play-ui[data-input="touch"] .play-pause-settings button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px 14px;
   border: 1px solid var(--play-line);
   border-radius: 999px;
@@ -370,10 +394,20 @@
 .play-ui[data-input="touch"] .play-field select { height: 46px; font-size: 13px; }
 .play-ui[data-input="touch"] .play-mode-button { padding: 14px 16px; }
 
+/* 手机先露出开始入口；对手与球拍设定仍在同一菜单里向下滑动。 */
+@media (max-width: 600px) {
+  .play-ui[data-input="touch"] .play-menu-grid { padding-block: 18px; gap: 18px; }
+  .play-ui[data-input="touch"] .play-editorial h1 { font-size: 32px; margin-block: 8px; }
+  .play-ui[data-input="touch"] .play-setup { display: flex; flex-direction: column; }
+  .play-ui[data-input="touch"] .play-section-heading { order: -2; }
+  .play-ui[data-input="touch"] .play-mode-actions { order: -1; margin: 0 0 18px; }
+}
+
 /* 横屏（手机的另一种握法）：纵向只剩 393px，控件整体缩一号，记分牌压成一行。 */
 @media (orientation: landscape) and (max-height: 520px) {
   .play-ui[data-input="touch"] {
-    --play-touch-stick: 96px;
+    --play-touch-stick: 108px;
+    --play-stick-bottom: 32px;
     --play-touch-shot: 44px;
     --play-touch-mid: 54px;
     --play-touch-common: 58px;
@@ -402,7 +436,7 @@
 /* 短屏竖机（宽 ≤ 380px）：再缩一点，保证球路键组不顶到状态 toast。 */
 @media (orientation: portrait) and (max-width: 380px) {
   .play-ui[data-input="touch"] {
-    --play-touch-stick: 104px;
+    --play-touch-stick: 112px;
     --play-touch-shot: 44px;
     --play-touch-mid: 54px;
     --play-touch-common: 58px;

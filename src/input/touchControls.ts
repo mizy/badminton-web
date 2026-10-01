@@ -14,8 +14,8 @@ import type { ShotType } from '../character/shotSynthesis'
 import { isEditableTarget } from './keyboard'
 import type { InputAction, InputAdapter, InputListener, MoveDirection } from './types'
 
-/** 摇杆死区（相对半径比例）：小于该幅度视为松手，避免手指微抖触发移动。 */
-export const STICK_DEADZONE = 0.2
+/** 摇杆死区（相对行程比例）：约 4px 过滤手指微抖，越过死区后从零平滑加速。 */
+export const STICK_DEADZONE = 0.12
 /** 拖动单位（像素）：落点从中间拖到满格需要的距离；越小越灵敏。 */
 export const AIM_DRAG_UNIT = 72
 /** 落点死区（相对拖动单位）：横向拖动超过该幅度才开始把落点推离中路。 */
@@ -65,7 +65,7 @@ export function moveVectorFromStick(
   const ny = dy / radius
   const length = Math.hypot(nx, ny)
   if (!(length > STICK_DEADZONE)) return null
-  const magnitude = Math.min(1, length) / length
+  const magnitude = Math.min(1, (length - STICK_DEADZONE) / (1 - STICK_DEADZONE)) / length
   const forward = -ny * magnitude
   const right = nx * magnitude
   const sign = side === 0 ? 1 : -1
@@ -73,7 +73,7 @@ export function moveVectorFromStick(
   return { x: forward * sign || 0, z: right * sign || 0 }
 }
 
-/** 摇杆手柄的视觉偏移，限制在底盘半径内。 */
+/** 摇杆手柄的视觉偏移，限制在可用行程内。 */
 export function clampStickOffset(dx: number, dy: number, radius: number): { x: number; y: number } {
   if (!(radius > 0) || !Number.isFinite(dx) || !Number.isFinite(dy)) return { x: 0, y: 0 }
   const length = Math.hypot(dx, dy)
@@ -116,6 +116,7 @@ export interface TouchControlsOptions {
   getSide?: () => 0 | 1
   /** 是否处于等待发球：发球的球路由松手那一刻的键决定，所以按住期间不提交挥拍。 */
   isAwaitingServe?: () => boolean
+  /** 手柄从中心到边缘的可用行程；默认从底盘与手柄实际尺寸计算。 */
   stickRadius?: number
   /** 拖动单位（像素）覆盖，默认 AIM_DRAG_UNIT。 */
   aimUnit?: number
@@ -123,11 +124,12 @@ export interface TouchControlsOptions {
 
 interface Point { x: number; y: number }
 
-const DEFAULT_STICK_RADIUS = 52
+const DEFAULT_STICK_RADIUS = 36
 
 /**
+ * @entry
  * 多指并发触屏适配：摇杆、六个球路键、起跳键、暂停键各自绑定 pointer 事件并用
- * setPointerCapture 独占自己的手指，互不干扰。松开 / 失焦 / 页面隐藏时补齐
+ * setPointerCapture 独占自己的手指，互不干扰。松开 / 失焦 / 转屏 / 页面隐藏时补齐
  * SWING_RELEASE 与 STOP_MOVE，避免挥拍状态卡死。
  */
 export function createTouchControlsAdapter(
@@ -149,7 +151,8 @@ export function createTouchControlsAdapter(
   let connected = false
   let stickPointer: number | null = null
   let stickCenter: Point = { x: 0, y: 0 }
-  let stickOffset: Point = { x: 0, y: 0 }
+  // 一次落指只测量一次布局；转屏会释放输入，下次落指再取新行程。
+  let stickRange = DEFAULT_STICK_RADIUS
   let lastMoveKey: string | null = 'stopped'
   let shotPointer: number | null = null
   /** 被按住的那个球路键与它的球路：拖动只改落点，不改球路。 */
@@ -188,6 +191,20 @@ export function createTouchControlsAdapter(
     stick.style.removeProperty('top')
     stick.style.removeProperty('right')
     stick.style.removeProperty('bottom')
+    stick.style.removeProperty('--stick-angle')
+    stick.style.removeProperty('--stick-strength')
+  }
+
+  function releaseStick(): void {
+    const pointer = stickPointer
+    if (pointer === null) return
+    // 先清除归属，随后到达的 lostpointercapture / 旧手指事件不再驱动摇杆。
+    stickPointer = null
+    const surface = stickZone ?? stick
+    if (surface?.hasPointerCapture?.(pointer)) surface.releasePointerCapture(pointer)
+    setKnob(knob, 0, 0)
+    resetStickVisual()
+    emitMove(null)
   }
 
   function centerOf(element: HTMLElement): Point {
@@ -218,13 +235,7 @@ export function createTouchControlsAdapter(
   }
 
   function releaseAll(): void {
-    if (stickPointer !== null) {
-      stickPointer = null
-      stickOffset = { x: 0, y: 0 }
-      setKnob(knob, 0, 0)
-      resetStickVisual()
-      emitMove(null)
-    }
+    releaseStick()
     if (shotPointer !== null) {
       resetShot()
       emit(swingReleaseAction(false))
@@ -238,14 +249,20 @@ export function createTouchControlsAdapter(
   function updateStick(clientX: number, clientY: number): void {
     const dx = clientX - stickCenter.x
     const dy = clientY - stickCenter.y
-    stickOffset = clampStickOffset(dx, dy, stickRadius())
-    setKnob(knob, stickOffset.x, stickOffset.y)
-    emitMove(moveVectorFromStick(dx, dy, stickRadius(), getSide()))
-  }
-
-  function stickRadius(): number {
-    const width = stick?.getBoundingClientRect().width ?? 0
-    return options.stickRadius ?? (width > 0 ? width / 2 : DEFAULT_STICK_RADIUS)
+    const offset = clampStickOffset(dx, dy, stickRange)
+    // 拖过行程时底座跟随，手柄始终在指下；回拉只需跨过短行程，不必回到最初落指点。
+    stickCenter = { x: clientX - offset.x, y: clientY - offset.y }
+    const dir = moveVectorFromStick(offset.x, offset.y, stickRange, getSide())
+    if (stick) {
+      stick.style.left = `${stickCenter.x}px`
+      stick.style.top = `${stickCenter.y}px`
+      stick.style.right = 'auto'
+      stick.style.bottom = 'auto'
+      stick.style.setProperty('--stick-angle', `${Math.atan2(offset.x, -offset.y) * 180 / Math.PI}deg`)
+      stick.style.setProperty('--stick-strength', String(dir ? Math.hypot(dir.x, dir.z) : 0))
+    }
+    setKnob(knob, offset.x, offset.y)
+    emitMove(dir)
   }
 
   /** 把当前落点写进按住的球路键 dataset（ui.ts 据此显示落点读数与瞄准高亮）。 */
@@ -306,35 +323,28 @@ export function createTouchControlsAdapter(
     if (!listener || stickPointer !== null || isEditableTarget(event.target)) return
     event.preventDefault()
     stickPointer = event.pointerId
+    // 落指只建立零点；移动与速度来自之后的相对拖动，边缘落指也不跳动。
     stickCenter = { x: event.clientX, y: event.clientY }
-    if (stick && stickZone) {
-      const bounds = stickZone.getBoundingClientRect()
-      const radius = stickRadius()
-      const x = Math.max(bounds.left + radius, Math.min(bounds.right - radius, event.clientX))
-      const y = Math.max(bounds.top + radius, Math.min(bounds.bottom - radius, event.clientY))
-      stick.style.left = `${x}px`
-      stick.style.top = `${y}px`
-      stick.style.right = 'auto'
-      stick.style.bottom = 'auto'
-      stick.dataset.active = 'true'
-      capture(stickZone, event.pointerId)
-    }
+    const width = stick?.clientWidth ?? 0
+    const knobWidth = knob?.offsetWidth ?? 0
+    stickRange = options.stickRadius ?? (width > knobWidth ? (width - knobWidth) / 2 : DEFAULT_STICK_RADIUS)
+    if (stick) stick.dataset.active = 'true'
+    const surface = stickZone ?? stick
+    if (surface) capture(surface, event.pointerId)
     updateStick(event.clientX, event.clientY)
   }
 
   function onStickMove(event: PointerEvent): void {
     if (stickPointer !== event.pointerId) return
     event.preventDefault()
+    // 跟随底座依赖完整轨迹；浏览器合并采样时也按顺序走过，避免快速转向被算成直线。
+    for (const sample of event.getCoalescedEvents?.() ?? []) updateStick(sample.clientX, sample.clientY)
     updateStick(event.clientX, event.clientY)
   }
 
   function onStickUp(event: PointerEvent): void {
     if (stickPointer !== event.pointerId) return
-    stickPointer = null
-    stickOffset = { x: 0, y: 0 }
-    setKnob(knob, 0, 0)
-    resetStickVisual()
-    emitMove(null)
+    releaseStick()
   }
 
   /** 起跳键：轻点 = 起跳 / 发球，按住不放 = 蹬转（触屏不再单开一个蹬转键）。 */
@@ -373,7 +383,7 @@ export function createTouchControlsAdapter(
     actionPointers.delete(event.pointerId)
   }
 
-  function listen(element: HTMLElement, type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel', handler: (event: PointerEvent) => void): void {
+  function listen(element: HTMLElement, type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel' | 'lostpointercapture', handler: (event: PointerEvent) => void): void {
     element.addEventListener(type, handler as EventListener)
     cleanups.push(() => element.removeEventListener(type, handler as EventListener))
   }
@@ -385,6 +395,7 @@ export function createTouchControlsAdapter(
       listen(stickSurface, 'pointermove', onStickMove)
       listen(stickSurface, 'pointerup', onStickUp)
       listen(stickSurface, 'pointercancel', onStickUp)
+      listen(stickSurface, 'lostpointercapture', onStickUp)
     }
     for (const button of shotButtons) {
       listen(button, 'pointerdown', event => onShotDown(event, button))
@@ -405,8 +416,12 @@ export function createTouchControlsAdapter(
       listen(button, 'pointercancel', onActionUp)
     }
     window.addEventListener('blur', releaseAll)
+    window.addEventListener('resize', releaseAll)
+    window.addEventListener('orientationchange', releaseAll)
     document.addEventListener('visibilitychange', onVisibilityChange)
     cleanups.push(() => window.removeEventListener('blur', releaseAll))
+    cleanups.push(() => window.removeEventListener('resize', releaseAll))
+    cleanups.push(() => window.removeEventListener('orientationchange', releaseAll))
     cleanups.push(() => document.removeEventListener('visibilitychange', onVisibilityChange))
   }
 

@@ -1,4 +1,6 @@
 import { defineConfig } from 'vite'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 
 export default defineConfig({
   root: '.',
@@ -7,8 +9,17 @@ export default defineConfig({
     name: 'offline-game',
     apply: 'build',
     generateBundle(_, bundle) {
-      const files = ['index.html', ...Object.keys(bundle).filter(file => !file.endsWith('.map') && file !== 'index.html')]
-      const version = files.join('|').split('').reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) | 0, 0).toString(16)
+      const publicFiles = ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png']
+      const files = ['index.html', ...Object.keys(bundle).filter(file => !file.endsWith('.map') && file !== 'index.html'), ...publicFiles]
+      const hash = createHash('sha256')
+      for (const file of files) {
+        const output = bundle[file]
+        hash.update(file)
+        if (output?.type === 'chunk') hash.update(output.code)
+        else if (output) hash.update(output.source)
+        else hash.update(readFileSync(new URL(file === 'index.html' ? './index.html' : `./public/${file}`, import.meta.url)))
+      }
+      const version = hash.digest('hex').slice(0, 16)
       this.emitFile({
         type: 'asset', fileName: 'sw.js',
         source: `const CACHE = 'badminton-${version}';

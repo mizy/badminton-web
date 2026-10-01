@@ -114,6 +114,12 @@ const LOADOUT_NOTES: Record<SessionOptions['loadout'], string> = {
 
 type DialogKind = 'menu' | 'paused' | 'set_end' | 'match_end' | null
 
+/** Chromium installation event; retained until the menu's install button is pressed. */
+interface InstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
 export interface PlayUIOptions {
   /** 触屏设备：挂载虚拟摇杆 / 击球按钮，并把键盘提示替换为触屏说明。 */
   touch?: boolean
@@ -184,7 +190,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
       </footer>
       <p class="play-mobile-hint">小窗口建议横屏或全屏游玩；键盘操作不受影响。</p>
       <div class="play-touch" data-ui="touch" aria-label="触屏操作">
-        <div class="play-touch-stick-zone" data-touch="stick-zone" aria-label="移动摇杆区域"></div>
+        <div class="play-touch-stick-zone" data-touch="stick-zone" aria-label="左下区域滑动移动，推满冲刺"></div>
         <div class="play-touch-stick" data-touch="stick" role="group" aria-label="移动摇杆">
           <span class="play-touch-stick-ring" aria-hidden="true"></span>
           <i class="play-touch-stick-knob" data-touch="stick-knob" aria-hidden="true"></i>
@@ -204,6 +210,10 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     <div class="play-modal-layer" data-ui="layer">
       <section class="play-menu" data-ui="menu-dialog" role="dialog" aria-modal="true" aria-labelledby="play-menu-title" aria-describedby="play-menu-description" tabindex="-1">
         <header class="play-menu-masthead"><span>COURT / 01</span><span>羽毛球单打实验场</span><span>OFFLINE EDITION</span></header>
+        <div class="play-install" data-ui="install-panel" hidden>
+          <button type="button" class="play-button-quiet" data-ui="install">手机安装方法</button>
+          <p data-ui="install-note" role="status">安装到主屏幕 · 首次联网加载后可离线游玩</p>
+        </div>
         <div class="play-menu-grid">
           <div class="play-editorial">
             <p class="play-eyebrow">LESS NOISE. MORE RALLIES.</p>
@@ -219,11 +229,9 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
               <div class="play-field"><label for="play-style">02 / 陪练与对手风格</label><select id="play-style" aria-describedby="play-style-note"><option value="attacker">进攻型</option><option value="rally" selected>相持型</option><option value="placement">落点型</option></select></div>
             </div>
             <div class="play-option-notes"><p id="play-difficulty-note"></p><p id="play-style-note"></p></div>
-            <div class="play-field"><label for="play-persona">04 / 对手球手</label><select id="play-persona" aria-describedby="play-persona-note"></select></div>
+            <div class="play-field"><label for="play-persona">03 / 对手球手</label><select id="play-persona" aria-describedby="play-persona-note"></select></div>
             <div class="play-persona-note"><p id="play-persona-note"></p></div>
-            <div class="play-field"><label for="play-persona">04 / 对手球手</label><select id="play-persona" aria-describedby="play-persona-note"></select></div>
-            <div class="play-persona-note"><p id="play-persona-note"></p></div>
-            <div class="play-field"><label for="play-loadout">03 / 球拍配置</label><select id="play-loadout" aria-describedby="play-loadout-note play-equipment-disclaimer"><option value="balanced">均衡拍 / BALANCED</option><option value="power">头重拍 / POWER</option><option value="control">轻快拍 / CONTROL</option></select></div>
+            <div class="play-field"><label for="play-loadout">04 / 球拍配置</label><select id="play-loadout" aria-describedby="play-loadout-note play-equipment-disclaimer"><option value="balanced">均衡拍 / BALANCED</option><option value="power">头重拍 / POWER</option><option value="control">轻快拍 / CONTROL</option></select></div>
             <div class="play-equipment-note"><p id="play-loadout-note"></p><span data-ui="racket-spec"></span><p id="play-equipment-disclaimer">三种配置各有取舍，并非强弱等级。参数为简化模拟，不是精密器材标定。</p></div>
             <div class="play-mode-actions">
               <button type="button" class="play-mode-button play-button-primary" data-ui="start-training"><span>自由训练 <b aria-hidden="true">↗</b></span><small>无比分压力 · 五步练习 · 落点预测</small></button>
@@ -236,7 +244,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
           <p class="play-keyboard-note">球路键按下即击球，数字 1–6 同效；等待发球时仅选球。Shift 单独不挥拍。</p>
           <p class="play-keyboard-note">先到位再起跳，空中不能二次起跳，落地要恢复。推荐桌面 + 键盘 · 支持 Tab / Enter 操作菜单</p>
           <div class="play-touch-controls" data-ui="touch-controls">
-            <span>左摇杆移动（推到底冲刺）</span><span>右下击球盘：按住即蓄力，松手出拍</span><span>拖动距离定球路——推向对方：放网 / 吊球 / 高远；向回拉：挑球 / 平抽 / 杀球</span><span>拖动方向定左右落点，盘面会实时点亮当前球路</span><span>盘上方起跳键：轻点起跳 / 发球，按住不放是蹬转</span><span>等待发球时按住击球盘拖出球路再松手发球</span><span>右上角暂停键：声音 / 预测 / 录像都在暂停里</span>
+            <span>左下区域滑动移动：落指生成摇杆，轻推慢走、推满冲刺，拖远时底座跟随，松手回位</span><span>右侧六个球路键：短按直接打，按住蓄力、拖动瞄准，松手出拍；拖动不切换球路</span><span>起跳键：轻点起跳 / 发球，长按蹬转；等待发球时也可短按球路键发球</span><span>右上角暂停：声音 / 预测 / 录像都在暂停里</span>
           </div>
         </footer>
       </section>
@@ -389,6 +397,41 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
   let destroyed = false
   const events = new AbortController()
   const { signal } = events
+  const installPanel = ui('install-panel')
+  const installButton = ui<HTMLButtonElement>('install')
+  const installNote = ui('install-note')
+  const standalone = window.matchMedia('(display-mode: standalone)')
+  let installPrompt: InstallPromptEvent | null = null
+  installPanel.hidden = !window.isSecureContext || standalone.matches || ('standalone' in navigator && navigator.standalone === true)
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault()
+    installPrompt = event as InstallPromptEvent
+    installButton.textContent = '安装到主屏幕'
+  }, { signal })
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null
+    installPanel.hidden = true
+  }, { signal })
+  standalone.addEventListener('change', event => { if (event.matches) installPanel.hidden = true }, { signal })
+  installButton.addEventListener('click', async () => {
+    const prompt = installPrompt
+    if (!prompt) {
+      installNote.textContent = '请用系统浏览器打开。Android：浏览器菜单 → 安装应用 / 添加到主屏幕；iPhone：Safari → 共享 → 添加到主屏幕。'
+      return
+    }
+    installPrompt = null
+    installButton.disabled = true
+    try {
+      await prompt.prompt()
+      const choice = await prompt.userChoice
+      installNote.textContent = choice.outcome === 'accepted' ? '安装已确认，完成后可从主屏幕打开。' : '安装已取消，仍可继续游玩；也可从浏览器菜单安装。'
+    } catch {
+      installNote.textContent = '安装窗口未能打开，请从浏览器菜单选择安装应用或添加到主屏幕。'
+    } finally {
+      installButton.disabled = false
+      installButton.textContent = '手机安装方法'
+    }
+  }, { signal })
 
   // Avoid replacing text nodes every animation frame (including live-region announcements).
   function text(node: HTMLElement, value: string): void {

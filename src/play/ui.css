@@ -260,6 +260,9 @@
 .play-menu-masthead { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 0 34px; padding: 19px 0; border-bottom: 1px solid var(--play-line); font-size: 10px; letter-spacing: .11em; }
 .play-menu-masthead > :first-child { font-weight: 750; color: var(--play-lemon); font-size: 15px; letter-spacing: .08em; }
 .play-menu-masthead > :last-child { color: var(--play-muted); font-size: 9px; }
+.play-install { display: flex; align-items: center; gap: 12px; margin: 14px 34px 0; }
+.play-install button { flex: 0 0 auto; min-height: 44px; padding: 8px 12px; font-size: 12px; }
+.play-install p { color: var(--play-muted); font-size: 11px; line-height: 1.7; }
 .play-menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; padding: 35px 34px 30px; }
 .play-editorial { display: flex; flex-direction: column; align-items: flex-start; }
 .play-editorial > .play-eyebrow { color: var(--play-muted); }
@@ -343,6 +346,7 @@
   .play-modal-layer { padding: 18px; }
   .play-menu { max-width: 1010px; }
   .play-menu-masthead { margin: 0 27px; padding: 14px 0; }
+  .play-install { margin-inline: 27px; }
   .play-menu-grid { gap: 30px; padding: 24px 27px 23px; }
   .play-editorial h1 { margin: 18px 0; font-size: 47px; }
   .play-court-sketch { width: 150px; height: 86px; margin-top: 22px; }
@@ -397,6 +401,7 @@
   .play-modal-layer { padding: 12px; align-items: flex-start; }
   .play-menu { margin-block: auto; }
   .play-menu-masthead { margin: 0 19px; padding: 13px 0; }
+  .play-install { margin-inline: 19px; }
   .play-menu-masthead > :nth-child(2) { display: none; }
   .play-menu-grid { grid-template-columns: 1fr; gap: 23px; padding: 25px 19px; }
   .play-editorial h1 { font-size: 40px; margin: 12px 0 15px; }

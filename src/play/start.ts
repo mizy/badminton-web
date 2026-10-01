@@ -194,7 +194,7 @@ export function startGame(): () => void {
     objects.renderer.render(scene, objects.camera)
     if (recorder.isRecording()) {
       const text = (id: string) => document.getElementById(id)?.textContent ?? ''
-      recorder.updateHud({ scoreText: text('score-overlay'), setText: text('set-overlay'), rallyText: text('rally-overlay'), statusText: text('status'), controlsText: touchDevice ? '左摇杆移动 · 按住右半屏瞄准 · 松手出拍' : 'WASD 移动 · J 挥拍 · 1–6 球路' })
+      recorder.updateHud({ scoreText: text('score-overlay'), setText: text('set-overlay'), rallyText: text('rally-overlay'), statusText: text('status'), controlsText: touchDevice ? '左摇杆移动 · 短按球路键直接打 · 按住拖动瞄准' : 'WASD 移动 · J 挥拍 · 1–6 球路' })
       recorder.composite(objects.renderer.domElement)
     }
   }
