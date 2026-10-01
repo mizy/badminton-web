@@ -11,6 +11,7 @@ import {
 import type { PlayerState } from '../character/types'
 import type { ShotType } from '../character/shotSynthesis'
 import { canPlayShot, SHOT_ORDER } from '../character/stroke'
+import { isPlayableRacketContact } from '../character/contact'
 import type { AIConfig, AIStyle, InterceptionPrediction, TacticalDecision } from './types'
 
 const COURT = { halfLength: 6.7, halfWidth: 2.59, netGap: 0.1, netHeight: 1.524 } as const
@@ -48,7 +49,7 @@ export function getLegalShots(player: PlayerState, shuttle: ShuttlecockState): S
     playerSide: player.side,
     racketFaceDeg: 0,
   })
-  if (!pose.reachable) return []
+  if (!isPlayableRacketContact(pose, contact)) return []
 
   return SHOT_ORDER.filter(shot => shot !== 'SMASH' || contact[1] >= SMASH_MIN_CONTACT_HEIGHT)
     .filter(shot => canPlayShot(shot, contact, player.pos[1]))

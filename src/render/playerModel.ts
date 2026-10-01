@@ -29,6 +29,13 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
   model.name = 'player-model'
   rig.group.add(model)
   model.updateWorldMatrix(true, true)
+  // Some inverse-bind matrices are captured before our metre normalization.
+  // Bind again only after the model has its gameplay parent, so later world
+  // movement cancels cleanly in attached-skin space. glTF rest poses are stable.
+  model.traverse(node => {
+    if (node instanceof THREE.SkinnedMesh) node.bind(node.skeleton)
+  })
+  model.updateWorldMatrix(true, true)
   const hips = restJoint(bones.hips!, rig.group)
   const chest = restJoint(bones.spine2!, rig.group)
   const head = bones.head ? restJoint(bones.head, rig.group) : null

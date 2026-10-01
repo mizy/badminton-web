@@ -132,6 +132,17 @@ describe('low-poly player rig', () => {
     })
   }
 
+  it('keeps the racket on the calibrated strings for a late grace-window contact', () => {
+    const mesh = makeMesh()
+    const player = createPlayer(0)
+    player.swing.shot = 'DRIVE'
+    setContact(player)
+    player.swing.elapsed = 0.2
+    syncPlayerMotion(mesh, player, 1)
+
+    near(point(mesh, 'racket-string-center'), new THREE.Vector3(...player.contactPose!.stringCenter))
+  })
+
   it.each(['loading', 'airborne', 'landing'] as const)('keeps contact aligned during %s and scissor rotation', phase => {
     const mesh = makeMesh()
     const player = createPlayer(1)

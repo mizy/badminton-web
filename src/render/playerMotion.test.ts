@@ -60,4 +60,30 @@ describe('independent player motion', () => {
     }
     expectLengths(rig)
   })
+
+  it('mirrors visible hip and shoulder side-on posture across six-point corners and grips', () => {
+    const pose = (point: NonNullable<ReturnType<typeof createPlayer>['movement']['footworkPoint']>, grip: 'forehand' | 'backhand') => {
+      const rig = createPlayerMotion(createPlayerSkeleton())
+      const player = createPlayer(0)
+      player.movement.footworkPoint = point
+      player.movement.footwork = point.startsWith('front') ? 'lunge' : point.startsWith('back') ? 'cross' : 'chasse'
+      player.grip = grip
+      player.swing = { ...player.swing, phase: 'preparing', elapsed: 0.08 }
+      updatePlayerMotion(rig, player, 0)
+      return { hips: rig.hips.rotation.y, chest: rig.chest.rotation.y }
+    }
+
+    const frontRight = pose('front-right', 'forehand')
+    const frontLeft = pose('front-left', 'backhand')
+    const backRight = pose('back-right', 'forehand')
+
+    expect(frontRight.hips).toBeLessThan(-0.35)
+    expect(frontLeft.hips).toBeGreaterThan(0.35)
+    expect(backRight.hips).toBeLessThan(frontRight.hips)
+    expect(frontRight.chest - frontRight.hips).toBeGreaterThan(0.1)
+    expect(frontLeft.chest - frontLeft.hips).toBeLessThan(-0.1)
+    for (const angle of [frontRight.hips, frontRight.chest, frontLeft.hips, frontLeft.chest, backRight.hips, backRight.chest]) {
+      expect(Math.abs(angle)).toBeLessThan(Math.PI / 2)
+    }
+  })
 })

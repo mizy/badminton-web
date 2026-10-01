@@ -6,6 +6,8 @@ import { beginSwing, releaseSwing } from '../character/stroke'
 import { SERVE_BY_SHOT, solveServe } from '../character/serve'
 import { beginBodyAction } from '../character/body'
 import { createPlayer } from './playerFactory'
+import { resolveContactGrip } from '../character/contact'
+import { getShuttleCorkCenter } from '../character/racketKinematics'
 
 export type PlayerGameAction = InputAction & { playerIndex: 0 | 1 }
 
@@ -48,8 +50,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (state.phase !== 'playing' && state.phase !== 'idle') return state
       const selected = updatePlayer(state, action.playerIndex, p => {
         if (p.swing.phase !== 'ready') return p
+        const contact = state.shuttle ? getShuttleCorkCenter(state.shuttle.pos, state.shuttle.vel) : null
         return {
           ...p,
+          grip: contact ? resolveContactGrip(p.pos, p.side, contact) : p.grip,
           selectedShot: action.shot ?? p.selectedShot,
           aim: action.aim ?? p.aim,
           serveSelection: state.phase === 'idle' && action.shot

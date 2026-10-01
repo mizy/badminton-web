@@ -8,6 +8,7 @@ import { getPersona } from '../ai/personas'
 import { Recorder } from '../recording/recorder'
 import { createGameCamera } from '../render/camera'
 import { createCourt } from '../render/court'
+import type { ArenaAnimation } from '../render/arenaAnimation'
 import { connectPlayHotkeys } from './hotkeys'
 import { stepFrame, syncFrameView, type PlaySceneObjects } from './frame'
 import { createGroundMarker, createPlayerMesh } from '../render/playerMesh'
@@ -16,7 +17,10 @@ import { createTrailSystem } from '../render/trajectory'
 import { createViewState } from './viewState'
 import { createPlayUI, type SessionOptions } from './ui'
 
-interface PlayStartObjects extends PlaySceneObjects { renderer: THREE.WebGLRenderer }
+interface PlayStartObjects extends PlaySceneObjects {
+  arena: ArenaAnimation
+  renderer: THREE.WebGLRenderer
+}
 
 export function startGame(): () => void {
   const scene = new THREE.Scene()
@@ -183,12 +187,18 @@ export function startGame(): () => void {
       if (state.lastPoint && state.lastPoint !== previous.lastPoint) {
         playTone(state.lastPoint.winner === 0 ? 660 : 220, 0.23)
         shake(state.lastPoint.winner === 0 ? 0.7 : 0.5)
+        objects.arena.reactToPoint({
+          reason: state.lastPoint.reason,
+          rallyHits: previous.rallyHits,
+          winnerSide: state.players[state.lastPoint.winner]?.side ?? state.lastPoint.winner,
+        })
       }
     } else {
       view.lastTime = now
       view.accumulator = 0
     }
     syncFrameView(now, state, view, objects, prediction)
+    objects.arena.update(now / 1000, active ? state.rallyHits : 0)
     ui.update(state)
     applyShake(now)
     objects.renderer.render(scene, objects.camera)
@@ -253,7 +263,7 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   renderer.domElement.style.outline = 'none'
   document.body.appendChild(renderer.domElement)
   const camera = createGameCamera()
-  createCourt(scene)
+  const arena = createCourt(scene)
   scene.add(new THREE.HemisphereLight(0xdff5ff, 0x18342e, 1.35))
   const light = new THREE.DirectionalLight(0xfff7e8, 2.45)
   light.position.set(-5, 12, 5)
@@ -276,9 +286,14 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   const shuttleGroup = createShuttlecockMesh()
   shuttleGroup.scale.setScalar(1.65)
   // 队服配色：主场电光蓝+青霓虹、客场猩红+琥珀，和绿色球场拉开对比。
-  const modelUrl = new URLSearchParams(window.location.search).get('model') ?? `${import.meta.env.BASE_URL}models/xbot.glb`
-  const homeMesh = createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '你', { glowScale: 0, labelScale: 0.5, modelUrl })
-  const awayMesh = createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, 'AI', { glowScale: 0, labelScale: 0.45, modelUrl })
+  const modelParams = new URLSearchParams(window.location.search)
+  const modelOverride = modelParams.get('model')
+  const modelUrl = modelOverride ?? `${import.meta.env.BASE_URL}models/kenney-player.glb`
+  const modelTextureUrl = modelOverride === null
+    ? `${import.meta.env.BASE_URL}models/kenney-player.png`
+    : modelParams.get('texture') ?? undefined
+  const homeMesh = createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '你', { glowScale: 0, labelScale: 0.5, modelUrl, modelTextureUrl })
+  const awayMesh = createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, 'AI', { glowScale: 0, labelScale: 0.45, modelUrl, modelTextureUrl })
   const homeGroundMarker = createGroundMarker(0x5ce1ff)
   const awayGroundMarker = createGroundMarker(0xffa14f)
   const marker = (color: number, inner: number, outer: number, opacity: number) => {
@@ -293,6 +308,6 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   const serviceMarker = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 2.5), new THREE.MeshBasicMaterial({ color: 0xe7eb80, transparent: true, opacity: 0.12, depthWrite: false }))
   serviceMarker.rotation.x = -Math.PI / 2
   scene.add(shuttleGroup, homeMesh, awayMesh, homeGroundMarker, awayGroundMarker, serviceMarker)
-  return { renderer, camera, scene, shuttleGroup, homeMesh, awayMesh, homeGroundMarker, awayGroundMarker,
+  return { renderer, arena, camera, scene, shuttleGroup, homeMesh, awayMesh, homeGroundMarker, awayGroundMarker,
     shuttleShadow, landingMarker, targetMarker, serviceMarker, trail: createTrailSystem(scene), predictionAt: 0 }
 }

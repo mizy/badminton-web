@@ -17,7 +17,37 @@ async function xbot() {
   return new GLTFLoader().parseAsync(data, '')
 }
 
+async function kenneyPlayer() {
+  const data = readFileSync(new URL('../../public/models/kenney-player.glb', import.meta.url))
+  const { scene: model } = await new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), '')
+  return { bytes: data.byteLength, model }
+}
+
 describe('glTF player binding', () => {
+  it('binds the compact default Kenney skin to the gameplay skeleton', async () => {
+    const rig = createPlayerSkeleton()
+    attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
+    const motion = createPlayerMotion(rig)
+    const { bytes, model } = await kenneyPlayer()
+    const bones = findHumanoidBones(model)
+
+    expect(bytes).toBeLessThan(450_000)
+    expect(bones.spine2?.name).toBe('UpperChest')
+    expect(bones.rightHand?.name).toBe('RightHand')
+    const updateModel = bindHumanoidModel(rig, model)
+    const player = createPlayer(0)
+    player.movement.footwork = 'lunge'
+    player.movement.footworkPoint = 'front-right'
+    player.movement.currentVel = { x: 1.2, z: 1.2 }
+    updatePlayerMotion(motion, player, 0.2)
+    updateModel(player, 0.2)
+
+    expect(model.name).toBe('player-model')
+    expect(new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).y).toBeGreaterThan(1.4)
+    expect(world(bones.rightFoot!).toArray().every(Number.isFinite)).toBe(true)
+    expect(world(model.getObjectByName('racket-string-center')!).distanceTo(world(bones.rightHand!))).toBeCloseTo(0.46, 5)
+  })
+
   it('retargets the real Xbot skin, preserves bind lengths, and keeps equipment in metres', async () => {
     const rig = createPlayerSkeleton()
     attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
@@ -44,6 +74,7 @@ describe('glTF player binding', () => {
       expect(Number.isFinite(world(bones.leftFoot!).y)).toBe(true)
     }
     const feet = [world(bones.rightFoot!), world(bones.leftFoot!)]
+    expect(new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).y).toBeGreaterThan(1.4)
     for (let frame = 0; frame < 5; frame++) {
       updatePlayerMotion(motion, player, 59 / 60)
       updateModel(player, 59 / 60)

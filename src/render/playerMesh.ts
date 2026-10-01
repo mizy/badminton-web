@@ -11,8 +11,10 @@ import type { Hdm05Motion } from './hdm05BadmintonMocap'
 export type { PlayerMeshColors } from './playerAppearance'
 
 export interface PlayerMeshOptions extends PlayerAppearanceOptions {
-  /** Rigged glTF with Mixamo bones and +Z bind-pose forward. */
+  /** Rigged glTF/GLB or FBX with supported humanoid bones and +Z bind-pose forward. */
   modelUrl?: string
+  /** Optional atlas for models that ship their skin separately. */
+  modelTextureUrl?: string
 }
 
 interface PlayerView {
@@ -59,10 +61,10 @@ export function createPlayerMesh(colors?: PlayerMeshColors, label = 'P', options
   players.set(skeleton.group, view)
   const modelUrl = options.modelUrl
   if (modelUrl) {
-    void import('three/examples/jsm/loaders/GLTFLoader.js').then(({ GLTFLoader }) => new GLTFLoader().load(modelUrl, gltf => {
+    void loadPlayerModel(modelUrl, options.modelTextureUrl, colors?.body).then(({ scene: model, animations }) => {
       try {
-        view.model = bindHumanoidModel(skeleton, gltf.scene, gltf.animations)
-        gltf.scene.traverse(node => {
+        view.model = bindHumanoidModel(skeleton, model, animations)
+        model.traverse(node => {
           if (!(node instanceof THREE.Mesh) || !colors) return
           for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
             if (material instanceof THREE.MeshStandardMaterial && material.name.includes('Beta_')) {
@@ -73,8 +75,7 @@ export function createPlayerMesh(colors?: PlayerMeshColors, label = 'P', options
         appearance.forEach(node => { node.visible = false })
         view.model()
       } catch (error) { console.warn('球员模型无法绑定，保留默认外观', error) }
-    }, undefined, error => { console.warn('球员模型加载失败，保留默认外观', error) }))
-      .catch(error => { console.warn('球员模型加载器失败，保留默认外观', error) })
+    }).catch(error => { console.warn('球员模型加载失败，保留默认外观', error) })
   }
   return skeleton.group
 }
@@ -104,4 +105,72 @@ export function updatePlayerRacketPose(group: THREE.Group, swing01: number): voi
   if (!view) return
   updateRacketMotion(view.motion, swing01)
   view.model?.()
+}
+
+interface LoadedPlayerModel {
+  animations: THREE.AnimationClip[]
+  scene: THREE.Group
+}
+
+async function loadPlayerModel(modelUrl: string, textureUrl?: string, bodyColor?: number): Promise<LoadedPlayerModel> {
+  const isFbx = /\.fbx(?:$|[?#])/i.test(modelUrl)
+  let loaded: LoadedPlayerModel
+  if (isFbx) {
+    const { FBXLoader } = await import('three/examples/jsm/loaders/FBXLoader.js')
+    const scene = await new FBXLoader().loadAsync(modelUrl)
+    loaded = { scene, animations: scene.animations }
+  } else {
+    const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
+    loaded = await new GLTFLoader().loadAsync(modelUrl)
+  }
+  if (textureUrl) await applyModelTexture(loaded.scene, textureUrl, bodyColor)
+  return loaded
+}
+
+async function applyModelTexture(model: THREE.Group, textureUrl: string, bodyColor?: number): Promise<void> {
+  const source = await new THREE.TextureLoader().loadAsync(textureUrl)
+  source.colorSpace = THREE.SRGBColorSpace
+  const texture = bodyColor === undefined ? source : createTeamTexture(source, bodyColor)
+  if (texture !== source) source.dispose()
+  model.traverse(node => {
+    if (!(node instanceof THREE.Mesh)) return
+    for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+      if (!(material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhongMaterial)) continue
+      material.map = texture
+      material.color.set(0xc8c8c8)
+      // Kenney's FBX exports TransparencyFactor=1 although the atlas itself is opaque.
+      material.opacity = 1
+      material.transparent = false
+      material.needsUpdate = true
+    }
+  })
+}
+
+/** Re-hues only the saturated red kit pixels; skin, hair and facial details remain unchanged. */
+function createTeamTexture(source: THREE.Texture, bodyColor: number): THREE.CanvasTexture {
+  const image = source.image as HTMLImageElement
+  const canvas = document.createElement('canvas')
+  canvas.width = image.naturalWidth || image.width
+  canvas.height = image.naturalHeight || image.height
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) throw new Error('无法创建球员队服贴图')
+  context.drawImage(image, 0, 0)
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
+  const target = [(bodyColor >> 16) & 255, (bodyColor >> 8) & 255, bodyColor & 255]
+  for (let offset = 0; offset < pixels.data.length; offset += 4) {
+    const red = pixels.data[offset]
+    const green = pixels.data[offset + 1]
+    const blue = pixels.data[offset + 2]
+    if (red <= 150 || green >= 125 || red <= green * 1.35 || red <= blue * 1.25) continue
+    const shade = 0.42 + 0.28 * red / 245
+    pixels.data[offset] = Math.min(255, target[0] * shade)
+    pixels.data[offset + 1] = Math.min(255, target[1] * shade)
+    pixels.data[offset + 2] = Math.min(255, target[2] * shade)
+  }
+  context.putImageData(pixels, 0, 0)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.flipY = source.flipY
+  texture.name = 'player-team-texture'
+  return texture
 }

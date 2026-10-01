@@ -11,13 +11,13 @@ export type BoneName = typeof BONE_KEYS[number]
 export type HumanoidBones = Partial<Record<BoneName, THREE.Object3D>>
 
 const NODE_TO_BONE: Record<string, BoneName> = {
-  Head: 'head', Hips: 'hips', LeftArm: 'leftArm', LeftFoot: 'leftFoot',
+  Chest: 'spine1', Head: 'head', Hips: 'hips', LeftArm: 'leftArm', LeftFoot: 'leftFoot',
   LeftForeArm: 'leftForeArm', LeftHand: 'leftHand', LeftLeg: 'leftLeg',
   LeftShoulder: 'leftShoulder', LeftToeBase: 'leftToe', LeftUpLeg: 'leftUpLeg',
   Neck: 'neck', RightArm: 'rightArm', RightFoot: 'rightFoot', RightForeArm: 'rightForeArm',
   RightHand: 'rightHand', RightLeg: 'rightLeg', RightShoulder: 'rightShoulder',
-  RightToeBase: 'rightToe', RightUpLeg: 'rightUpLeg', Spine: 'spine',
-  Spine1: 'spine1', Spine2: 'spine2',
+  RightToeBase: 'rightToe', RightToes: 'rightToe', RightUpLeg: 'rightUpLeg', Spine: 'spine',
+  Spine1: 'spine1', Spine2: 'spine2', UpperChest: 'spine2', LeftToes: 'leftToe',
 }
 
 export function findHumanoidBones(root: THREE.Object3D): HumanoidBones {

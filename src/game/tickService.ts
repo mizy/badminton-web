@@ -8,9 +8,9 @@ import { advanceBody, beginBodyAction } from '../character/body'
 import { updateStamina } from './stamina'
 import { decideTactical, getLegalShots } from '../ai/tactical'
 import { checkPoint } from './match'
-import { evaluateContact, getTechniqueRacketFaceDeg } from '../character/contact'
+import { evaluateContact, getTechniqueRacketFaceDeg, resolveContactGrip } from '../character/contact'
 import { createReachableRacketPose, getShuttleCorkCenter } from '../character/racketKinematics'
-import { advanceSwing, beginSwing, canPlayShot, getShotTarget, releaseSwing, RACKETS, SHOT_NAMES } from '../character/stroke'
+import { advanceSwing, beginSwing, canPlayShot, getShotTarget, isContactWindowOpen, releaseSwing, RACKETS, SHOT_NAMES } from '../character/stroke'
 
 export interface TickAIConfigs {
   home?: AIConfig
@@ -105,13 +105,12 @@ function contactPlayers(state: GameState): GameState {
   if (state.netTouched) return state
   for (const i of [0, 1] as const) {
     const player = state.players[i]
-    if (!player || state.lastHitter === i || player.swing.phase !== 'swinging' || !onOwnSide(player, shuttle)) continue
+    if (!player || player.contactPose || state.lastHitter === i || !isContactWindowOpen(player.swing) || !onOwnSide(player, shuttle)) continue
     const technique = player.swing.shot
     if (!getLegalShots(player, shuttle).includes(technique)) continue
     const face = getTechniqueRacketFaceDeg(technique)
     const cork = getShuttleCorkCenter(shuttle.pos, shuttle.vel)
     const racket = createReachableRacketPose({ desiredContact: cork, playerPos: player.pos, playerSide: player.side, racketFaceDeg: face })
-    if (!racket.reachable) continue
     const spec = RACKETS[player.loadout]
     const offset = (player.swing.elapsed - 0.07) * 1000
     const readiness = player.movement.readiness
@@ -121,11 +120,11 @@ function contactPlayers(state: GameState): GameState {
       power: Math.min(1, (0.68 + readiness * 0.25 + player.swing.charge01 * 0.3) * fatigue * spec.power), racket, racketFaceDeg: face,
       shuttle, swingOffsetMs: offset / spec.sweetSpot, target, targetZ: target[2], slice: player.swing.slice })
     if (result.outcome !== 'hit') continue
-    const forward = player.side === 0 ? 1 : -1
     const quality = result.quality * (0.7 + readiness * 0.3) * fatigue
     const feedback = result.netClearance !== null && result.netClearance < 0 ? '下网风险：触球过低或位置太靠后'
       : result.targetError > 0.8 ? '回球偏短：到位、体力或力量不足'
-      : Math.abs(offset) > 65 ? '击球偏早：等球进入拍前'
+      : offset < -65 ? '击球偏早：等球进入拍前'
+      : offset > 65 ? '击球偏晚：更早启动挥拍'
       : readiness < 0.55 ? '被动回球：先制动再出拍'
       : '干净触球'
     const bodyShot = technique === 'SMASH' && player.body.phase === 'airborne'
@@ -133,7 +132,7 @@ function contactPlayers(state: GameState): GameState {
     const shotName = player.swing.slice ? `${technique === 'CLEAR' ? '滑板' : '切削'}${bodyShot}` : bodyShot
     const contacted: PlayerState = {
       ...player, contactPose: racket, contactQuality: quality, feedback: `${shotName} · ${feedback}`,
-      grip: (cork[2] - player.pos[2]) * forward < -0.25 ? 'backhand' : 'forehand',
+      grip: resolveContactGrip(player.pos, player.side, cork),
       stamina: Math.max(0, player.stamina - (technique === 'SMASH' ? 4 : 1.5)), wantsToSwing: false,
       swing: { ...player.swing, phase: 'recovery' },
       racket: { ...player.racket, normal: racket.faceNormal, pos: racket.stringCenter, vel: result.outgoingVel },

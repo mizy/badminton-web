@@ -14,6 +14,8 @@ export const RACKETS: Record<Loadout, { name: string; balance: number; tension: 
 
 /** 蓄力窗口：按住 CHARGE.min 起算，CHARGE.max 蓄满封顶（秒）。 */
 export const CHARGE = { min: 0.05, max: 0.4 } as const
+/** The visual strike ends at 0.16s; a short follow-through grace catches near-edge timing. */
+export const CONTACT_WINDOW_SECONDS = 0.22
 const CHARGE_DEPTH_SPAN = 1.2
 
 export function charge01(heldSeconds: number): number {
@@ -58,13 +60,19 @@ export function advanceSwing(player: PlayerState, dt: number): PlayerState {
   const phase = next.swing.phase === 'preparing' ? 'preparing'
     : elapsed >= racket.recovery ? 'ready'
     : elapsed >= 0.16 || next.swing.phase === 'recovery' ? 'recovery' : 'swinging'
-  const missed = phase === 'recovery' && next.swing.phase !== 'recovery'
+  const missed = next.contactPose === null && next.swing.elapsed < CONTACT_WINDOW_SECONDS
+    && elapsed >= CONTACT_WINDOW_SECONDS
   return {
     ...next,
     wantsToSwing: phase === 'preparing' || phase === 'swinging',
     feedback: missed ? '挥空：提前到位，在球到拍前时挥拍' : next.feedback,
     swing: { ...next.swing, elapsed, phase },
   }
+}
+
+export function isContactWindowOpen(swing: PlayerState['swing']): boolean {
+  return (swing.phase === 'swinging' || swing.phase === 'recovery')
+    && swing.elapsed <= CONTACT_WINDOW_SECONDS
 }
 
 export function canPlayShot(shot: ShotType, pos: Vec3, playerHeight = 0): boolean {

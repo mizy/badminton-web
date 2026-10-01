@@ -1,6 +1,7 @@
 /** 室内羽毛球馆 — 按 BWF 标准绘制场地、球网及轻量赛事环境 */
 
 import * as THREE from 'three'
+import { createArenaAnimation, type ArenaAnimation } from './arenaAnimation'
 
 const COURT_LENGTH = 13.4
 const COURT_WIDTH = 6.1
@@ -22,26 +23,17 @@ const NET_SEGMENTS = 48
 
 const APRON_LENGTH = 21.4
 const APRON_WIDTH = 11.4
-const STAND_FRONT = 6.15
-const STAND_DEPTH = 0.72
-const STAND_HEIGHT = 0.33
-const STAND_ROWS = 4
-const CROWD_COLUMNS = 17
-
-const CROWD_COLORS = [0x23485e, 0xa4463f, 0xd19a47, 0x3f6b56, 0x6b527d, 0xd8d2bf]
-const SKIN_COLORS = [0xf0c7a4, 0xd8a178, 0xa86f4d, 0x70462f]
-
 /** @entry 创建实际比赛与调试场景共用的完整室内球馆。 */
-export function createCourt(scene: THREE.Scene): void {
+export function createCourt(scene: THREE.Scene): ArenaAnimation {
   addHallFloor(scene)
   addCourtApron(scene)
   addFloor(scene)
   addCourtLines(scene)
   addNet(scene)
   addArenaBackdrop(scene)
-  addSpectatorStands(scene)
-  addOfficials(scene)
+  const arena = createArenaAnimation(scene)
   addCeilingStructure(scene)
+  return arena
 }
 
 /**
@@ -194,47 +186,6 @@ function addArenaBackdrop(scene: THREE.Scene): void {
   scene.add(group)
 }
 
-function addSpectatorStands(scene: THREE.Scene): void {
-  const group = new THREE.Group()
-  group.name = 'spectator-stands'
-  const standMaterial = new THREE.MeshStandardMaterial({ color: 0x1b292d, roughness: 0.9 })
-  const railMaterial = new THREE.MeshStandardMaterial({ color: 0x53696b, metalness: 0.35, roughness: 0.48 })
-  const stepGeometry = new THREE.BoxGeometry(20.5, 1, STAND_DEPTH)
-
-  for (const side of [-1, 1]) {
-    for (let row = 0; row < STAND_ROWS; row += 1) {
-      const height = 0.25 + row * STAND_HEIGHT
-      const step = new THREE.Mesh(stepGeometry, standMaterial)
-      step.scale.y = height
-      step.position.set(0, height / 2, side * (STAND_FRONT + row * STAND_DEPTH))
-      step.receiveShadow = true
-      group.add(step)
-    }
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(20.8, 0.06, 0.06), railMaterial)
-    rail.position.set(0, 0.72, side * (STAND_FRONT - 0.42))
-    group.add(rail)
-  }
-
-  addCrowdInstances(group)
-  scene.add(group)
-}
-
-function addOfficials(scene: THREE.Scene): void {
-  const group = new THREE.Group()
-  group.name = 'match-officials'
-  group.add(createUmpireChair())
-
-  const lineJudge = createLineJudge()
-  const leftJudge = lineJudge.clone()
-  leftJudge.position.set(-7.65, 0, -4.25)
-  leftJudge.rotation.y = -Math.PI / 2
-  const rightJudge = lineJudge.clone()
-  rightJudge.position.set(7.65, 0, -4.25)
-  rightJudge.rotation.y = Math.PI / 2
-  group.add(leftJudge, rightJudge)
-  scene.add(group)
-}
-
 function addCeilingStructure(scene: THREE.Scene): void {
   const group = new THREE.Group()
   group.name = 'arena-roofline'
@@ -267,103 +218,6 @@ function addCeilingStructure(scene: THREE.Scene): void {
     group.add(panel)
   }
   scene.add(group)
-}
-
-function addCrowdInstances(group: THREE.Group): void {
-  const count = STAND_ROWS * CROWD_COLUMNS * 2
-  const bodies = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(0.34, 0.52, 0.24),
-    new THREE.MeshStandardMaterial({ roughness: 0.88 }),
-    count,
-  )
-  const heads = new THREE.InstancedMesh(
-    new THREE.SphereGeometry(0.14, 8, 6),
-    new THREE.MeshStandardMaterial({ roughness: 0.92 }),
-    count,
-  )
-  bodies.name = 'crowd-bodies'
-  heads.name = 'crowd-heads'
-  const dummy = new THREE.Object3D()
-  let index = 0
-
-  for (const side of [-1, 1]) {
-    for (let row = 0; row < STAND_ROWS; row += 1) {
-      const platformHeight = 0.25 + row * STAND_HEIGHT
-      for (let column = 0; column < CROWD_COLUMNS; column += 1) {
-        const variation = ((column * 7 + row * 3 + index) % 5) * 0.018
-        const x = -9 + column * (18 / (CROWD_COLUMNS - 1)) + (row % 2 ? 0.12 : -0.08)
-        const z = side * (STAND_FRONT + row * STAND_DEPTH - 0.04)
-        dummy.position.set(x, platformHeight + 0.42 + variation, z)
-        dummy.rotation.set(0, side === 1 ? Math.PI : 0, 0)
-        dummy.scale.set(0.9 + variation, 0.9 + variation, 1)
-        dummy.updateMatrix()
-        bodies.setMatrixAt(index, dummy.matrix)
-        bodies.setColorAt(index, new THREE.Color(CROWD_COLORS[(column + row * 2) % CROWD_COLORS.length]))
-
-        dummy.position.y = platformHeight + 0.82 + variation * 1.5
-        dummy.scale.setScalar(0.92 + variation)
-        dummy.updateMatrix()
-        heads.setMatrixAt(index, dummy.matrix)
-        heads.setColorAt(index, new THREE.Color(SKIN_COLORS[(column * 3 + row) % SKIN_COLORS.length]))
-        index += 1
-      }
-    }
-  }
-  bodies.instanceMatrix.needsUpdate = true
-  heads.instanceMatrix.needsUpdate = true
-  if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true
-  if (heads.instanceColor) heads.instanceColor.needsUpdate = true
-  bodies.receiveShadow = true
-  heads.receiveShadow = true
-  group.add(bodies, heads)
-}
-
-function createUmpireChair(): THREE.Group {
-  const chair = new THREE.Group()
-  chair.name = 'umpire-chair'
-  chair.position.set(0, 0, -3.78)
-  const frame = new THREE.MeshStandardMaterial({ color: 0xd9dfd8, metalness: 0.55, roughness: 0.36 })
-  const seat = new THREE.MeshStandardMaterial({ color: 0x273f43, roughness: 0.75 })
-  const uniform = new THREE.MeshStandardMaterial({ color: 0x202d38, roughness: 0.8 })
-  const skin = new THREE.MeshStandardMaterial({ color: 0xc98f68, roughness: 0.9 })
-
-  for (const x of [-0.31, 0.31]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.55, 0.05), frame)
-    rail.position.set(x, 0.78, 0.16)
-    chair.add(rail)
-  }
-  for (let step = 0; step < 5; step += 1) {
-    const rung = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.045, 0.15), frame)
-    rung.position.set(0, 0.24 + step * 0.27, 0.16)
-    chair.add(rung)
-  }
-  const platform = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.08, 0.72), frame)
-  platform.position.set(0, 1.48, 0)
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.62, 0.08), seat)
-  back.position.set(0, 1.8, -0.32)
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.54, 0.25), uniform)
-  body.position.set(0, 1.86, -0.02)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), skin)
-  head.position.set(0, 2.25, -0.01)
-  chair.add(platform, back, body, head)
-  return chair
-}
-
-function createLineJudge(): THREE.Group {
-  const judge = new THREE.Group()
-  const chairMaterial = new THREE.MeshStandardMaterial({ color: 0x405257, metalness: 0.2, roughness: 0.64 })
-  const uniform = new THREE.MeshStandardMaterial({ color: 0x283744, roughness: 0.82 })
-  const skin = new THREE.MeshStandardMaterial({ color: 0xd6a078, roughness: 0.9 })
-  const chair = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.08, 0.58), chairMaterial)
-  chair.position.y = 0.42
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.58, 0.07), chairMaterial)
-  back.position.set(0, 0.7, -0.27)
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.48, 0.24), uniform)
-  body.position.set(0, 0.74, -0.02)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 9, 7), skin)
-  head.position.set(0, 1.1, -0.01)
-  judge.add(chair, back, body, head)
-  return judge
 }
 
 function createArenaBannerTexture(): THREE.CanvasTexture {

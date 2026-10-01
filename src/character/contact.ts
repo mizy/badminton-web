@@ -74,6 +74,9 @@ const TIMING = {
   missMs: 270,
 } as const
 
+/** 5cm remains the sweet spot; the outer 3cm represents a weak racket-frame contact. */
+export const MAX_PLAYABLE_CONTACT_ERROR = 0.08
+
 const TECHNIQUES: Record<ShotType, TechniqueProfile> = {
   SMASH: {
     baseSpeed: 42, elevationDeg: -8, faceDeg: -18,
@@ -118,13 +121,13 @@ export function evaluateContact(input: ContactInput): ContactResult {
   const quality = clamp01(timingScore * sweetSpot * techniqueFit * faceScore)
   const target = resolveTarget(input, technique)
 
-  if (!input.racket.reachable) {
+  if (!input.racket.reachable && !isPlayableRacketContact(input.racket, shuttleCorkCenter)) {
     return missResult(input, { contactError, idealPoint, shuttleCorkCenter, sweetSpot, target, technique, techniqueFit, timing, timingScore }, 'unreachable')
   }
   if (timing === 'miss') {
     return missResult(input, { contactError, idealPoint, shuttleCorkCenter, sweetSpot, target, technique, techniqueFit, timing, timingScore }, 'timing')
   }
-  if (contactError > MAX_CONTACT_ERROR) {
+  if (contactError > MAX_PLAYABLE_CONTACT_ERROR) {
     return missResult(input, { contactError, idealPoint, shuttleCorkCenter, sweetSpot, target, technique, techniqueFit, timing, timingScore }, 'racket contact')
   }
   if (techniqueFit < 0.18) {
@@ -177,6 +180,15 @@ export function idealContactPoint(playerPos: Vec3, playerSide: 0 | 1, technique:
 
 export function getTechniqueRacketFaceDeg(technique: ShotType): number {
   return TECHNIQUES[technique].faceDeg
+}
+
+export function isPlayableRacketContact(racket: RacketContactPose, shuttleCorkCenter: Vec3): boolean {
+  return distance3(racket.stringCenter, shuttleCorkCenter) <= MAX_PLAYABLE_CONTACT_ERROR
+}
+
+export function resolveContactGrip(playerPos: Vec3, playerSide: 0 | 1, contactPoint: Vec3): 'forehand' | 'backhand' {
+  const forward = playerSide === 0 ? 1 : -1
+  return (contactPoint[2] - playerPos[2]) * forward < -0.25 ? 'backhand' : 'forehand'
 }
 
 function resolveTechnique(input: ContactInput, contactPoint: Vec3): ShotType {

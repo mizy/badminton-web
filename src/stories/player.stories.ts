@@ -6,13 +6,14 @@ import { HDM05_CLIPS, loadHdm05Motion, createHdm05StrikeClip, type Hdm05Motion }
 import { createCourt } from '../render/court'
 import { mountScene } from './threeHelper'
 
-const meta: Meta<{ motion: MotionDemo; modelUrl: string; source: 'procedural' | 'hdm05'; clipId: string; fullTake: boolean }> = {
+const meta: Meta<{ motion: MotionDemo; modelUrl: string; modelTextureUrl: string; source: 'procedural' | 'hdm05'; clipId: string; fullTake: boolean }> = {
   title: '渲染/球员展示',
   tags: ['autodocs'],
-  args: { motion: 'lateral', modelUrl: '/models/xbot.glb', source: 'procedural', clipId: 'dg-04-smash', fullTake: false },
+  args: { motion: 'sixPoints', modelUrl: '/models/kenney-player.glb', modelTextureUrl: '/models/kenney-player.png', source: 'procedural', clipId: 'dg-04-smash', fullTake: false },
   argTypes: { motion: { control: 'select', options: MOTION_DEMOS }, modelUrl: { control: 'text' },
+    modelTextureUrl: { control: 'text' },
     source: { control: 'inline-radio', options: ['procedural', 'hdm05'] }, clipId: { control: 'select', options: HDM05_CLIPS }, fullTake: { control: 'boolean' } },
-  render: ({ motion, modelUrl, source, clipId, fullTake }) => {
+  render: ({ motion, modelUrl, modelTextureUrl, source, clipId, fullTake }) => {
     const container = document.createElement('div')
     container.style.cssText = 'width:100%;height:min(600px,100vh);min-height:340px;position:relative'
     const legend = document.createElement('div')
@@ -22,8 +23,8 @@ const meta: Meta<{ motion: MotionDemo; modelUrl: string; source: 'procedural' | 
     const ctx = mountScene(container)
     createCourt(ctx.scene)
     const meshes = [
-      createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '', { labelScale: 0, modelUrl: modelUrl || undefined }),
-      createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, '', { labelScale: 0, modelUrl: modelUrl || undefined }),
+      createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '', { labelScale: 0, modelUrl: modelUrl || undefined, modelTextureUrl: modelTextureUrl || undefined }),
+      createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, '', { labelScale: 0, modelUrl: modelUrl || undefined, modelTextureUrl: modelTextureUrl || undefined }),
     ]
     let capture: Hdm05Motion | null = null
     if (source === 'hdm05') {

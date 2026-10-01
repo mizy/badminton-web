@@ -9,7 +9,8 @@ export default defineConfig({
     name: 'offline-game',
     apply: 'build',
     generateBundle(_, bundle) {
-      const publicFiles = ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'models/xbot.glb']
+      const publicFiles = ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
+        'models/kenney-player.glb', 'models/kenney-player.png']
       const files = ['index.html', ...Object.keys(bundle).filter(file => !file.endsWith('.map') && file !== 'index.html'), ...publicFiles]
       const hash = createHash('sha256')
       for (const file of files) {

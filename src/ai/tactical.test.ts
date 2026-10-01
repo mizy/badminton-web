@@ -12,6 +12,7 @@ import {
 } from '../character/racketKinematics'
 import * as physics from '../physics/shuttlecock'
 import type { ShuttlecockState } from '../physics/shuttlecock'
+import { isPlayableRacketContact } from '../character/contact'
 
 const STYLES: AIStyle[] = ['attacker', 'rally', 'placement']
 
@@ -71,17 +72,18 @@ describe('legal AI shots use shared body constraints', () => {
     expect(getLegalShots(player, shuttleAt([0.25, 1.8, 0]))).toEqual([])
   })
 
-  it('never offers a shot rejected by the shared racket IK', () => {
+  it('never offers a shot outside the shared racket contact allowance', () => {
     const player = createPlayer(0)
     for (const height of [0.2, 0.5, 0.85, 1.2, 1.6, 2, 2.5, 2.8]) {
       for (const z of [-1.4, -0.5, 0, 0.5, 1.4]) {
         const shuttle = shuttleAt([-2.35, height, z])
         const legal = getLegalShots(player, shuttle)
+        const contact = getShuttleCorkCenter(shuttle.pos, shuttle.vel)
         const pose = createReachableRacketPose({
-          desiredContact: getShuttleCorkCenter(shuttle.pos, shuttle.vel),
+          desiredContact: contact,
           playerPos: player.pos, playerSide: player.side, racketFaceDeg: 0,
         })
-        if (!pose.reachable) expect(legal).toEqual([])
+        if (!isPlayableRacketContact(pose, contact)) expect(legal).toEqual([])
       }
     }
   })

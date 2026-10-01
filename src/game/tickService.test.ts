@@ -116,4 +116,37 @@ describe('ordered rally events', () => {
       expect(flight.lastPoint?.winner).toBe(0)
     })
   }
+
+  it('keeps contact open through the first 60ms of visual recovery', () => {
+    const makeState = (elapsed: number) => {
+      const state = session()
+      const home = createPlayer(0)
+      home.pos = [-2.4, 0, 0]
+      home.swing = { ...beginSwing(home).swing, phase: 'recovery', elapsed, shot: 'DRIVE' }
+      const velocity: [number, number, number] = [-7, -1, 0]
+      const contact = idealContactPoint(home.pos, 0, 'DRIVE')
+      return { ...state, phase: 'playing' as const, lastHitter: 1 as const,
+        players: [home, state.players[1]] as typeof state.players,
+        shuttle: { pos: placeShuttleForCorkCenter(contact, velocity), vel: velocity, spin: [0, 0, 0] as [number, number, number] } }
+    }
+
+    const lateEdge = gameReducer(makeState(0.18), { type: 'TICK', dt: 1 / 120 })
+    expect(lateEdge.lastHitter).toBe(0)
+    expect(lateEdge.players[0]?.feedback).toContain('偏晚')
+    expect(gameReducer(makeState(0.225), { type: 'TICK', dt: 1 / 120 }).lastHitter).toBe(1)
+  })
+
+  it('accepts a racket-edge contact just outside the strict arm sphere', () => {
+    const state = session()
+    const home = createPlayer(0)
+    home.pos = [-2.4, 0, 0]
+    home.swing = { ...beginSwing(home).swing, phase: 'swinging', elapsed: 0.02, shot: 'DRIVE' }
+    const velocity: [number, number, number] = [-7, -1, 0]
+    const contact: [number, number, number] = [-1.64, 1.25, 1.084]
+    const edge = { ...state, phase: 'playing' as const, lastHitter: 1 as const,
+      players: [home, state.players[1]] as typeof state.players,
+      shuttle: { pos: placeShuttleForCorkCenter(contact, velocity), vel: velocity, spin: [0, 0, 0] as [number, number, number] } }
+
+    expect(gameReducer(edge, { type: 'TICK', dt: 1 / 120 }).lastHitter).toBe(0)
+  })
 })

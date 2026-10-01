@@ -109,6 +109,32 @@ describe('shot contact model', () => {
     expect(result.quality).toBeLessThan(0.35)
     expect(result.reason).toBe('off center')
   })
+
+  it.each([
+    { error: 0.05, outcome: 'hit' },
+    { error: 0.075, outcome: 'hit' },
+    { error: 0.085, outcome: 'miss' },
+  ] as const)('uses a small racket-edge allowance at $error m', ({ error, outcome }) => {
+    const input = createInput(DRIVE_CONTACT, 'DRIVE', 0)
+    const cork: Vec3 = [DRIVE_CONTACT[0], DRIVE_CONTACT[1], DRIVE_CONTACT[2] + error]
+    input.shuttle = { ...input.shuttle, pos: placeShuttleForCorkCenter(cork, INCOMING_VELOCITY) }
+
+    const result = evaluateContact(input)
+
+    expect(result.outcome).toBe(outcome)
+    expect(result.contactError).toBeCloseTo(error, 5)
+    if (outcome === 'hit') expect(result.reason).toBe('off center')
+    else expect(result.reason).toBe('racket contact')
+  })
+
+  it('accepts a cork just beyond the strict arm sphere when the strings are within the allowance', () => {
+    // Shoulder-to-cork distance is 1.16m; the strict arm+racket sphere ends at 1.10m.
+    const edgeContact: Vec3 = [DRIVE_CONTACT[0], DRIVE_CONTACT[1], 0.924]
+    const input = createInput(edgeContact, 'DRIVE', 0)
+
+    expect(input.racket.reachable).toBe(false)
+    expect(evaluateContact(input).outcome).toBe('hit')
+  })
 })
 
 function createInput(
