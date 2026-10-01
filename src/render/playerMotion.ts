@@ -146,7 +146,8 @@ export function updatePlayerMotion(rig: PlayerMotion, player: PlayerState, elaps
   const blend = dt > 0 && dt < 0.1 ? 1 - Math.exp(-dt * 18) : 1
   rig.pace = THREE.MathUtils.lerp(rig.pace, Math.min(speed / 5, 1), blend)
   rig.stride += Math.min(dt, 0.05) * speed / (0.3 + speed * 0.09) * Math.PI
-  const crouch = bodyCrouch(player, speed) * (newContact ? 0 : smooth(contactAge / 0.12))
+  const crouch = newContact ? 0 : THREE.MathUtils.lerp(-rig.body.position.y,
+    bodyCrouch(player, speed) * smooth(contactAge / 0.12), blend)
   let turn = 0
   if (player.body.action === 'scissor') {
     if (player.body.phase === 'loading') turn = -0.5 * smooth(player.body.elapsed / 0.075)

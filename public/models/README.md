@@ -5,8 +5,8 @@ three.js examples repository:
 
 https://github.com/mrdoob/three.js/blob/dev/examples/models/gltf/Xbot.glb
 
-The repository is distributed under the MIT license. This asset is used as a rigged test body for Storybook and the optional game
-model preview. The badminton motion,
+The repository is distributed under the MIT license. This asset is used as a rigged test body for Storybook and the default game
+character. The badminton motion,
 contact timing, shuttle trajectory, and racket placement are owned by local
 badminton code.
 
@@ -18,7 +18,8 @@ badminton code.
   支持暂停、慢放、逐帧、时间轴、两侧朝向、六点步法和六种挥拍；显示骨长误差和落脚轨迹。
 - **渲染 / 球员展示** 用同一组动作样本验证模型绑定。`modelUrl` 默认为
   `/models/xbot.glb`，留空可查看程序构造的运动员，填入其他模型路径可替换外观。
-- 游戏默认使用程序外观，访问 `/?model=/models/xbot.glb` 可直接使用 Xbot 打球。
+- 游戏默认加载 Xbot（包含在离线缓存中），主客场保留蓝 / 红配色。
+  访问 `/?model=` 可使用程序外观，`?model=其他路径` 可替换模型。
   模型加载或骨骼映射失败时保留程序外观。
 
 动作骨架与模型的调用关系：
@@ -34,7 +35,13 @@ PlayerState → playerMotion / playerFootwork → playerSkeleton
 需要 Hips、Spine2、左右 Arm / ForeArm / Hand / UpLeg / Leg / Foot。
 模型自动归一到 1.78 米；绑定层保留原始骨长和静止轴向，按动作落点做双骨 IK，
 球拍挂在模型右手并保持米制尺寸。其他骨骼命名需在 `humanoidModel.ts` 中增加映射。
-比赛动作目前由本地程序生成；更换人物外观不会自动改变步法和挥拍质量。
+比赛通过 Three.js `AnimationMixer` 播放 Xbot 自带的 `idle` / `walk` / `run`，
+只读取腿部旋转轨道，忽略平移、缩放和上身轨道。世界位置与跳跃仍由游戏模拟控制。
+直线后退反向播放步态，腿部朝向按实际世界速度转换；开始、急停恢复、六点专项步法、
+起跳和挥拍阶段平滑切回程序骨架 IK，接触帧立即保持原有球拍校准。
+前场左右角为持拍腿跨步 / 弓步，中场横移为并步，后场斜退为交叉步；
+松手后脚步逐步收回准备站位。模型不含已标注的专业羽毛球六点动捕，专项动作仍由本地落脚系统合成。
+其他模型未提供这三个片段时沿用程序骨架动作。
 
 
 ## HDM05 动捕试验

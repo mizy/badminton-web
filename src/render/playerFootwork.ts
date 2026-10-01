@@ -26,25 +26,27 @@ export function createFootwork(): FootworkMotion {
 
 function landingOffset(player: PlayerState, direction: THREE.Vector3, sign: number): THREE.Vector3 {
   const depth = player.movement.footworkPoint?.split('-')[0]
-  const lateral = player.movement.footworkPoint?.endsWith('right') ? 1 : -1
+  const lateral = direction.x < 0 ? 1 : -1
   const offset = new THREE.Vector3(-sign * 0.15, 0, sign === 1 ? -0.08 : 0.08)
   if (player.movement.footwork === 'ready') return offset
   if (player.movement.footwork === 'start') return offset.add(new THREE.Vector3(-sign * 0.08, 0, sign * 0.04))
+  if (player.movement.footwork === 'recover') return offset
   if (depth === 'front' || player.movement.footwork === 'lunge') {
-    return offset.addScaledVector(direction, sign === 1 ? 0.26 : -0.14)
+    return offset.addScaledVector(direction, sign === 1 ? 0.42 : -0.20)
   }
-  if (depth === 'back' && player.movement.footwork === 'cross') {
-    offset.x += sign === -lateral ? -lateral * 0.22 : lateral * 0.02
-    offset.z -= 0.10
+  if (depth === 'back' && Math.abs(direction.x) > 0.3) {
+    offset.x += sign === -lateral ? -lateral * 0.42 : lateral * 0.02
+    offset.z -= sign === -lateral ? 0.22 : 0.04
   } else if (depth === 'mid' || player.movement.footwork === 'chasse') {
     const side = direction.x < 0 ? 1 : -1
-    offset.x -= side * (sign === side ? 0.10 : 0.025)
+    offset.x -= side * (sign === side ? 0.20 : 0.025)
   }
   return offset
 }
 
 function groundTarget(rig: PlayerSkeleton, player: PlayerState, sign: number, speed: number): THREE.Vector3 {
-  const rotation = rig.hips.getWorldQuaternion(new THREE.Quaternion())
+  // Court-relative steps must not rotate with the upper body's backswing.
+  const rotation = rig.group.getWorldQuaternion(new THREE.Quaternion())
   const direction = new THREE.Vector3(player.movement.currentVel.x, 0, player.movement.currentVel.z)
     .applyQuaternion(rotation.clone().invert())
   if (direction.lengthSq() < 0.01) direction.set(0, 0, 1)
@@ -101,7 +103,7 @@ function advanceFeet(motion: FootworkMotion, targets: THREE.Vector3[], speed: nu
     // Minimum-jerk interpolation has zero velocity and acceleration at both plants.
     const eased = t * t * t * (10 + t * (-15 + t * 6))
     active.position.copy(active.from).lerp(active.to, eased)
-    active.position.y += Math.sin(Math.PI * t) ** 2 * (0.045 + Math.min(speed / 6, 1) * 0.065)
+    active.position.y += Math.sin(Math.PI * t) ** 2 * (0.065 + Math.min(speed / 6, 1) * 0.10)
     if (t === 1) active.duration = 0
     return
   }
