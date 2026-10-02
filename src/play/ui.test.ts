@@ -1,30 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { SHOT_ORDER } from '../character/stroke'
 import type { PlayerState } from '../character/types'
-import { TOUCH_COMMON_SHOTS, TOUCH_SHOT_ROWS, aimReadoutView, chargeView, pointBannerView } from './ui'
+import { TOUCH_DIRECTIONS, aimReadoutView, chargeView, pointBannerView } from './ui'
 
-describe('触屏球路键排布', () => {
-  it('六个球路各占一个键，不重不漏', () => {
-    const shots = TOUCH_SHOT_ROWS.flat()
-    expect(shots).toHaveLength(SHOT_ORDER.length)
-    expect(new Set(shots).size).toBe(SHOT_ORDER.length)
-    expect([...shots].sort()).toEqual([...SHOT_ORDER].sort())
-  })
-
-  it('常驻和展开的球路各三个', () => {
-    expect(TOUCH_SHOT_ROWS.map(row => row.length)).toEqual([3, 3])
-  })
-
-  it('高远、杀球和挑球常驻，其他球路可以展开', () => {
-    expect(TOUCH_SHOT_ROWS[0]).toEqual(['CLEAR', 'SMASH', 'LIFT'])
-    expect(TOUCH_SHOT_ROWS[1]).toEqual(['DROP', 'DRIVE', 'NET_DROP'])
-    expect([...TOUCH_COMMON_SHOTS].sort()).toEqual(['CLEAR', 'LIFT'])
-    expect(TOUCH_COMMON_SHOTS.every(shot => TOUCH_SHOT_ROWS.flat().includes(shot))).toBe(true)
+describe('触屏击球方向', () => {
+  it('只保留上挑 / 高远、下压、平抽三个方向', () => {
+    expect(TOUCH_DIRECTIONS).toEqual(['up', 'down', 'flat'])
   })
 })
 
 const swing = (phase: PlayerState['swing']['phase'], elapsed: number, released = 0): PlayerState['swing'] =>
-  ({ phase, elapsed, shot: 'CLEAR', aim: { lateral: 0, depth: 0 }, target: null, slice: false, charge01: released, holdLimit: 0.5 })
+  ({ phase, elapsed, shot: 'CLEAR', direction: null, aim: { lateral: 0, depth: 0 }, target: null, slice: false, charge01: released, holdLimit: 0.5 })
 
 describe('瞄准读数', () => {
   it('把连续落点写成球路 / 左右 / 纵深三段', () => {

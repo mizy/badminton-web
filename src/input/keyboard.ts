@@ -1,7 +1,7 @@
 /** 键盘输入适配 — KeyboardEvent → InputEvent（以己方底线视角为准） */
 
 import type { ShotAim } from '../character/types'
-import type { ShotType } from '../character/shotSynthesis'
+import type { ShotDirection } from '../character/shotSynthesis'
 import type { InputAction, InputAdapter, InputListener } from './types'
 
 export interface KeyMapping {
@@ -24,19 +24,9 @@ const DEFAULT_KEYMAP: KeyMapping = {
   pause: 'Escape',
 }
 
-const SHOT_KEYS: Readonly<Record<string, ShotType>> = {
-  KeyJ: 'CLEAR',
-  KeyK: 'DROP',
-  KeyL: 'SMASH',
-  KeyU: 'DRIVE',
-  KeyI: 'NET_DROP',
-  KeyO: 'LIFT',
-  Digit1: 'CLEAR',
-  Digit2: 'DROP',
-  Digit3: 'SMASH',
-  Digit4: 'DRIVE',
-  Digit5: 'NET_DROP',
-  Digit6: 'LIFT',
+const DIRECTION_KEYS: Readonly<Record<string, ShotDirection>> = {
+  KeyJ: 'up', KeyK: 'flat', KeyL: 'down',
+  Digit1: 'up', Digit2: 'flat', Digit3: 'down',
 }
 
 /** 同时检查聚焦元素和事件路径，覆盖可编辑子节点及 shadow DOM。 */
@@ -68,7 +58,7 @@ export function createKeyboardAdapter(
   const shiftKeys = new Set(['ShiftLeft', 'ShiftRight'])
   const aimKeys = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyX'])
   const handledKeys = new Set([
-    ...movementKeys, ...aimKeys, ...shiftKeys, ...Object.keys(SHOT_KEYS),
+    ...movementKeys, ...aimKeys, ...shiftKeys, ...Object.keys(DIRECTION_KEYS),
     keymap.serve, keymap.swing, keymap.pause, 'KeyQ',
   ])
 
@@ -109,9 +99,9 @@ export function createKeyboardAdapter(
 
     if (movementKeys.has(event.code)) emitMovement()
     else if (shiftKeys.has(event.code)) return
-    else if (SHOT_KEYS[event.code] || event.code === keymap.swing) {
+    else if (DIRECTION_KEYS[event.code] || event.code === keymap.swing) {
       const slice = pressed.has('ShiftLeft') || pressed.has('ShiftRight')
-      const shot = SHOT_KEYS[event.code]
+      const direction = DIRECTION_KEYS[event.code] ?? 'up'
       swinging.add(event.code)
       // 落点用同一 WASD：按击球键时采样移动方向作为瞄准，双手无需离开常用键位。
       // 无方向按下时保留现有 aim（含箭头/X 设置），不覆盖。
@@ -119,7 +109,7 @@ export function createKeyboardAdapter(
       const lateral = Number(pressed.has(keymap.moveRight)) - Number(pressed.has(keymap.moveLeft))
       const sampled = { lateral: Math.sign(lateral), depth: Math.sign(forward) }
       const swingAim: ShotAim = sampled.lateral || sampled.depth ? sampled : aim
-      emit(shot ? { type: 'SWING_START', shot, slice, aim: swingAim } : { type: 'SWING_START', slice, aim: swingAim })
+      emit({ type: 'SWING_START', direction, slice, aim: swingAim })
     }
     else if (event.code === keymap.serve) emit({ type: 'SERVE_OR_JUMP' })
     else if (event.code === keymap.pause) emit({ type: 'PAUSE' })

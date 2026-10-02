@@ -31,7 +31,7 @@ export function startGame(): () => void {
   const recorder = new Recorder()
   const view = createViewState()
   let state = gameReducer(createFullGameState(), { type: 'START_SESSION', mode: 'match', players: [createPlayer(0), createPlayer(1)] })
-  let options: SessionOptions = { mode: 'training', persona: 'chen-wen', difficulty: 'medium', style: 'rally', loadout: 'balanced' }
+  let options: SessionOptions = { mode: 'training', aiVsAi: false, persona: 'chen-wen', difficulty: 'medium', style: 'rally', loadout: 'balanced' }
   let active = false
   let prediction = true
   let soundEnabled = true
@@ -81,7 +81,12 @@ export function startGame(): () => void {
   }
 
   function handleInput(event: InputEvent): void {
-    if (!active || state.controls[event.playerIndex] !== 'human') return
+    if (!active) return
+    if (event.action.type === 'PAUSE') {
+      dispatch({ type: 'PAUSE', playerIndex: event.playerIndex })
+      return
+    }
+    if (state.controls[event.playerIndex] !== 'human') return
     dispatch({ ...event.action, playerIndex: event.playerIndex })
   }
 
@@ -92,8 +97,10 @@ export function startGame(): () => void {
     players[0]!.loadout = nextOptions.loadout
     players[1]!.loadout = nextOptions.loadout
     const persona = getPersona(nextOptions.persona)
+    players[0]!.serveSelection = persona.serve
     players[1]!.serveSelection = persona.serve
-    state = gameReducer(state, { type: 'START_SESSION', mode: options.mode, players })
+    const controls: GameState['controls'] = nextOptions.aiVsAi ? ['ai', 'ai'] : ['human', 'ai']
+    state = gameReducer(state, { type: 'START_SESSION', mode: options.mode, players, controls })
     active = true
     prediction = options.mode === 'training'
     view.accumulator = 0
@@ -196,7 +203,8 @@ export function startGame(): () => void {
     const now = performance.now()
     const previous = state
     if (active) {
-      state = stepFrame(now, state, view, { away: getAIConfig(options.difficulty, options.style, options.mode === 'training') , home: undefined })
+      const ai = getAIConfig(options.difficulty, options.style, options.mode === 'training')
+      state = stepFrame(now, state, view, { away: ai, home: options.aiVsAi ? ai : undefined })
       if (state.rallyHits > previous.rallyHits) {
         // 重杀命中抖得更狠，普通击球也有一点回馈。
         const hitter = state.players[state.lastHitter ?? 0]

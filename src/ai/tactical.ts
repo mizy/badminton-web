@@ -52,7 +52,7 @@ export function getLegalShots(player: PlayerState, shuttle: ShuttlecockState): S
   if (!isPlayableRacketContact(pose, contact)) return []
 
   return SHOT_ORDER.filter(shot => shot !== 'SMASH' || contact[1] >= SMASH_MIN_CONTACT_HEIGHT)
-    .filter(shot => canPlayShot(shot, contact, player.pos[1]))
+    .filter(shot => canPlayShot(shot, contact, player.pos[1], player.swing.direction))
 }
 
 /** 最多采样 3 秒真实气动轨迹，优先 1.6–2.1m 接触；落地/撞网即停止。 */

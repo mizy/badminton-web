@@ -3,7 +3,7 @@ import { stepShuttlecock, type ShuttlecockState } from '../physics/shuttlecock'
 import type { PlayerState } from './types'
 import type { ShotType } from './shotSynthesis'
 import { advanceBody } from './body'
-import { canPlayShot, SHOT_BUFFER_SECONDS } from './stroke'
+import { canPlayShot, charge01, resolveDirectionalShot, SHOT_BUFFER_SECONDS } from './stroke'
 import { createReachableRacketPose, distance3, getShuttleCorkCenter, type Vec3 } from './racketKinematics'
 import { MAX_PLAYABLE_CONTACT_ERROR } from './contact'
 
@@ -24,19 +24,21 @@ export function predictShotOpportunity(player: PlayerState, shuttle: Shuttlecock
     if (sample.pos[1] < 0.2) break
     const contact = getShuttleCorkCenter(sample.pos, sample.vel)
     const body = advanceBody(player, t)
-    if (contact[0] * forward < -0.08 && canPlayShot(shot, contact, body.pos[1])
-      && (shot !== 'SMASH' || contact[1] >= 2.05)) {
+    const technique = player.swing.direction ? resolveDirectionalShot(body, contact,
+      player.swing.phase === 'preparing' ? charge01(player.swing.elapsed) : player.swing.charge01) : shot
+    if (contact[0] * forward < -0.08 && canPlayShot(technique, contact, body.pos[1], player.swing.direction)
+      && (technique !== 'SMASH' || contact[1] >= 2.15)) {
       const current = createReachableRacketPose({ desiredContact: contact, playerPos: body.pos, playerSide: player.side, racketFaceDeg: 0 })
       const forwardReach = (contact[0] - player.pos[0]) * forward
       const close = distance3(current.stringCenter, contact) < MAX_PLAYABLE_CONTACT_ERROR * 0.5
-        && forwardReach > 0.25 && forwardReach < (shot === 'SMASH' ? 0.78 : 0.9)
+        && forwardReach > 0.25 && forwardReach < (technique === 'SMASH' ? 0.78 : 0.9)
       const position: Vec3 = close ? [player.pos[0], 0, player.pos[2]] : [
         -forward * Math.max(0.3, Math.min(6.65, -forward * (contact[0] - forward * 0.5))),
         0, Math.max(-2.45, Math.min(2.45, contact[2] - forward * 0.12)),
       ]
       const distance = Math.hypot(position[0] - player.pos[0], position[2] - player.pos[2])
       const height = contact[1] - body.pos[1]
-      const preferred = shot === 'SMASH' ? 2.3 : shot === 'CLEAR' || shot === 'DROP' ? 2 : shot === 'DRIVE' ? 1.4 : 1
+      const preferred = technique === 'SMASH' ? 2.3 : technique === 'CLEAR' || technique === 'DROP' ? 2 : technique === 'DRIVE' ? 1.4 : 1
       const score = Math.abs(height - preferred) + distance * 0.25 + t * 0.08
       if (score < bestScore) {
         bestScore = score

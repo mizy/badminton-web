@@ -1,6 +1,6 @@
 import type { FootworkPoint } from './footwork'
 import type { RacketState } from '../physics/racket'
-import type { ShotType } from './shotSynthesis'
+import type { ShotDirection, ShotType } from './shotSynthesis'
 import type { ServeType } from './serve'
 import type { RacketContactPose } from './racketKinematics'
 import type { TacticalDecision } from '../ai/types'
@@ -36,6 +36,8 @@ export interface SwingState {
   phase: 'ready' | 'preparing' | 'queued' | 'swinging' | 'recovery'
   elapsed: number
   shot: ShotType
+  /** Touch intent; the technical shot is resolved from contact height and power. */
+  direction: ShotDirection | null
   aim: ShotAim
   target: [number, number, number] | null
   slice: boolean

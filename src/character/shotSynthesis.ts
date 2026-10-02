@@ -5,6 +5,7 @@ import type { CollisionResult } from '../physics/racket'
 import type { PlayerState, TimingWindow } from './types'
 
 export type ShotType = 'SMASH' | 'DROP' | 'CLEAR' | 'DRIVE' | 'NET_DROP' | 'LIFT'
+export type ShotDirection = 'up' | 'down' | 'flat'
 
 export interface ShotIntent {
   type: ShotType

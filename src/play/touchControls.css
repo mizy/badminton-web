@@ -1,8 +1,6 @@
 /* 触屏操作层：整个屏幕交给 3D 画面，操作件都是漂浮在上面的半透明手柄。
-   左下区域落指生成短行程摇杆，拖过外圈时底座跟随；右侧常驻高远、杀球和挑球，
-   “更多”切换到吊球、平抽和放网，出拍后恢复常用键。整组内移，起跳独立占右侧；
-   短按直接打该球路，按住拖动只改落点（横向连续左右、向上更深），力量条与落点读数在键组上方；
-   右上角一个暂停键。触屏一共就这几个可点控件。
+   左下区域落指生成短行程摇杆，拖过外圈时底座跟随；右侧三个方向键控制蓄力和出拍，
+   横向拖动选左右落点、纵向拖动选深度，起跳独立占右侧；右上角一个暂停键。
 
    只在 .play-ui[data-input="touch"] 下显示，桌面键盘布局不受影响。
    触屏对记分牌 / 工具条 / 状态行的覆盖也集中在本文件末尾（真机竖屏最紧，改这些只看一个文件）。 */
@@ -154,22 +152,6 @@
 }
 .play-ui[data-input="touch"] .play-touch-charge .play-charge { margin-top: 0; }
 .play-ui[data-input="touch"] .play-touch-charge .play-charge > i { height: 5px; }
-.play-ui[data-input="touch"] .play-touch-more {
-  position: absolute; left: calc(var(--play-touch-shot) + 8px); top: calc(var(--play-touch-common) + 14px);
-  min-width: 50px; min-height: 44px; padding: 0 8px; border: 1px solid var(--play-line);
-  border-radius: 10px; color: var(--play-paper); background: rgb(12 28 48 / 85%);
-  font-size: 11px; pointer-events: auto; touch-action: manipulation;
-}
-.play-ui[data-input="touch"] .play-touch-more[aria-expanded="true"] { border-color: var(--play-home); color: var(--play-home); }
-.play-ui[data-input="touch"] .play-touch-extra {
-  position: absolute; left: 0; top: 0; width: 100%;
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px;
-  border: 1px solid var(--play-line); border-radius: 14px; background: rgb(12 28 48 / 94%);
-}
-.play-ui[data-input="touch"] .play-touch-extra .play-touch-shot {
-  position: relative; width: 100%; min-width: 44px; height: 48px; border-radius: 10px;
-}
-
 .play-ui[data-input="touch"] .play-touch-jump {
   display: grid;
   place-items: center;
@@ -263,14 +245,6 @@
   font-size: 15px;
   font-weight: 700;
   box-shadow: 0 6px 18px rgb(0 0 0 / 38%), inset 0 -4px 10px rgb(0 0 0 / 24%);
-}
-.play-ui[data-input="touch"] .play-touch-shot-tag {
-  margin-top: 2px;
-  color: var(--play-lemon);
-  font-size: 8px;
-  font-weight: 400;
-  letter-spacing: .12em;
-  opacity: .9;
 }
 /* 可打：描一圈自己的颜色（用 inset 阴影而不是 border，免得按下时尺寸跳动）。 */
 .play-ui[data-input="touch"] .play-touch-shot[data-available="true"] {

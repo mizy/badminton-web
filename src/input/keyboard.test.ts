@@ -97,18 +97,18 @@ describe('keyboard court-relative controls', () => {
     key('keydown', 'KeyW')
     key('keydown', 'KeyA')
     key('keydown', 'KeyL')
-    expect(events.at(-1)?.action).toEqual({ type: 'SWING_START', shot: 'SMASH', slice: false, aim: { lateral: -1, depth: 1 } })
+    expect(events.at(-1)?.action).toEqual({ type: 'SWING_START', direction: 'down', slice: false, aim: { lateral: -1, depth: 1 } })
     key('keyup', 'KeyL')
     key('keyup', 'KeyW')
     key('keyup', 'KeyA')
     tap('KeyJ')
-    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', shot: 'CLEAR', slice: false, aim: { lateral: 0, depth: 0 } })
+    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', direction: 'up', slice: false, aim: { lateral: 0, depth: 0 } })
     adapter.disconnect()
     adapter = createKeyboardAdapter(1)
     adapter.connect(event => events.push(event))
     key('keydown', 'KeyD')
-    key('keydown', 'KeyO')
-    expect(events.at(-1)?.action).toEqual({ type: 'SWING_START', shot: 'LIFT', slice: false, aim: { lateral: 1, depth: 0 } })
+    key('keydown', 'Digit3')
+    expect(events.at(-1)?.action).toEqual({ type: 'SWING_START', direction: 'down', slice: false, aim: { lateral: 1, depth: 0 } })
   })
 
   it('keeps custom keymaps and resolves the side on each new input', () => {
@@ -130,34 +130,31 @@ describe('keyboard court-relative controls', () => {
     expect(events.some(event => event.action.type === 'SWING_START')).toBe(false)
     key('keydown', 'ShiftRight')
     tap('KeyH')
-    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', slice: true, aim: { lateral: 0, depth: 0 } })
+    expect(events.at(-2)?.action).toMatchObject({ type: 'SWING_START', direction: 'up', slice: true, aim: { lateral: 0, depth: 0 } })
     expect(lastAction()).toEqual({ type: 'SWING_RELEASE' })
     tap('KeyJ')
     expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', shot: 'CLEAR', slice: true, aim: { lateral: 0, depth: 0 } })
   })
 
   it.each([
-    ['KeyJ', 'CLEAR'], ['KeyK', 'DROP'], ['KeyL', 'SMASH'],
-    ['KeyU', 'DRIVE'], ['KeyI', 'NET_DROP'], ['KeyO', 'LIFT'],
-    ['Digit1', 'CLEAR'], ['Digit2', 'DROP'], ['Digit3', 'SMASH'],
-    ['Digit4', 'DRIVE'], ['Digit5', 'NET_DROP'], ['Digit6', 'LIFT'],
-  ])('directly starts %s as %s once per press and pairs the release', (code, shot) => {
+    ['KeyJ', 'up'], ['Digit1', 'up'], ['KeyK', 'flat'], ['Digit2', 'flat'], ['KeyL', 'down'], ['Digit3', 'down'],
+  ])('starts the %s direction as %s once per press and pairs the release', (code, direction) => {
     key('keydown', code)
     key('keydown', code, true)
     key('keydown', code)
     key('keyup', code)
     key('keyup', code)
     expect(events.map(event => event.action)).toEqual([
-      { type: 'SWING_START', shot, slice: false, aim: { lateral: 0, depth: 0 } }, { type: 'SWING_RELEASE' },
+      { type: 'SWING_START', direction, slice: false, aim: { lateral: 0, depth: 0 } }, { type: 'SWING_RELEASE' },
     ])
     tap(code)
     expect(events).toHaveLength(4)
   })
 
-  it('always makes J a clear, not a repeat of the last shot', () => {
+  it('always makes J the high direction, not a repeat of the last direction', () => {
     tap('KeyL')
     tap('KeyJ')
-    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', shot: 'CLEAR', slice: false, aim: { lateral: 0, depth: 0 } })
+    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', direction: 'up', slice: false, aim: { lateral: 0, depth: 0 } })
   })
 
   it.each(['Space', 'KeyQ', 'Escape'])('does not autorepeat %s', code => {
@@ -178,7 +175,7 @@ describe('keyboard court-relative controls', () => {
     tap('KeyL')
     key('keyup', code)
     expect(events.map(event => event.action)).toEqual([
-      { type }, { type: 'SWING_START', shot: 'SMASH', slice: false, aim: { lateral: 0, depth: 0 } }, { type: 'SWING_RELEASE' },
+      { type }, { type: 'SWING_START', direction: 'down', slice: false, aim: { lateral: 0, depth: 0 } }, { type: 'SWING_RELEASE' },
     ])
   })
 
@@ -186,7 +183,7 @@ describe('keyboard court-relative controls', () => {
     key('keydown', shift)
     key('keydown', shift, true)
     expect(events).toHaveLength(0)
-    for (const code of ['KeyJ', 'KeyK', 'KeyL', 'KeyU', 'KeyI', 'KeyO', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6']) {
+    for (const code of ['KeyJ', 'KeyK', 'KeyL', 'Digit1', 'Digit2', 'Digit3']) {
       tap(code)
       expect(events.at(-2)?.action).toMatchObject({ type: 'SWING_START', slice: true, aim: { lateral: 0, depth: 0 } })
       expect(lastAction()).toEqual({ type: 'SWING_RELEASE' })
@@ -195,7 +192,7 @@ describe('keyboard court-relative controls', () => {
     key('keyup', shift)
     expect(events).toHaveLength(count)
     tap('KeyJ')
-    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', shot: 'CLEAR', slice: false, aim: { lateral: 0, depth: 0 } })
+    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', direction: 'up', slice: false, aim: { lateral: 0, depth: 0 } })
   })
 
   it('keeps slicing until both Shift keys are released and samples it on the swing edge', () => {
@@ -203,12 +200,12 @@ describe('keyboard court-relative controls', () => {
     key('keydown', 'ShiftRight')
     key('keyup', 'ShiftLeft')
     key('keydown', 'KeyK')
-    expect(lastAction()).toEqual({ type: 'SWING_START', shot: 'DROP', slice: true, aim: { lateral: 0, depth: 0 } })
+    expect(lastAction()).toEqual({ type: 'SWING_START', direction: 'flat', slice: true, aim: { lateral: 0, depth: 0 } })
     key('keyup', 'ShiftRight')
     expect(events).toHaveLength(1)
     key('keyup', 'KeyK')
     tap('KeyK')
-    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', shot: 'DROP', slice: false, aim: { lateral: 0, depth: 0 } })
+    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', direction: 'flat', slice: false, aim: { lateral: 0, depth: 0 } })
   })
 
   it('pairs overlapping swing keys independently', () => {
@@ -285,7 +282,7 @@ describe('keyboard court-relative controls', () => {
     expect(lastAction()).toEqual({ type: 'AIM', aim: { lateral: -1, depth: 1 } })
     tap('KeyK')
     // 按键瞬间 KeyD 仍按住：WASD 采样覆盖箭头，右路即瞄 lateral 1
-    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', shot: 'DROP', slice: false, aim: { lateral: 1, depth: 0 } })
+    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', direction: 'flat', slice: false, aim: { lateral: 1, depth: 0 } })
   })
 
   it('does not turn a remapped movement key into a swing or release on blur', () => {
@@ -310,7 +307,7 @@ describe('keyboard court-relative controls', () => {
     expect(events.slice(-2).map(event => event.action.type)).toEqual(['SWING_RELEASE', 'STOP_MOVE'])
     adapter.connect(event => events.push(event))
     tap('KeyL')
-    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', shot: 'SMASH', slice: false, aim: { lateral: 0, depth: 0 } })
+    expect(events.at(-2)?.action).toEqual({ type: 'SWING_START', direction: 'down', slice: false, aim: { lateral: 0, depth: 0 } })
   })
 
   it('installs no interval, disconnects every listener, and reconnects cleanly', () => {

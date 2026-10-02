@@ -231,6 +231,16 @@
 .play-key-hints kbd { color: var(--play-paper); margin-right: 3px; font-size: 10px; }
 .play-mobile-hint { display: none; }
 
+/* Spectator matches retain the score, rally status and pause affordance without implying live control. */
+.play-ui[data-spectating="true"] .play-key-hints,
+.play-ui[data-spectating="true"] .play-shots,
+.play-ui[data-spectating="true"] .play-contact-window,
+.play-ui[data-spectating="true"] .play-touch-stick-zone,
+.play-ui[data-spectating="true"] .play-touch-stick,
+.play-ui[data-spectating="true"] .play-touch-shoot { display: none !important; }
+.play-ui[data-spectating="true"] .play-touch { pointer-events: none; }
+.play-ui[data-spectating="true"] .play-touch-pause { pointer-events: auto; }
+
 /* An editorial cover rather than a generic game launcher. No remote assets. */
 .play-modal-layer {
   position: absolute;

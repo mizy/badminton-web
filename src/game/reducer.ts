@@ -2,7 +2,7 @@ import type { InputAction } from '../input/types'
 import { handleSetEnd, SHORT_SERVICE_LINE, SINGLES_HALF_WIDTH } from './match'
 import { createFullGameState, type GameMode, type GameState } from './types'
 import { processGameTick, type TickAIConfigs } from './tickService'
-import { beginSwing, releaseSwing } from '../character/stroke'
+import { beginSwing, charge01, releaseSwing, resolveDirectionalShot } from '../character/stroke'
 import { SERVE_BY_SHOT, solveServe } from '../character/serve'
 import { beginBodyAction } from '../character/body'
 import { createPlayer } from './playerFactory'
@@ -51,32 +51,51 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           grip: contact ? resolveContactGrip(p.pos, p.side, contact) : p.grip,
           selectedShot: action.shot ?? p.selectedShot,
           aim: action.aim ?? p.aim,
-          serveSelection: state.phase === 'idle' && action.shot
-            ? SERVE_BY_SHOT[action.shot] ?? p.serveSelection
-            : p.serveSelection,
+          serveSelection: p.serveSelection,
         }
       })
-      // 等待发球时，发球键（J/K/I/L）即选择并直接发出该种发球。
-      if (state.phase === 'idle') return serveFrom(selected, action.playerIndex)
+      if (state.phase === 'idle') {
+        const player = state.players[action.playerIndex]
+        if (!player) return state
+        const serveSelection = action.direction === 'up' ? 'FOREHAND_HIGH'
+          : action.direction === 'down' ? 'BACKHAND_SHORT'
+            : action.direction === 'flat' ? 'BACKHAND_FLICK'
+              : action.shot ? SERVE_BY_SHOT[action.shot] : player.serveSelection
+        const players = [...state.players] as GameState['players']
+        players[action.playerIndex] = { ...player, serveSelection, aim: action.aim ?? player.aim }
+        return serveFrom({ ...state, players }, action.playerIndex)
+      }
       return updatePlayer(selected, action.playerIndex, p => {
         if (p.swing.phase !== 'ready' && p.swing.phase !== 'queued') return p
-        const winding = beginSwing(p, action.holdGrace)
+        const winding = beginSwing(p, action.holdGrace, action.direction ?? null)
+        const shot = action.direction ? state.shuttle
+          ? resolveDirectionalShot(winding, getShuttleCorkCenter(state.shuttle.pos, state.shuttle.vel), 0)
+          : 'NET_DROP' : winding.swing.shot
         return {
-          ...winding,
-          swing: { ...winding.swing, slice: action.slice ?? false },
+          ...winding, selectedShot: shot,
+          swing: { ...winding.swing, shot, slice: action.slice ?? false },
         }
       })
     }
     case 'SWING_SELECT':
       // 触屏击球盘在按住拖动时改选本次挥拍：只在蓄力阶段生效，不重开计时、不改发球选择。
-      return updatePlayer(state, action.playerIndex, p => p.swing.phase !== 'preparing' ? p : ({
-        ...p,
-        selectedShot: action.shot,
-        aim: { ...action.aim },
-        swing: { ...p.swing, shot: action.shot, aim: { ...action.aim } },
-      }))
-    case 'SWING_RELEASE':
-      return updatePlayer(state, action.playerIndex, p => releaseSwing(p, action.minimumCharge))
+      return updatePlayer(state, action.playerIndex, p => {
+        if (p.swing.phase !== 'preparing') return p
+        const next = { ...p, aim: { ...action.aim }, swing: { ...p.swing,
+          direction: action.direction ?? (action.shot ? null : p.swing.direction),
+          shot: action.shot ?? p.swing.shot, aim: { ...action.aim } } }
+        const shot = next.swing.direction && state.shuttle
+          ? resolveDirectionalShot(next, getShuttleCorkCenter(state.shuttle.pos, state.shuttle.vel), charge01(next.swing.elapsed)) : next.swing.shot
+        return { ...next, selectedShot: shot, swing: { ...next.swing, shot } }
+      })
+    case 'SWING_RELEASE': {
+      const next = updatePlayer(state, action.playerIndex, p => releaseSwing(p, action.minimumCharge))
+      const player = next.players[action.playerIndex]
+      if (state.phase !== 'idle' || !player?.swing.direction || player.swing.phase !== 'swinging') return next
+      const serve = player.swing.charge01 < 0.3 ? 'FOREHAND_SHORT'
+        : player.swing.direction === 'up' ? 'FOREHAND_HIGH' : 'BACKHAND_FLICK'
+      return serveFrom(updatePlayer(next, action.playerIndex, p => ({ ...p, serveSelection: serve })), action.playerIndex)
+    }
     case 'PAUSE':
       if (state.phase === 'match_end' || state.phase === 'set_end') return state
       if (state.phase === 'paused') return { ...state, phase: state.pausedPhase ?? 'idle', pausedPhase: null }

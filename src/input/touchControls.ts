@@ -1,16 +1,7 @@
-/** 触屏输入适配 — Pointer Events → InputEvent（左虚拟摇杆移动 + 右侧固定球路键出拍）。
- *
- * 右手是王者荣耀 / 原神那套「技能键」：右下角固定排着六个球路键（data-touch="shot"，
- * 每键一个 ShotType），位置不随手指变，拇指靠肌肉记忆盲按。每个键两种用法：
- *   - 短按（< TAP_RELEASE_MS）：一键出招，用 TAP_CHARGE 的固定力量直接打这个球路，落点走默认中路
- *   - 按住不放 / 按住拖动：开始蓄力（力量随按住时长涨），拖动改落点——
- *     横向拖动 = 左右落点（连续值，见 aimFromDrag），向上拖 = 落点更深，松手出拍
- * 拖动过程中用 SWING_SELECT 只改落点，不改球路（球路由按下的那个键定死），不重开计时。
- * 舞台上落点圆环（play/frame.ts 的 targetMarker）会跟着拖动连续移动，指哪打哪。
- */
+/** 触屏输入适配 — 左侧摇杆移动，右侧三个方向键控制蓄力、击球和落点。 */
 
 import type { ShotAim } from '../character/types'
-import type { ShotType } from '../character/shotSynthesis'
+import type { ShotDirection, ShotType } from '../character/shotSynthesis'
 import { isEditableTarget } from './keyboard'
 import type { InputAction, InputAdapter, InputListener, MoveDirection } from './types'
 
@@ -28,7 +19,7 @@ export const AIM_DEPTH_SPAN = 1
  *  留得比一次点按稍宽（250ms），免得手一抖就掉进蓄力那条路。 */
 export const TAP_RELEASE_MS = 250
 /** 一键出招的固定力量（0–1）：点一下就是实打实的一拍，不必先蓄力。 */
-export const TAP_CHARGE = 0.65
+export const TAP_CHARGE = 0.2
 /** 触屏瞄准宽限（秒）：蓄力窗口之外多留这么久让拇指拖完落点再松手（键盘为 0）。 */
 export const TOUCH_AIM_HOLD_GRACE = 1.6
 /** 起跳键长按判定（ms）：超过即改为蹬转。 */
@@ -82,18 +73,21 @@ export function clampStickOffset(dx: number, dy: number, radius: number): { x: n
   return { x: dx * scale, y: dy * scale }
 }
 
-/** 按下球路键即开始蓄力；slice 仅键盘 Shift 提供，触屏不参与。
- *  holdGrace 是自动出拍的额外宽限：拇指要拖完落点再松手，不能被蓄力窗口强制出拍。 */
-export function swingStartAction(shot: ShotType, aim: ShotAim, holdGrace = TOUCH_AIM_HOLD_GRACE): InputAction {
-  return { type: 'SWING_START', shot, slice: false, aim, holdGrace }
+/** 按下方向键即开始蓄力；holdGrace 留出拖动瞄准的时间，slice 仅键盘 Shift 提供。 */
+export function swingStartAction(shot: ShotType | ShotDirection, aim: ShotAim, holdGrace = TOUCH_AIM_HOLD_GRACE): InputAction {
+  return shot === 'up' || shot === 'down' || shot === 'flat'
+    ? { type: 'SWING_START', direction: shot, slice: false, aim, holdGrace }
+    : { type: 'SWING_START', shot, slice: false, aim, holdGrace }
 }
 
-/** 蓄力中只改落点（球路由按下的那个键定死，不受拖动影响）。 */
-export function swingSelectAction(shot: ShotType, aim: ShotAim): InputAction {
-  return { type: 'SWING_SELECT', shot, aim }
+/** 蓄力中只改落点（击球方向由按下的键决定，不受拖动影响）。 */
+export function swingSelectAction(shot: ShotType | ShotDirection, aim: ShotAim): InputAction {
+  return shot === 'up' || shot === 'down' || shot === 'flat'
+    ? { type: 'SWING_SELECT', direction: shot, aim }
+    : { type: 'SWING_SELECT', shot, aim }
 }
 
-/** 松开球路键出拍：短按走点按力量，长按走实际蓄力（minimumCharge=0）。 */
+/** 松开方向键出拍：短按走轻拍力量，长按走实际蓄力（minimumCharge=0）。 */
 export function swingReleaseAction(tapped: boolean): InputAction {
   return { type: 'SWING_RELEASE', minimumCharge: tapped ? TAP_CHARGE : 0 }
 }
@@ -128,7 +122,7 @@ const DEFAULT_STICK_RADIUS = 36
 
 /**
  * @entry
- * 多指并发触屏适配：摇杆、六个球路键、起跳键、暂停键各自绑定 pointer 事件并用
+ * 多指并发触屏适配：摇杆、三个方向键、起跳键、暂停键各自绑定 pointer 事件并用
  * setPointerCapture 独占自己的手指，互不干扰。松开 / 失焦 / 转屏 / 页面隐藏时补齐
  * SWING_RELEASE 与 STOP_MOVE，避免挥拍状态卡死。
  */
@@ -142,7 +136,7 @@ export function createTouchControlsAdapter(
   const stickZone = root.querySelector<HTMLElement>('[data-touch="stick-zone"]')
   const stick = root.querySelector<HTMLElement>('[data-touch="stick"]')
   const knob = root.querySelector<HTMLElement>('[data-touch="stick-knob"]')
-  /** 固定球路键：一次只允许一根手指按住其中一个。 */
+  /** 固定方向键：一次只允许一根手指按住其中一个。 */
   const shotButtons = Array.from(root.querySelectorAll<HTMLElement>('[data-touch="shot"]'))
   const jump = root.querySelector<HTMLElement>('[data-touch="jump"]')
   const actionButtons = Array.from(root.querySelectorAll<HTMLElement>('[data-touch="action"]'))
@@ -155,9 +149,9 @@ export function createTouchControlsAdapter(
   let stickRange = DEFAULT_STICK_RADIUS
   let lastMoveKey: string | null = 'stopped'
   let shotPointer: number | null = null
-  /** 被按住的那个球路键与它的球路：拖动只改落点，不改球路。 */
+  /** 被按住的方向键：拖动只改落点，不改击球方向。 */
   let shotButton: HTMLElement | null = null
-  let shotType: ShotType | null = null
+  let shotDirection: ShotDirection | null = null
   let shotOrigin: Point = { x: 0, y: 0 }
   let shotAim: ShotAim = { lateral: 0, depth: 0 }
   let shotStartedAt = 0
@@ -224,7 +218,7 @@ export function createTouchControlsAdapter(
   function resetShot(): void {
     shotPointer = null
     shotButton = null
-    shotType = null
+    shotDirection = null
     shotAim = { lateral: 0, depth: 0 }
     shotDeferred = false
     for (const button of shotButtons) {
@@ -272,25 +266,25 @@ export function createTouchControlsAdapter(
     button.dataset.depth = aim.depth.toFixed(3)
   }
 
-  /** 拖动中只改落点：球路已由按下的键定死（等待发球时不提交，松手才发出）。 */
+  /** 拖动中只改落点：方向已由按下的键定好（等待发球时不提交，松手才发出）。 */
   function updateShot(clientX: number, clientY: number): void {
-    if (!shotButton || !shotType) return
+    if (!shotButton || !shotDirection) return
     const next = aimFromDrag(clientX - shotOrigin.x, clientY - shotOrigin.y, aimUnit)
     if (next.lateral === shotAim.lateral && next.depth === shotAim.depth) return
     shotAim = next
     reflectShot(shotButton, next)
     if (shotDeferred) return
-    emit(swingSelectAction(shotType, next))
+    emit(swingSelectAction(shotDirection, next))
   }
 
   function onShotDown(event: PointerEvent, button: HTMLElement): void {
     if (!listener || shotPointer !== null || isEditableTarget(event.target)) return
-    const shot = button.dataset.shot as ShotType | undefined
-    if (!shot) return
+    const direction = button.dataset.direction as ShotDirection | undefined
+    if (!direction || !['up', 'down', 'flat'].includes(direction)) return
     event.preventDefault()
     shotPointer = event.pointerId
     shotButton = button
-    shotType = shot
+    shotDirection = direction
     // 参照点是键心而不是按下点：同一个键无论拇指按在哪个像素上，拖动语义都一样。
     shotOrigin = centerOf(button)
     shotAim = { lateral: 0, depth: 0 }
@@ -299,7 +293,7 @@ export function createTouchControlsAdapter(
     capture(button, event.pointerId)
     reflectShot(button, shotAim)
     // 蓄力从按下这一刻开始（长按沿用按住时长定力量，短按走点按力量）；发球等待期按住不提交，见 onShotUp。
-    if (!shotDeferred) emit(swingStartAction(shot, shotAim))
+    if (!shotDeferred) emit(swingStartAction(direction, shotAim))
   }
 
   function onShotMove(event: PointerEvent): void {
@@ -311,11 +305,11 @@ export function createTouchControlsAdapter(
   function onShotUp(event: PointerEvent): void {
     if (shotPointer !== event.pointerId) return
     const deferred = shotDeferred
-    const shot = shotType
+    const direction = shotDirection
     const aim = shotAim
     const tapped = performance.now() - shotStartedAt < TAP_RELEASE_MS
     resetShot()
-    if (deferred && shot) emit(swingStartAction(shot, aim))
+    if (deferred && direction) emit(swingStartAction(direction, aim))
     emit(swingReleaseAction(tapped))
   }
 

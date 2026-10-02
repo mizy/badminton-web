@@ -1,5 +1,5 @@
 import type { ShuttlecockState } from '../physics/shuttlecock'
-import type { ShotType } from './shotSynthesis'
+import type { ShotDirection, ShotType } from './shotSynthesis'
 import {
   MAX_CONTACT_ERROR,
   distance3,
@@ -27,6 +27,7 @@ export interface ContactInput {
   slice?: boolean
   /** The caller may wait for better contact without calculating an outgoing flight. */
   minQuality?: number
+  direction?: ShotDirection
 }
 
 export interface ContactResult {
@@ -142,9 +143,13 @@ export function evaluateContact(input: ContactInput): ContactResult {
 
   const outgoingSpin: Vec3 = [0, input.slice ? 105 : 22 + quality * 24, input.playerSide === 0 ? -3 : 3]
   const maxSpeed = profile.baseSpeed
-    * (0.52 + clamp01(input.power) * 0.48)
-    * (0.58 + quality * 0.42) * (input.slice ? 0.86 : 1)
-  const elevationDeg = profile.elevationDeg + (input.racketFaceDeg - profile.faceDeg) * 0.65
+    * (input.direction ? 0.85 + clamp01(input.power) * 0.15 : 0.52 + clamp01(input.power) * 0.48)
+    * (input.direction ? 0.88 + quality * 0.12 : 0.58 + quality * 0.42) * (input.slice ? 0.86 : 1)
+  const elevation = input.direction && technique === 'SMASH' ? -22 + clamp01(input.power) * 18
+    : input.direction === 'flat' && technique === 'DRIVE'
+      ? Math.max(0, Math.atan2(1.7 - shuttleCorkCenter[1], Math.max(0.5, Math.abs(shuttleCorkCenter[0]))) * 180 / Math.PI + 6)
+      : profile.elevationDeg
+  const elevationDeg = elevation + (input.racketFaceDeg - profile.faceDeg) * 0.65
     + (input.slice && technique === 'CLEAR' ? 7 : input.slice && technique === 'DROP' ? 4 : 0)
   const solution = solveTargetedShot({
     corkCenter: input.racket.stringCenter,
@@ -217,7 +222,7 @@ function computeTechniqueFit(input: ContactInput, technique: ShotType, contactPo
   const forward = input.playerSide === 0 ? 1 : -1
   const reach = (contactPoint[0] - input.playerPos[0]) * forward
   const localHeight = contactPoint[1] - input.playerPos[1]
-  const heightFit = 1 - Math.abs(localHeight - profile.height) / profile.heightTolerance
+  const heightFit = input.direction ? 1 : 1 - Math.abs(localHeight - profile.height) / profile.heightTolerance
   const reachFit = 1 - Math.abs(reach - profile.reach) / profile.reachTolerance
   const incomingDown = input.shuttle.vel[1] < -0.5
   const smashBonus = technique === 'SMASH' && incomingDown ? 0.12 : 0

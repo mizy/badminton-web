@@ -10,7 +10,7 @@ import { decideTactical, getLegalShots } from '../ai/tactical'
 import { checkPoint } from './match'
 import { evaluateContact, getTechniqueRacketFaceDeg, resolveContactGrip } from '../character/contact'
 import { createReachableRacketPose, getShuttleCorkCenter } from '../character/racketKinematics'
-import { advanceSwing, beginSwing, canPlayShot, getShotTarget, isContactWindowOpen, releaseSwing, RACKETS, SHOT_NAMES } from '../character/stroke'
+import { advanceSwing, beginSwing, canPlayShot, charge01, getShotTarget, isContactWindowOpen, releaseSwing, resolveDirectionalShot, RACKETS, SHOT_NAMES } from '../character/stroke'
 import { predictShotOpportunity } from '../character/interception'
 
 export interface TickAIConfigs {
@@ -21,12 +21,12 @@ export interface TickAIConfigs {
 export function processGameTick(state: GameState, dt: number, aiConfigs?: TickAIConfigs): GameState {
   if (state.phase === 'paused' || state.phase === 'set_end' || state.phase === 'match_end') return state
   let next = updateAI(state, aiConfigs)
-  const assists = next.players.map((p, i) => p && next.controls[i] === 'human' && p.swing.phase === 'queued'
+  const assists = next.players.map((p, i) => p && next.controls[i] === 'human' && (p.swing.phase === 'queued' || (p.swing.phase === 'preparing' && p.swing.direction))
     && next.lastHitter !== i && next.shuttle && !next.netTouched ? predictShotOpportunity(p, next.shuttle, p.swing.shot) : null)
   next = { ...next, players: next.players.map((player, index) => {
     const opportunity = assists[index]
     // The arm reaches impact in 70ms; released input waits until that contact is near.
-    if (!player || !opportunity || opportunity.time > 0.1 || next.phase !== 'playing'
+    if (!player || player.swing.phase !== 'queued' || !opportunity || opportunity.time > 0.1 || next.phase !== 'playing'
       || !getLegalShots(player, next.shuttle!).includes(player.swing.shot)) return player
     return { ...player, movement: { ...player.movement, targetDir: { x: 0, z: 0 } },
       swing: { ...player.swing, phase: 'swinging' as const, elapsed: 0 } }
@@ -39,7 +39,7 @@ export function processGameTick(state: GameState, dt: number, aiConfigs?: TickAI
       const opportunity = assists[index]
       const input = p.movement.targetDir
       let moving = advanceBody(p, step)
-      if (opportunity && p.swing.phase === 'queued' && Math.hypot(input.x, input.z) < 0.1 && opportunity.distance <= 0.8) {
+      if (opportunity && (p.swing.phase === 'queued' || p.swing.phase === 'preparing') && Math.hypot(input.x, input.z) < 0.1 && opportunity.distance <= 0.8) {
         const dx = opportunity.position[0] - p.pos[0]
         const dz = opportunity.position[2] - p.pos[2]
         const distance = Math.hypot(dx, dz)
@@ -48,7 +48,13 @@ export function processGameTick(state: GameState, dt: number, aiConfigs?: TickAI
         moving = { ...moving, movement: { ...moving.movement, targetDir: dir } }
       }
       const moved = updateMovement(moving, step)
-      return advanceSwing(updateStamina({ ...moved, movement: { ...moved.movement, targetDir: input } }, step), step, next.controls[index] === 'human')
+      const advanced = advanceSwing(updateStamina({ ...moved, movement: { ...moved.movement, targetDir: input } }, step), step, next.controls[index] === 'human')
+      if (advanced.swing.direction && advanced.swing.phase === 'preparing' && next.shuttle && next.lastHitter !== index) {
+        const cork = getShuttleCorkCenter(next.shuttle.pos, next.shuttle.vel)
+        const shot = resolveDirectionalShot(advanced, cork, charge01(advanced.swing.elapsed))
+        return { ...advanced, selectedShot: shot, grip: resolveContactGrip(advanced.pos, advanced.side, cork), swing: { ...advanced.swing, shot } }
+      }
+      return advanced
     }) as GameState['players']
     const previousPlayer = next.players[0]
     const moved = previousPlayer && players[0] ? Math.hypot(players[0].pos[0] - previousPlayer.pos[0], players[0].pos[2] - previousPlayer.pos[2]) : 0
@@ -132,24 +138,26 @@ function contactPlayers(state: GameState): GameState {
   for (const i of [0, 1] as const) {
     const player = state.players[i]
     if (!player || player.contactPose || state.lastHitter === i || !isContactWindowOpen(player.swing) || !onOwnSide(player, shuttle)) continue
-    const technique = player.swing.shot
+    const cork = getShuttleCorkCenter(shuttle.pos, shuttle.vel)
+    const technique = resolveDirectionalShot(player, cork, player.swing.charge01)
     if (!getLegalShots(player, shuttle).includes(technique)) continue
     const face = getTechniqueRacketFaceDeg(technique)
-    const cork = getShuttleCorkCenter(shuttle.pos, shuttle.vel)
     const racket = createReachableRacketPose({ desiredContact: cork, playerPos: player.pos, playerSide: player.side, racketFaceDeg: face })
     // Human near-miss assistance must not make the AI hit early with zero sweet-spot quality.
     if (state.controls[i] === 'ai' && !racket.reachable) continue
     const spec = RACKETS[player.loadout]
-    const offset = (player.swing.elapsed - 0.07) * 1000
+    const offset = (player.swing.elapsed - (player.swing.direction ? 0 : 0.07)) * 1000
     const readiness = player.movement.readiness
     const fatigue = 0.65 + 0.35 * player.stamina / player.maxStamina
     let target = player.swing.target ?? getShotTarget(player, technique, player.swing.aim)
     // A low standing smash must land shorter to clear the net; jumps can drive deeper.
-    if (technique === 'SMASH') target = [Math.sign(target[0]) * Math.min(Math.abs(target[0]), Math.max(1.7, (cork[1] - 1.9) * 6)), 0, target[2]]
+    if (technique === 'SMASH' && !player.swing.direction) target = [Math.sign(target[0]) * Math.min(Math.abs(target[0]), Math.max(1.7, (cork[1] - 1.9) * 6)), 0, target[2]]
     const result = evaluateContact({ intent: technique, playerPos: player.pos, playerSide: player.side,
-      power: Math.min(1, (0.68 + readiness * 0.25 + player.swing.charge01 * 0.3) * fatigue * spec.power), racket, racketFaceDeg: face,
+      power: Math.min(1, (player.swing.direction ? player.swing.charge01 * (0.8 + readiness * 0.2)
+        : 0.68 + readiness * 0.25 + player.swing.charge01 * 0.3) * fatigue * spec.power), racket, racketFaceDeg: face,
       shuttle, swingOffsetMs: offset / spec.sweetSpot, target, targetZ: target[2], slice: player.swing.slice,
-      minQuality: state.controls[i] === 'human' && technique === 'CLEAR' && player.swing.elapsed < 0.22 ? 0.4 : 0 })
+      direction: player.swing.direction ?? undefined,
+      minQuality: !player.swing.direction && state.controls[i] === 'human' && technique === 'CLEAR' && player.swing.elapsed < 0.22 ? 0.4 : 0 })
     if (result.outcome !== 'hit') continue
     const quality = result.quality * (0.7 + readiness * 0.3) * fatigue
     const feedback = result.netClearance !== null && result.netClearance < 0 ? '下网风险：触球过低或位置太靠后'
@@ -164,10 +172,10 @@ function contactPlayers(state: GameState): GameState {
       ? player.body.action === 'scissor' ? '蹬转杀' : '跳杀' : SHOT_NAMES[technique]
     const shotName = player.swing.slice ? `${technique === 'CLEAR' ? '滑板' : '切削'}${bodyShot}` : bodyShot
     const contacted: PlayerState = {
-      ...player, contactPose: racket, contactQuality: quality, feedback: `${shotName} · ${feedback}`,
+      ...player, selectedShot: technique, contactPose: racket, contactQuality: quality, feedback: `${shotName} · ${feedback}`,
       grip: resolveContactGrip(player.pos, player.side, cork),
       stamina: Math.max(0, player.stamina - (technique === 'SMASH' ? 4 : 1.5)), wantsToSwing: false,
-      swing: { ...player.swing, phase: 'recovery' },
+      swing: { ...player.swing, shot: technique, phase: 'recovery' },
       racket: { ...player.racket, normal: racket.faceNormal, pos: racket.stringCenter, vel: result.outgoingVel },
     }
     const players = [...state.players] as GameState['players']

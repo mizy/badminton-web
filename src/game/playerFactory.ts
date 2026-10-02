@@ -33,7 +33,7 @@ export function createPlayer(side: 0 | 1): PlayerState {
     selectedShot: 'CLEAR',
     serveSelection: 'FOREHAND_HIGH',
     aim: { lateral: 0, depth: 0 },
-    swing: { phase: 'ready', elapsed: 0, shot: 'CLEAR', aim: { lateral: 0, depth: 0 }, target: null, slice: false, charge01: 0, holdLimit: holdLimitFor('balanced') },
+    swing: { phase: 'ready', elapsed: 0, shot: 'CLEAR', direction: null, aim: { lateral: 0, depth: 0 }, target: null, slice: false, charge01: 0, holdLimit: holdLimitFor('balanced') },
     body: { phase: 'grounded', action: null, elapsed: 0, verticalVelocity: 0 },
     grip: 'forehand',
     loadout: 'balanced',
