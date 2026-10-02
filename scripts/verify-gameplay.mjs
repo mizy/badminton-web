@@ -5,6 +5,7 @@ import puppeteer from 'puppeteer-core'
 
 const url = process.env.PLAY_URL ?? 'http://127.0.0.1:3000'
 const output = '.workbuddy/gameplay'
+const profileFrames = process.env.PROFILE_FRAMES === '1'
 await mkdir(output, { recursive: true })
 const browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true })
 try {
@@ -18,6 +19,24 @@ try {
   await page.screenshot({ path: `${output}/menu.png` })
   await page.select('#play-difficulty', 'easy')
   await page.click('[data-ui="start-training"]')
+  if (profileFrames) {
+    const client = await page.createCDPSession()
+    await client.send('Emulation.setCPUThrottlingRate', { rate: 4 })
+    await page.evaluate(() => {
+      window.__frameTimes = []
+      let last = performance.now()
+      let hits = 0
+      function frame() {
+        const now = performance.now()
+        const state = window.__badminton__.getState()
+        if (state.phase === 'playing') window.__frameTimes.push({ ms: now - last, hit: state.rallyHits > hits })
+        last = now
+        hits = state.rallyHits
+        requestAnimationFrame(frame)
+      }
+      requestAnimationFrame(frame)
+    })
+  }
   await page.evaluate(async () => { window.__opportunity = (await import('/src/character/interception.ts')).predictShotOpportunity })
   const held = new Set()
   const setKeys = async keys => {
@@ -43,7 +62,7 @@ try {
     if (s.lastHitter === 0 && s.rallyHits > 0 && key !== lastKey) {
       lastKey = key
       hits.push({ shot: s.players[0].swing.shot, quality: s.players[0].contactQuality, feedback: s.players[0].feedback, rallyHits: s.rallyHits })
-      if (hits.length === 1 || s.players[0].swing.shot === 'SMASH') await page.screenshot({ path: `${output}/hit-${hits.length}.png` })
+      if (!profileFrames && (hits.length === 1 || s.players[0].swing.shot === 'SMASH')) await page.screenshot({ path: `${output}/hit-${hits.length}.png` })
     }
     if (s.phase === 'idle') {
       if (holdingSmash) { await page.keyboard.up('l'); holdingSmash = false }
@@ -65,7 +84,7 @@ try {
         // After repeated smashes, sustain a cooperative rally using the safe shots.
         if (smash) { await page.keyboard.down('l'); holdingSmash = true }
         else await page.keyboard.press(s.shuttle.pos[1] < 1.65 ? 'o' : 'j')
-        await page.screenshot({ path: `${output}/prepared.png` })
+        if (!profileFrames) await page.screenshot({ path: `${output}/prepared.png` })
       }
     } else await setKeys([])
     await new Promise(resolve => setTimeout(resolve, 45))
@@ -78,6 +97,14 @@ try {
   await page.keyboard.press('Escape')
   await page.waitForFunction(() => window.__badminton__.getState().phase === 'paused')
   await page.screenshot({ path: `${output}/paused.png` })
+  if (profileFrames) {
+    const frames = await page.evaluate(() => window.__frameTimes)
+    const hitFrames = frames.filter(frame => frame.hit).map(frame => frame.ms).sort((a, b) => a - b)
+    const summary = { cpuSlowdown: 4, frameCount: frames.length, hitCount: hitFrames.length,
+      hitP50: hitFrames[Math.floor(hitFrames.length * 0.5)], hitP95: hitFrames[Math.floor((hitFrames.length - 1) * 0.95)], hitMax: Math.max(...hitFrames) }
+    await writeFile(`${output}/frame-performance.json`, JSON.stringify(summary, null, 2))
+    console.log('Actual hit frames', JSON.stringify(summary))
+  }
   assert.deepEqual(errors, [])
   await writeFile(`${output}/results.json`, JSON.stringify({ hits, longestRally: Math.max(...rallies), errors, elapsedMs: Date.now() - started }, null, 2))
   console.log(JSON.stringify({ hits, longestRally: Math.max(...rallies), errors, elapsedMs: Date.now() - started }, null, 2))

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as targeting from './shotTargeting'
 import { evaluateContact, idealContactPoint, type ContactInput } from './contact'
 import {
   createReachableRacketPose,
@@ -15,6 +16,19 @@ const DRIVE_CONTACT = idealContactPoint(PLAYER_POS, 0, 'DRIVE')
 const baseInput = createInput(DRIVE_CONTACT, 'DRIVE', 0)
 
 describe('shot contact model', () => {
+  it('defers a low-quality touch before solving its outgoing trajectory', () => {
+    const input = createInput(DRIVE_CONTACT, 'DRIVE', 0)
+    input.shuttle = { ...input.shuttle, pos: placeShuttleForCorkCenter([DRIVE_CONTACT[0], DRIVE_CONTACT[1], DRIVE_CONTACT[2] + 0.14], INCOMING_VELOCITY) }
+    const solve = vi.spyOn(targeting, 'solveTargetedShot')
+    try {
+      const result = evaluateContact({ ...input, minQuality: 0.4 })
+      expect(result.outcome).toBe('miss')
+      expect(result.reason).toBe('quality')
+      expect(result.outgoingVel).toEqual(input.shuttle.vel)
+      expect(solve).not.toHaveBeenCalled()
+    } finally { solve.mockRestore() }
+  })
+
   it('turns centered timing and actual string contact into an in-court drive', () => {
     const result = evaluateContact(baseInput)
 

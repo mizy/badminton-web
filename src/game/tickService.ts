@@ -148,12 +148,9 @@ function contactPlayers(state: GameState): GameState {
     if (technique === 'SMASH') target = [Math.sign(target[0]) * Math.min(Math.abs(target[0]), Math.max(1.7, (cork[1] - 1.9) * 6)), 0, target[2]]
     const result = evaluateContact({ intent: technique, playerPos: player.pos, playerSide: player.side,
       power: Math.min(1, (0.68 + readiness * 0.25 + player.swing.charge01 * 0.3) * fatigue * spec.power), racket, racketFaceDeg: face,
-      shuttle, swingOffsetMs: offset / spec.sweetSpot, target, targetZ: target[2], slice: player.swing.slice })
+      shuttle, swingOffsetMs: offset / spec.sweetSpot, target, targetZ: target[2], slice: player.swing.slice,
+      minQuality: state.controls[i] === 'human' && technique === 'CLEAR' && player.swing.elapsed < 0.22 ? 0.4 : 0 })
     if (result.outcome !== 'hit') continue
-    // Wait through the edge of the reach envelope rather than spending a prepared
-    // shot on a weak frame scrape. Late contacts still get a rescue return.
-    const threshold = technique === 'CLEAR' ? 0.4 : 0
-    if (state.controls[i] === 'human' && result.quality < threshold && player.swing.elapsed < 0.22) continue
     const quality = result.quality * (0.7 + readiness * 0.3) * fatigue
     const feedback = result.netClearance !== null && result.netClearance < 0 ? '下网风险：触球过低或位置太靠后'
       : result.targetError > 0.8 ? '回球偏短：到位、体力或力量不足'

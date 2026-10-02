@@ -25,6 +25,8 @@ export interface ContactInput {
   target?: Vec3
   targetZ: number
   slice?: boolean
+  /** The caller may wait for better contact without calculating an outgoing flight. */
+  minQuality?: number
 }
 
 export interface ContactResult {
@@ -133,6 +135,9 @@ export function evaluateContact(input: ContactInput): ContactResult {
   }
   if (techniqueFit < 0.18) {
     return missResult(input, { contactError, idealPoint, shuttleCorkCenter, sweetSpot, target, technique, techniqueFit, timing, timingScore }, 'technique reach')
+  }
+  if (quality < (input.minQuality ?? 0)) {
+    return missResult(input, { contactError, idealPoint, shuttleCorkCenter, sweetSpot, target, technique, techniqueFit, timing, timingScore }, 'quality')
   }
 
   const outgoingSpin: Vec3 = [0, input.slice ? 105 : 22 + quality * 24, input.playerSide === 0 ? -3 : 3]

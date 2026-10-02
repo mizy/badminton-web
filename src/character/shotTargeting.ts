@@ -34,11 +34,12 @@ interface FlightSample {
   netHeight: number | null
 }
 
-const FIXED_STEP = 1 / 120
-const MAX_FLIGHT_STEPS = 1_200
+const FIXED_STEP = 1 / 60
+const MAX_FLIGHT_STEPS = 600
 const NET_HEIGHT = 1.524
+const TARGET_TOLERANCE = 0.01
 
-/** @entry 在固定拍面仰角下反解所需初速，并用两次瞄准修正抵消 Magnus 横漂。 */
+/** @entry 反解初速，达到厘米精度后停止；最多两次瞄准修正抵消 Magnus 横漂。 */
 export function solveTargetedShot(
   input: TargetedShotInput,
   config: ShuttlecockConfig = DEFAULT_SHUTTLECOCK,
@@ -49,11 +50,15 @@ export function solveTargetedShot(
   for (let correction = 0; correction < 2; correction += 1) {
     const errorX = input.target[0] - solved.flight.landingPoint[0]
     const errorZ = input.target[2] - solved.flight.landingPoint[2]
+    if (Math.hypot(errorX, errorZ) <= TARGET_TOLERANCE) break
     aimTarget = [aimTarget[0] + errorX * 0.86, 0, aimTarget[2] + errorZ * 0.86]
     solved = solveSpeed(input, aimTarget, config)
   }
 
-  const landingPoint = solved.flight.landingPoint
+  // Candidate flights find the speed cheaply; verify the one outgoing flight
+  // at gameplay precision before reporting its landing and net clearance.
+  const flight = simulateFlight(solved.launchPoint, solved.velocity, input.spin, config, true)
+  const landingPoint = flight.landingPoint
   const targetError = Math.hypot(
     landingPoint[0] - input.target[0],
     landingPoint[2] - input.target[2],
@@ -62,7 +67,7 @@ export function solveTargetedShot(
     converged: solved.hasRange && targetError <= 0.22,
     launchPoint: solved.launchPoint,
     landingPoint,
-    netClearance: solved.flight.netHeight === null ? null : solved.flight.netHeight - NET_HEIGHT,
+    netClearance: flight.netHeight === null ? null : flight.netHeight - NET_HEIGHT,
     outgoingVel: solved.velocity,
     speed: solved.speed,
     targetError,
@@ -101,10 +106,15 @@ function solveSpeed(
   const hasRange = highProgress >= desiredRange
 
   if (hasRange) {
-    for (let iteration = 0; iteration < 20; iteration += 1) {
+    for (let iteration = 0; iteration < 12; iteration += 1) {
       const speed = (low + high) / 2
       const flight = simulateFlight(launchPoint, scale3(unitVelocity, speed), input.spin, config)
       const progress = horizontalProgress(input.corkCenter, flight.landingPoint, directionX, directionZ)
+      if (Math.abs(progress - desiredRange) <= TARGET_TOLERANCE) {
+        high = speed
+        highFlight = flight
+        break
+      }
       if (progress < desiredRange) low = speed
       else {
         high = speed
@@ -115,8 +125,7 @@ function solveSpeed(
 
   const speed = hasRange ? high : maxSpeed
   const velocity = scale3(unitVelocity, speed)
-  const flight = hasRange ? highFlight : simulateFlight(launchPoint, velocity, input.spin, config)
-  return { flight, hasRange, launchPoint, speed, velocity }
+  return { flight: highFlight, hasRange, launchPoint, speed, velocity }
 }
 
 function simulateFlight(
@@ -124,6 +133,7 @@ function simulateFlight(
   velocity: Vec3,
   spin: Vec3,
   config: ShuttlecockConfig,
+  fine = false,
 ): FlightSample {
   let state: ShuttlecockState = {
     pos: [...launchPoint],
@@ -133,17 +143,20 @@ function simulateFlight(
   let previous = state
   let netHeight: number | null = null
 
-  for (let step = 0; step < MAX_FLIGHT_STEPS && state.pos[1] > 0; step += 1) {
+  const dt = fine ? FIXED_STEP / 2 : FIXED_STEP
+  for (let step = 0; step < MAX_FLIGHT_STEPS * (fine ? 2 : 1) && state.pos[1] > 0; step += 1) {
     previous = state
-    state = stepShuttlecock(state, FIXED_STEP, config, 4)
+    state = stepShuttlecock(state, dt, config, fine ? 4 : 2)
     if (netHeight === null && crossedNet(previous.pos[0], state.pos[0])) {
       const alpha = -previous.pos[0] / (state.pos[0] - previous.pos[0])
       netHeight = previous.pos[1] + (state.pos[1] - previous.pos[1]) * alpha
     }
   }
 
+  const alpha = previous.pos[1] / Math.max(1e-9, previous.pos[1] - state.pos[1])
   return {
-    landingPoint: [state.pos[0], 0, state.pos[2]],
+    landingPoint: [previous.pos[0] + (state.pos[0] - previous.pos[0]) * alpha, 0,
+      previous.pos[2] + (state.pos[2] - previous.pos[2]) * alpha],
     netHeight,
   }
 }

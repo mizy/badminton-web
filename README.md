@@ -78,6 +78,9 @@ pnpm verify:mobile
 # 真实键盘回归：连续杀球、至少六拍相持、暂停与资源错误检查
 PLAY_URL=http://127.0.0.1:3000 node scripts/verify-gameplay.mjs
 
+# 同一对局启用四倍 CPU 降速，统计实际击球帧（测量期间不截击球截图）
+PROFILE_FRAMES=1 PLAY_URL=http://127.0.0.1:3000 node scripts/verify-gameplay.mjs
+
 # pnpm build && pnpm preview 后：清单、安装条件、离线重开和触屏发球
 pnpm verify:pwa
 ```
