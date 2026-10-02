@@ -1,6 +1,6 @@
 /* 触屏操作层：整个屏幕交给 3D 画面，操作件都是漂浮在上面的半透明手柄。
-   左下区域落指生成短行程摇杆，拖过外圈时底座跟随；右侧是拇指技能簇——六个球路沿拇指弧线分布，
-   最大的挑球键承担主击球，吊/高远/杀球和平抽/放网环绕，起跳键在技能簇左侧；
+   左下区域落指生成短行程摇杆，拖过外圈时底座跟随；右侧常驻高远、杀球和挑球，
+   “更多”切换到吊球、平抽和放网，出拍后恢复常用键。整组内移，起跳独立占右侧；
    短按直接打该球路，按住拖动只改落点（横向连续左右、向上更深），力量条与落点读数在键组上方；
    右上角一个暂停键。触屏一共就这几个可点控件。
 
@@ -135,8 +135,9 @@
         容器本身不吃触摸（pointer-events: none），只有球路键和起跳键可点，其余都是提示。 ---- */
 .play-ui[data-input="touch"] .play-touch-shoot {
   position: absolute;
-  right: calc(var(--play-touch-edge) + var(--play-safe-right));
+  right: calc(80px + var(--play-safe-right));
   bottom: calc(var(--play-touch-edge) + var(--play-safe-bottom));
+  width: calc(var(--play-touch-primary) + var(--play-touch-mid) + 48px);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -153,6 +154,21 @@
 }
 .play-ui[data-input="touch"] .play-touch-charge .play-charge { margin-top: 0; }
 .play-ui[data-input="touch"] .play-touch-charge .play-charge > i { height: 5px; }
+.play-ui[data-input="touch"] .play-touch-more {
+  position: absolute; left: calc(var(--play-touch-shot) + 8px); top: calc(var(--play-touch-common) + 14px);
+  min-width: 50px; min-height: 44px; padding: 0 8px; border: 1px solid var(--play-line);
+  border-radius: 10px; color: var(--play-paper); background: rgb(12 28 48 / 85%);
+  font-size: 11px; pointer-events: auto; touch-action: manipulation;
+}
+.play-ui[data-input="touch"] .play-touch-more[aria-expanded="true"] { border-color: var(--play-home); color: var(--play-home); }
+.play-ui[data-input="touch"] .play-touch-extra {
+  position: absolute; left: 0; top: 0; width: 100%;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px;
+  border: 1px solid var(--play-line); border-radius: 14px; background: rgb(12 28 48 / 94%);
+}
+.play-ui[data-input="touch"] .play-touch-extra .play-touch-shot {
+  position: relative; width: 100%; min-width: 44px; height: 48px; border-radius: 10px;
+}
 
 .play-ui[data-input="touch"] .play-touch-jump {
   display: grid;
@@ -188,11 +204,10 @@
 }
 .play-ui[data-input="touch"] .play-touch-readout[data-active="true"] { opacity: 1; }
 
-/* ---- 球路键：原神式非对称拇指簇。挑球主键 80px、高远常用键 68px、
-        中频球路 62px、低频 48px；起跳 60px 独立占左翼，四档尺寸一眼可辨。 ---- */
+/* 常驻三键沿拇指弧线排布；更多球路在同一区域替换，起跳独立占右侧。 */
 .play-ui[data-input="touch"] .play-touch-actions {
   position: relative;
-  width: calc(var(--play-touch-primary) + var(--play-touch-mid) + 48px);
+  width: 100%;
   height: calc(var(--play-touch-primary) + var(--play-touch-mid) + var(--play-touch-shot) + 16px);
 }
 .play-ui[data-input="touch"] .play-touch-shots {
@@ -201,7 +216,7 @@
 }
 .play-ui[data-input="touch"] .play-touch-jump {
   position: absolute;
-  left: 0;
+  left: calc(100% + 6px);
   top: calc(100% - var(--play-touch-jump) - 28px);
 }
 .play-ui[data-input="touch"] .play-touch-shot {
@@ -223,7 +238,6 @@
   line-height: 1.05;
   pointer-events: auto;
 }
-.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="upper-left"] { left: 0; top: 4px; }
 .play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="upper-center"] {
   left: calc(var(--play-touch-shot) + 8px);
   top: 0;
@@ -238,13 +252,6 @@
   width: var(--play-touch-mid);
   height: var(--play-touch-mid);
   font-size: 13px;
-}
-.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="lower-left"] { left: 6px; top: calc(var(--play-touch-shot) + 14px); }
-.play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="lower-center"] {
-  left: calc(var(--play-touch-shot) + 16px);
-  top: calc(var(--play-touch-shot) + 20px);
-  width: var(--play-touch-mid);
-  height: var(--play-touch-mid);
 }
 .play-ui[data-input="touch"] .play-touch-shot[data-touch-slot="primary"] {
   right: 0;

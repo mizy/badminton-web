@@ -11,13 +11,13 @@ describe('触屏球路键排布', () => {
     expect([...shots].sort()).toEqual([...SHOT_ORDER].sort())
   })
 
-  it('两行都是三个键（拇指横排盲按，行不能太长）', () => {
+  it('常驻和展开的球路各三个', () => {
     expect(TOUCH_SHOT_ROWS.map(row => row.length)).toEqual([3, 3])
   })
 
-  it('按拇指弧线排布，并把高远 / 挑球标为常用主键', () => {
-    expect(TOUCH_SHOT_ROWS[0]).toEqual(['DROP', 'CLEAR', 'SMASH'])
-    expect(TOUCH_SHOT_ROWS[1]).toEqual(['NET_DROP', 'DRIVE', 'LIFT'])
+  it('高远、杀球和挑球常驻，其他球路可以展开', () => {
+    expect(TOUCH_SHOT_ROWS[0]).toEqual(['CLEAR', 'SMASH', 'LIFT'])
+    expect(TOUCH_SHOT_ROWS[1]).toEqual(['DROP', 'DRIVE', 'NET_DROP'])
     expect([...TOUCH_COMMON_SHOTS].sort()).toEqual(['CLEAR', 'LIFT'])
     expect(TOUCH_COMMON_SHOTS.every(shot => TOUCH_SHOT_ROWS.flat().includes(shot))).toBe(true)
   })

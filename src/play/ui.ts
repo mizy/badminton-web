@@ -84,11 +84,10 @@ export function pointBannerView(point: GameState['lastPoint']): { side: 'home' |
   }
 }
 
-/** 触屏球路槽位：按拇指自然扫过的弧线排布，最大主键留给最常用的挑球。
- *  每个球路仍恰好占一个固定槽位；CSS 依据 data-touch-slot 放置按钮。 */
+/** 第一组常驻，第二组放入“更多”；每种球路仍使用同一个按住/拖动/松手入口。 */
 export const TOUCH_SHOT_ROWS: readonly (readonly ShotType[])[] = [
-  ['DROP', 'CLEAR', 'SMASH'],
-  ['NET_DROP', 'DRIVE', 'LIFT'],
+  ['CLEAR', 'SMASH', 'LIFT'],
+  ['DROP', 'DRIVE', 'NET_DROP'],
 ]
 /** 常用球路：给主键尺寸和“常用”角标，拇指不必在六个同权按钮里逐个找。 */
 export const TOUCH_COMMON_SHOTS: readonly ShotType[] = ['CLEAR', 'LIFT']
@@ -203,9 +202,12 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
           <div class="play-touch-charge" data-ui="touch-charge"></div>
           <span class="play-touch-readout" data-ui="touch-aim-readout" aria-hidden="true">按住拖动瞄准</span>
           <div class="play-touch-actions">
+            <button type="button" class="play-touch-more" data-ui="more-shots" aria-expanded="false" aria-controls="play-extra-shots">更多</button>
             <button type="button" class="play-touch-jump" data-touch="jump" aria-label="起跳，按住不放是蹬转">起跳<small>按住蹬转</small></button>
             <div class="play-touch-shots" data-touch="shots" data-ui="touch-shots" role="group"
-              aria-label="球路键：短按直接打，按住拖动瞄准落点"></div>
+              aria-label="常用球路：高远、杀球、挑球，按住拖动瞄准">
+              <div id="play-extra-shots" class="play-touch-extra" data-ui="extra-shots" role="group" aria-label="更多球路" hidden></div>
+            </div>
           </div>
         </div>
       </div>
@@ -247,7 +249,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
           <p class="play-keyboard-note">杀球按住蓄力、松手立即出拍；其他球路可提前准备，近距离自动调整一步。数字 1–6 同效。</p>
           <p class="play-keyboard-note">金色接球圈是杀球机会；移动到位后按 L，Space 起跳可提高击球点。支持键盘和触屏。</p>
           <div class="play-touch-controls" data-ui="touch-controls">
-            <span>左下区域滑动移动：落指生成摇杆，轻推慢走、推满冲刺，拖远时底座跟随，松手回位</span><span>右侧六个球路键：短按直接打，按住蓄力、拖动瞄准，松手出拍；拖动不切换球路</span><span>起跳键：轻点起跳 / 发球，长按蹬转；等待发球时也可短按球路键发球</span><span>右上角暂停：声音 / 预测 / 录像都在暂停里</span>
+            <span>左下区域滑动移动：轻推慢走、推满冲刺，松手回位</span><span>右侧高远、杀球、挑球三个常用键；“更多”展开吊球、平抽、放网</span><span>按住蓄力、拖动瞄准，松手出拍；拖动不切换球路</span><span>起跳键：轻点起跳 / 发球，长按蹬转；右上角暂停</span>
           </div>
         </footer>
       </section>
@@ -346,11 +348,13 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     ui('shots').append(item)
     return item
   })
-  // 触屏球路键：六个固定槽位（见 TOUCH_SHOT_ROWS），位置由 CSS 按拇指弧线排。
+  // 常用三键和展开三键共用输入适配器；只在 UI 层折叠不常用球路。
   // 短按直接打出该球路，按住拖动只改落点（dataset 由 input/touchControls.ts 写入），落点读数写在键组上方。
   const touchAimReadout = ui('touch-aim-readout')
   const touchShots = ui('touch-shots')
-  const touchSlots = ['upper-left', 'upper-center', 'upper-right', 'lower-left', 'lower-center', 'primary']
+  const extraShots = ui('extra-shots')
+  const moreShots = ui<HTMLButtonElement>('more-shots')
+  const touchSlots = ['upper-center', 'upper-right', 'primary', 'extra', 'extra', 'extra']
   const touchShotButtons = TOUCH_SHOT_ROWS.flat().map((shot, index) => {
     const button = document.createElement('button')
     button.type = 'button'
@@ -369,7 +373,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
       button.append(tag)
     }
     button.setAttribute('aria-label', `${SHOT_NAMES[shot]}：短按直接打，按住拖动瞄准落点`)
-    touchShots.append(button)
+    ;(index < 3 ? touchShots : extraShots).append(button)
     return button
   })
   const resultRows = Array.from({ length: 3 }, (_, index) => {
@@ -462,6 +466,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     breakDialog.hidden = kind === null || kind === 'menu'
     if (previous === kind) return
     if (kind) {
+      setExtraShots(false)
       if (!previous && document.activeElement instanceof HTMLElement) returnFocus = document.activeElement
       const dialog = currentDialog()!
       const primary = kind === 'menu' ? difficulty : kind === 'paused' ? resumeButton
@@ -473,6 +478,14 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
       if (focus?.isConnected && !focus.closest('[hidden], [inert]')) focus.focus({ preventScroll: true })
       else if (document.activeElement instanceof HTMLElement && layer.contains(document.activeElement)) document.activeElement.blur()
     }
+  }
+
+  /** Owns the common/extra touch-key view; input and selected shot stay in the game. */
+  function setExtraShots(open: boolean): void {
+    extraShots.hidden = !open
+    touchShotButtons.slice(0, 3).forEach(button => { button.hidden = open })
+    moreShots.setAttribute('aria-expanded', String(open))
+    text(moreShots, open ? '常用' : '更多')
   }
 
   function refreshSettings(): void {
@@ -788,6 +801,13 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     predictionEnabled = !predictionEnabled
     refreshToggles()
     callbacks.prediction(predictionEnabled)
+  }, { signal })
+  moreShots.addEventListener('click', () => {
+    if (touchShotButtons.some(button => button.dataset.aiming === 'true')) return
+    setExtraShots(extraShots.hidden)
+  }, { signal })
+  extraShots.addEventListener('pointerup', () => {
+    setExtraShots(false)
   }, { signal })
 
   // Capture before the game's bubbling keyboard adapter. Native select/button defaults

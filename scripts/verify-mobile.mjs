@@ -29,7 +29,11 @@ try {
     await page.screenshot({ path: `.workbuddy/mobile-pwa/after-${name}-menu.png` })
     await page.select('#play-difficulty', 'easy')
     await page.click('[data-ui="start-training"]')
-    const controls = await page.evaluate(() => [...document.querySelectorAll('[data-touch="shot"], [data-touch="jump"], [data-touch="action"]')].map(node => {
+    assert.deepEqual(await page.$$eval('[data-touch="shot"]', nodes => nodes.filter(node => !node.closest('[hidden]')).map(node => node.dataset.shot)), ['CLEAR', 'SMASH', 'LIFT'])
+    await page.click('[data-ui="more-shots"]')
+    assert.equal(await page.$eval('[data-ui="extra-shots"]', node => node.hidden), false)
+    assert.deepEqual(await page.$$eval('[data-touch="shot"]', nodes => nodes.filter(node => !node.closest('[hidden]')).map(node => node.dataset.shot)), ['DROP', 'DRIVE', 'NET_DROP'])
+    const controls = await page.evaluate(() => [...document.querySelectorAll('[data-touch="shot"], [data-touch="jump"], [data-touch="action"], [data-ui="more-shots"]')].filter(node => !node.closest('[hidden]')).map(node => {
       const r = node.getBoundingClientRect()
       const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
       return { shot: node.dataset.shot ?? node.dataset.touch, size: Math.min(r.width, r.height), inside: r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight, reachable: !!top && node.contains(top) }
@@ -37,11 +41,31 @@ try {
     for (const control of controls) {
       assert.ok(control.inside && control.reachable && control.size >= 44, `${name}: ${JSON.stringify(control)}`)
     }
+    await page.screenshot({ path: `.workbuddy/mobile-pwa/after-${name}-more.png` })
+    await page.click('[data-ui="more-shots"]')
     const center = async selector => page.$eval(selector, node => {
       const r = node.getBoundingClientRect()
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
     })
     const stickCenter = await center('[data-touch="stick"]')
+    // Every visible shot can reach full right aim without reaching the screen edge.
+    for (const type of ['CLEAR', 'SMASH', 'LIFT']) {
+      const point = await center(`[data-shot="${type}"][data-touch="shot"]`)
+      assert.ok(point.x + 72 <= width - 24, `${name}: ${type} needs right-drag room`)
+      const aiming = await page.touchscreen.touchStart(point.x, point.y)
+      await aiming.move(point.x + 72, point.y)
+      await page.waitForFunction(type => Number(document.querySelector(`[data-touch="shot"][data-shot="${type}"]`).dataset.lateral) === 1, { timeout: 5000 }, type)
+      await aiming.end()
+      await page.click('[data-touch="action"]')
+      await page.click('[data-ui="restart"]')
+    }
+    await page.click('[data-ui="more-shots"]')
+    const extraPoint = await center('[data-shot="DROP"][data-touch="shot"]')
+    await page.touchscreen.tap(extraPoint.x, extraPoint.y)
+    assert.equal(await page.$eval('[data-ui="extra-shots"]', node => node.hidden), true)
+    assert.equal(await page.evaluate(() => window.__badminton__.getState().players[0].selectedShot), 'DROP')
+    await page.click('[data-touch="action"]')
+    await page.click('[data-ui="restart"]')
     const origin = { x: Math.round(width * 0.2), y: height - 140 }
     const drag = await page.touchscreen.touchStart(origin.x, origin.y)
     const baseDown = await center('[data-touch="stick"]')

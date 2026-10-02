@@ -53,6 +53,8 @@
   position: absolute;
   top: 30%;
   left: 50%;
+  width: max-content;
+  max-width: calc(100% - 32px);
   display: grid;
   justify-items: center;
   gap: 2px;
