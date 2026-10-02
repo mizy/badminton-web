@@ -223,7 +223,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
             <h1 id="play-menu-title">掌控回合<span>。</span><br>一拍制胜</h1>
             <p id="play-menu-description" class="play-lead">拉开角度，制造机会，高点杀球。<br class="play-desktop-break">下一拍，由你决定。</p>
             <div class="play-court-sketch" aria-hidden="true"><span></span><i></i><b>01</b></div>
-            <div class="play-editorial-note"><span>六种球路 / 三种对手风格</span><p>移动到接球圈，提前准备球路。<br>按住蓄力，松手后角色等球到位出拍。</p></div>
+            <div class="play-editorial-note"><span>六种球路 / 三种对手风格</span><p>杀球按住蓄力，松手立即出拍。<br>其他球路可提前准备，跟住来球。</p></div>
           </div>
           <div class="play-setup">
             <div class="play-section-heading"><h2>设定你的球局</h2><span>SESSION SETUP</span></div>
@@ -244,7 +244,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
         </div>
         <footer class="play-menu-footer">
           <div class="play-menu-controls" data-ui="keyboard-controls"><span><kbd>WASD</kbd> 移动 <kbd>Space</kbd> 起跳 <kbd>Q</kbd> 蹬转</span><span>发球 <kbd>J</kbd> 高远 <kbd>K</kbd> 小球 <kbd>I</kbd> 反手小 <kbd>L</kbd> 平射（按下即发）· 击球 <kbd>J</kbd> 高远 <kbd>K</kbd> 吊球 <kbd>L</kbd> 杀球 <kbd>U</kbd> 平抽 <kbd>I</kbd> 放网 <kbd>O</kbd> 挑球</span><span>击球按住蓄力、<kbd>WASD</kbd> 定落点 · <kbd>Space → L</kbd> 跳杀 <kbd>Q → L</kbd> 蹬转杀 <kbd>Shift + J</kbd> 滑板高远 <kbd>Shift + K</kbd> 切削吊球</span></div>
-          <p class="play-keyboard-note">球路键可提前短按准备；按住蓄力、松手等球出拍，近距离自动调整一步。数字 1–6 同效。</p>
+          <p class="play-keyboard-note">杀球按住蓄力、松手立即出拍；其他球路可提前准备，近距离自动调整一步。数字 1–6 同效。</p>
           <p class="play-keyboard-note">金色接球圈是杀球机会；移动到位后按 L，Space 起跳可提高击球点。支持键盘和触屏。</p>
           <div class="play-touch-controls" data-ui="touch-controls">
             <span>左下区域滑动移动：落指生成摇杆，轻推慢走、推满冲刺，拖远时底座跟随，松手回位</span><span>右侧六个球路键：短按直接打，按住蓄力、拖动瞄准，松手出拍；拖动不切换球路</span><span>起跳键：轻点起跳 / 发球，长按蹬转；等待发球时也可短按球路键发球</span><span>右上角暂停：声音 / 预测 / 录像都在暂停里</span>
@@ -650,7 +650,9 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     cue.dataset.active = String(!!opportunity || queued)
     cue.dataset.smash = String(player?.selectedShot === 'SMASH')
     text(ui('shot-cue-title'), queued ? `${SHOT_NAMES[player!.swing.shot]}已准备` : player?.selectedShot === 'SMASH' ? '杀球机会' : '来球 · 准备接球')
-    text(ui('shot-cue-note'), opportunity && opportunity.distance > 0.8 ? '移动到接球圈' : queued ? '跟住来球 · 到位后出拍' : touch ? '短按球路键 · 按住蓄力' : 'J 高远 / K 吊球 / L 杀球')
+    text(ui('shot-cue-note'), opportunity && opportunity.distance > 0.8 ? '移动到接球圈' : queued ? '跟住来球 · 到位后出拍'
+      : player?.selectedShot === 'SMASH' ? touch ? '按住杀球蓄力 · 松手立即出拍' : '按住 L 蓄力 · 松开立即出拍'
+      : touch ? '短按球路键 · 按住蓄力' : 'J 高远 / K 吊球 / L 杀球')
     const ratio = player && player.maxStamina > 0 ? player.stamina / player.maxStamina : 0
     const percent = Number.isFinite(ratio) ? Math.round(Math.max(0, Math.min(1, ratio)) * 100) : 0
     if (stamina.value !== percent) stamina.value = percent

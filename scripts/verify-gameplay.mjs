@@ -27,6 +27,7 @@ try {
   const hits = []
   const rallies = []
   let lastKey = ''
+  let holdingSmash = false
   const started = Date.now()
   while (Date.now() - started < 60000 && (hits.length < 8 || Math.max(0, ...rallies) < 6)) {
     const read = await page.evaluate(() => {
@@ -44,22 +45,33 @@ try {
       hits.push({ shot: s.players[0].swing.shot, quality: s.players[0].contactQuality, feedback: s.players[0].feedback, rallyHits: s.rallyHits })
       if (hits.length === 1 || s.players[0].swing.shot === 'SMASH') await page.screenshot({ path: `${output}/hit-${hits.length}.png` })
     }
-    if (s.phase === 'idle') { await setKeys([]); await page.keyboard.press('j') }
+    if (s.phase === 'idle') {
+      if (holdingSmash) { await page.keyboard.up('l'); holdingSmash = false }
+      await setKeys([])
+      await page.keyboard.press('j')
+    }
     else if (s.phase === 'playing' && s.lastHitter === 1 && opportunity) {
       const p = s.players[0]
       const dx = opportunity.position[0] - p.pos[0]
       const dz = opportunity.position[2] - p.pos[2]
       const forward = p.side === 0 ? 1 : -1
-      await setKeys(opportunity.distance > 0.65 ? [Math.abs(dx) > 0.15 ? dx * forward > 0 ? 'w' : 's' : '', Math.abs(dz) > 0.15 ? dz * forward > 0 ? 'd' : 'a' : ''].filter(Boolean) : [])
+      const smash = read.smash && hits.length < 8
+      await setKeys(opportunity.distance > (smash ? 0.18 : 0.65) ? [Math.abs(dx) > 0.15 ? dx * forward > 0 ? 'w' : 's' : '', Math.abs(dz) > 0.15 ? dz * forward > 0 ? 'd' : 'a' : ''].filter(Boolean) : [])
+      if (holdingSmash && opportunity.time <= 0.03 && opportunity.distance < 0.35) {
+        await page.keyboard.up('l')
+        holdingSmash = false
+      }
       if (p.swing.phase === 'ready' && opportunity.time < 0.8) {
         // After repeated smashes, sustain a cooperative rally using the safe shots.
-        await page.keyboard.press(read.smash && hits.length < 8 ? 'l' : s.shuttle.pos[1] < 1.65 ? 'o' : 'j')
+        if (smash) { await page.keyboard.down('l'); holdingSmash = true }
+        else await page.keyboard.press(s.shuttle.pos[1] < 1.65 ? 'o' : 'j')
         await page.screenshot({ path: `${output}/prepared.png` })
       }
     } else await setKeys([])
     await new Promise(resolve => setTimeout(resolve, 45))
   }
   await setKeys([])
+  if (holdingSmash) await page.keyboard.up('l')
   assert.ok(hits.length >= 5, `expected repeated human returns: ${JSON.stringify(hits)}`)
   assert.ok(hits.filter(hit => hit.shot === 'SMASH').length >= 3, `expected repeatable smashes: ${JSON.stringify(hits)}`)
   assert.ok(Math.max(...rallies) >= 6, `expected a sustained rally, longest ${Math.max(...rallies)}`)

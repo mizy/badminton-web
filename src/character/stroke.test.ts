@@ -3,6 +3,19 @@ import { createPlayer } from '../game/playerFactory'
 import { advanceSwing, beginSwing, canPlayShot, CHARGE, getShotTarget, RACKETS, releaseSwing } from './stroke'
 
 describe('charged strokes', () => {
+  it.each([0, 1.6])('holds a human smash beyond the charge cap (grace %s) and strikes on the first release', holdGrace => {
+    const home = createPlayer(0)
+    home.selectedShot = 'SMASH'
+    let player = advanceSwing(beginSwing(home, holdGrace), 2.7)
+    expect(player.swing.phase).toBe('preparing')
+    expect(player.contactPose).toBeNull()
+    player = releaseSwing(player)
+    expect(player.swing.phase).toBe('swinging')
+    expect(player.swing.elapsed).toBe(0)
+    expect(player.swing.charge01).toBe(1)
+    expect(releaseSwing(player)).toBe(player)
+  })
+
   it('holds the windup while charging and buffers released input until contact', () => {
     let player = beginSwing(createPlayer(0))
     expect(player.swing.phase).toBe('preparing')

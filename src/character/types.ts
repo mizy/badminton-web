@@ -40,7 +40,7 @@ export interface SwingState {
   target: [number, number, number] | null
   slice: boolean
   charge01: number
-  /** 本次蓄力允许按住的秒数：到点自动出拍。准备时长 + 蓄力窗口，触屏另加瞄准宽限。 */
+  /** 自动出拍时限：准备时长 + 蓄力窗口，触屏另加宽限。人类杀球保持到松手。 */
   holdLimit: number
 }
 

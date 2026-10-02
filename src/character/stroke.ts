@@ -40,22 +40,23 @@ export function beginSwing(player: PlayerState, holdGrace = 0): PlayerState {
   }
 }
 
-/** 松开后保存力量与落点，人类输入等待来球；AI 在已算好的时机直接出拍。
+/** 杀球在松开时立即出拍；其他人类球路等待来球，AI 使用已算好的时机。
  * minimumCharge 是触屏短按力量下限。挥拍开始时才计接触窗口。 */
 export function releaseSwing(player: PlayerState, minimumCharge = 0, buffered = true): PlayerState {
   if (player.swing.phase !== 'preparing') return player
   const floor = Math.min(1, Math.max(0, minimumCharge))
   const held = Math.max(charge01(player.swing.elapsed), floor)
   const aim: ShotAim = { ...player.swing.aim, depth: Math.max(-1, Math.min(1, player.swing.aim.depth + held * CHARGE_DEPTH_SPAN)) }
-  return { ...player, feedback: buffered ? `${SHOT_NAMES[player.swing.shot]}已准备 · 移动到接球圈` : player.feedback,
-    swing: { ...player.swing, phase: buffered ? 'queued' : 'swinging', elapsed: 0, aim, charge01: held } }
+  const queued = buffered && player.swing.shot !== 'SMASH'
+  return { ...player, feedback: queued ? `${SHOT_NAMES[player.swing.shot]}已准备 · 移动到接球圈` : `${SHOT_NAMES[player.swing.shot]} · 出拍`,
+    swing: { ...player.swing, phase: queued ? 'queued' : 'swinging', elapsed: 0, aim, charge01: held } }
 }
 
 export function advanceSwing(player: PlayerState, dt: number, buffered = true): PlayerState {
   if (player.swing.phase === 'ready') return player
   const racket = RACKETS[player.loadout]
   let next = player
-  if (next.swing.phase === 'preparing' && next.swing.elapsed + dt >= next.swing.holdLimit) {
+  if (next.swing.phase === 'preparing' && (!buffered || next.swing.shot !== 'SMASH') && next.swing.elapsed + dt >= next.swing.holdLimit) {
     // 蓄满封顶自动出拍：长时间按住不会卡死，也不额外惩罚。触屏的 holdLimit 含瞄准宽限。
     next = releaseSwing({ ...next, swing: { ...next.swing, elapsed: next.swing.holdLimit } }, 0, buffered)
   }

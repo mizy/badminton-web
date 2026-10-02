@@ -82,7 +82,8 @@ function processGameTick(state, dt, aiConfigs?): GameState
 
 负责一帧内的物理步进、碰撞检测、击球合成和计分判定。
 
-人类挥拍输入由 `character/stroke.ts` 保留为 `queued`，`processGameTick` 在来球到达时启动挥拍，
+人类杀球按住蓄力、松手立即进入 `swinging`，不自动出拍。其他人类挥拍输入由
+`character/stroke.ts` 保留为 `queued`，`processGameTick` 在来球到达时启动挥拍，
 并通过现有 `updateMovement` 完成附近站位调整。`character/interception.ts` 的纯轨迹预测同时由
 击球循环和 `play/frame.ts` 使用；画面上的预测每 80ms 更新，只保存在场景视图中。
 AI 继续使用现有战术计划和直接出拍时机，所有比赛状态变化仍经 `gameReducer`。

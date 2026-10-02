@@ -152,7 +152,7 @@ function contactPlayers(state: GameState): GameState {
     if (result.outcome !== 'hit') continue
     // Wait through the edge of the reach envelope rather than spending a prepared
     // shot on a weak frame scrape. Late contacts still get a rescue return.
-    const threshold = technique === 'SMASH' ? 0.45 : technique === 'CLEAR' ? 0.4 : 0
+    const threshold = technique === 'CLEAR' ? 0.4 : 0
     if (state.controls[i] === 'human' && result.quality < threshold && player.swing.elapsed < 0.22) continue
     const quality = result.quality * (0.7 + readiness * 0.3) * fatigue
     const feedback = result.netClearance !== null && result.netClearance < 0 ? '下网风险：触球过低或位置太靠后'
