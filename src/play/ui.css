@@ -1,9 +1,9 @@
 .play-ui {
-  --play-green: #123b30;
-  --play-deep: #09291f;
-  --play-paper: #f2efdf;
-  --play-muted: #bcc9b8;
-  --play-lemon: #e4f279;
+  --play-green: #18314d;
+  --play-deep: #0c1c30;
+  --play-paper: #f3f7fc;
+  --play-muted: #b4c6dc;
+  --play-lemon: #8ce9dd;
   /* 主客队霓虹色：与 start.ts 里两队队服/脚下能量环同色，HUD 与场上对得上。 */
   --play-home: #5ce1ff;
   --play-away: #ffa14f;
@@ -40,9 +40,7 @@
 .play-vignette {
   position: absolute;
   inset: 0;
-  background:
-    repeating-linear-gradient(0deg, rgb(0 0 0 / 9%) 0 1px, transparent 1px 3px),
-    radial-gradient(128% 90% at 50% 44%, transparent 46%, rgb(0 0 0 / 24%) 76%, rgb(0 0 0 / 54%) 100%);
+  background: radial-gradient(120% 100% at 50% 42%, transparent 55%, rgb(5 12 25 / 42%) 100%);
 }
 /* 得分瞬间的全屏同色闪光。 */
 .play-flash { position: absolute; inset: 0; opacity: 0; }
@@ -92,9 +90,7 @@
   transform: translateX(-50%);
   border-top: 2px solid var(--play-home);
   border-bottom: 1px solid var(--play-line);
-  background:
-    linear-gradient(rgb(9 41 31 / 96%), rgb(6 27 25 / 88%)),
-    repeating-linear-gradient(90deg, rgb(92 225 255 / 7%) 0 1px, transparent 1px 7px);
+  background: linear-gradient(rgb(12 28 48 / 94%), rgb(18 41 66 / 84%));
   box-shadow: 0 10px 30px rgb(0 0 0 / 35%), inset 0 0 26px rgb(92 225 255 / 8%);
   text-align: center;
 }
@@ -151,7 +147,7 @@
   border: 1px solid var(--play-line);
   border-radius: 999px;
   color: var(--play-paper);
-  background: linear-gradient(rgb(20 58 46 / 92%), rgb(9 41 31 / 92%));
+  background: rgb(12 28 48 / 88%);
   box-shadow: inset 0 1px 0 rgb(242 239 223 / 8%);
   font-size: 11px;
   letter-spacing: .04em;
@@ -163,7 +159,7 @@
 .play-tools [data-ui="record"] { grid-column: span 2; }
 .play-tools [data-recording="true"]::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; border-radius: 50%; background: #ffb396; }
 
-.play-training { position: absolute; top: 170px; left: 24px; width: 190px; padding: 15px 12px; border-left: 2px solid var(--play-lemon); background: rgb(9 41 31 / 88%); }
+.play-training { position: absolute; top: 170px; left: 24px; width: 190px; padding: 15px 12px; border-left: 2px solid var(--play-lemon); background: rgb(12 28 48 / 78%); }
 .play-training > .play-eyebrow { color: var(--play-muted); font-size: 9px; }
 .play-training h2 { margin-top: 5px; font-size: 13px; font-weight: 600; }
 .play-tasks { display: grid; gap: 0; margin-top: 11px !important; padding: 0; list-style: none; }
@@ -189,7 +185,7 @@
   row-gap: 9px;
   padding: 13px 18px 11px;
   border-top: 1px solid var(--play-line);
-  background: rgb(9 41 31 / 92%);
+  background: rgb(12 28 48 / 86%);
 }
 .play-feedback { grid-area: feedback; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding-right: 16px; min-width: 0; }
 .play-feedback strong { color: var(--play-lemon); font-size: 12px; font-weight: 550; }
@@ -243,8 +239,8 @@
   overflow: auto;
   overscroll-behavior: contain;
   padding: 26px;
-  background: rgb(5 25 18 / 84%);
-  backdrop-filter: blur(7px);
+  background: rgb(7 17 33 / 60%);
+  backdrop-filter: blur(4px);
   pointer-events: auto;
 }
 .play-menu {
@@ -253,7 +249,7 @@
   width: min(1120px, 100%);
   margin: auto;
   border-top: 3px solid var(--play-lemon);
-  background: var(--play-green);
+  background: linear-gradient(115deg, rgb(19 42 66 / 84%), rgb(12 25 44 / 97%));
   box-shadow: 0 25px 90px rgb(0 0 0 / 25%);
   animation: play-enter 240ms ease-out both;
 }
@@ -450,6 +446,49 @@
   .play-training h2 { font-size: 11px; }
   .play-console { bottom: 10px; row-gap: 5px; padding-block: 7px; }
   .play-shots li { min-height: 27px; padding-block: 4px; }
+}
+
+.play-shot-cue {
+  position: absolute; top: 190px; right: 24px; display: grid; gap: 4px;
+  padding: 12px 18px; border-right: 3px solid var(--play-home);
+  background: rgb(12 28 48 / 80%); text-align: right;
+  opacity: 0; transform: translateY(6px); transition: opacity 140ms, transform 140ms;
+}
+.play-shot-cue[data-active="true"] { opacity: 1; transform: none; }
+.play-shot-cue b { color: var(--play-home); font-size: 18px; }
+.play-shot-cue span { color: var(--play-muted); font-size: 11px; }
+.play-shot-cue[data-smash="true"] { border-color: #ffb45e; }
+.play-shot-cue[data-smash="true"] b { color: #ffb45e; }
+.play-impact-readout {
+  position: absolute; left: 50%; top: 25%; transform: translateX(-50%);
+  color: #fff; font-weight: 800; font-size: 28px; letter-spacing: .06em;
+  text-shadow: 0 2px 16px #122944; opacity: 0; transition: opacity 120ms;
+}
+.play-impact-readout[data-active="true"] { opacity: 1; }
+.play-impact-readout[data-quality="clean"] { color: #ffe3aa; }
+@media (min-width: 801px) {
+  .play-ui:not([data-input="touch"]) .play-console {
+    left: 24px; right: 24px; width: auto; max-width: none; bottom: 18px;
+    transform: none; padding: 0; border: 0; background: none;
+    grid-template-areas: "feedback shots" "player shots" "keys keys";
+    grid-template-columns: minmax(220px, 1fr) auto; gap: 8px 20px;
+  }
+  .play-ui:not([data-input="touch"]) .play-feedback { max-width: 370px; padding: 9px 12px; background: rgb(12 28 48 / 80%); border-left: 2px solid var(--play-home); }
+  .play-ui:not([data-input="touch"]) .play-player-readout { justify-content: flex-start; }
+  .play-ui:not([data-input="touch"]) .play-technique { display: none; }
+  .play-ui:not([data-input="touch"]) .play-shots { width: 450px; align-self: end; }
+  .play-ui:not([data-input="touch"]) .play-shots li { background: rgb(12 28 48 / 88%); min-height: 52px; border-radius: 8px; grid-template-columns: 1fr; justify-items: center; gap: 3px; }
+  .play-ui:not([data-input="touch"]) .play-shots li[data-selected="true"] { background: var(--shot-accent); }
+  .play-ui:not([data-input="touch"]) .play-shots li[data-selected="true"] > span { color: var(--play-deep); }
+  .play-ui:not([data-input="touch"]) .play-shots small, .play-ui:not([data-input="touch"]) .play-contact-window { display: none; }
+  .play-ui:not([data-input="touch"]) .play-key-hints { justify-content: flex-end; }
+  .play-ui:not([data-input="touch"]) .play-key-hints span:nth-child(n+4) { display: none; }
+}
+@media (max-width: 800px), (max-height: 500px) {
+  .play-shot-cue { top: 108px; right: 12px; padding: 5px 9px; max-width: 230px; }
+  .play-shot-cue b { font-size: 12px; }
+  .play-shot-cue span { font-size: 9px; }
+  .play-impact-readout { top: 24%; font-size: 20px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

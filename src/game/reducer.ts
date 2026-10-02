@@ -27,11 +27,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return serveFrom(state, action.playerIndex)
     case 'MOVE': {
       if (state.phase !== 'playing' && state.phase !== 'idle') return state
-      // 击球即制动：引拍与挥拍期间 WASD 只作落点采样，不再驱动移动。
-      if (state.phase === 'playing') {
-        const swing = state.players[action.playerIndex]?.swing.phase
-        if (swing === 'preparing' || swing === 'swinging') return state
-      }
       return updatePlayer(state, action.playerIndex, p => ({ ...p, movement: { ...p.movement, targetDir: action.dir } }))
     }
     case 'STOP_MOVE':
@@ -49,7 +44,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'SWING_START': {
       if (state.phase !== 'playing' && state.phase !== 'idle') return state
       const selected = updatePlayer(state, action.playerIndex, p => {
-        if (p.swing.phase !== 'ready') return p
+        if (p.swing.phase !== 'ready' && p.swing.phase !== 'queued') return p
         const contact = state.shuttle ? getShuttleCorkCenter(state.shuttle.pos, state.shuttle.vel) : null
         return {
           ...p,
@@ -64,11 +59,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // 等待发球时，发球键（J/K/I/L）即选择并直接发出该种发球。
       if (state.phase === 'idle') return serveFrom(selected, action.playerIndex)
       return updatePlayer(selected, action.playerIndex, p => {
-        if (p.swing.phase !== 'ready') return p
+        if (p.swing.phase !== 'ready' && p.swing.phase !== 'queued') return p
         const winding = beginSwing(p, action.holdGrace)
         return {
           ...winding,
-          movement: { ...winding.movement, targetDir: { x: 0, z: 0 } },
           swing: { ...winding.swing, slice: action.slice ?? false },
         }
       })

@@ -57,16 +57,36 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
   const hand = bones.rightHand!
   const palm = hand.getObjectByName('RightHandMiddle1')?.position.clone().multiplyScalar(0.65) ?? new THREE.Vector3()
   const rightArm = limbs.find(limb => limb.source === rig.rightArm)!
+  const leftArm = limbs.find(limb => limb.source === rig.leftArm)!
   const gripRotation = RACKET_IN_RIGHT_HAND.clone().invert()
+  const index = hand.getObjectByName('RightHandIndex1')
+  const pinky = hand.getObjectByName('RightHandPinky1')
+  // The handle crosses the palm from little finger towards index/thumb. Aligning
+  // it along the fingers produces a pinching wrist, even when positions match.
+  if (index && pinky) {
+    const shaft = index.getWorldPosition(new THREE.Vector3()).sub(pinky.getWorldPosition(new THREE.Vector3())).normalize()
+    const normal = new THREE.Vector3(0, -1, 0)
+    const x = new THREE.Vector3().crossVectors(shaft, normal).normalize()
+    normal.crossVectors(x, shaft).normalize()
+    const rotation = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, shaft, normal))
+    rotation.premultiply(rig.group.getWorldQuaternion(new THREE.Quaternion()).invert())
+    gripRotation.copy(rotation).invert()
+  }
   const fingers: { node: THREE.Object3D; rotation: THREE.Quaternion; axis: THREE.Vector3; angle: number; thumb: boolean }[] = []
   hand.traverse(node => {
     const match = /RightHand(Thumb|Index|Middle|Ring|Pinky)([123])$/.exec(node.name)
     if (!match) return
     const thumb = match[1] === 'Thumb'
     const joint = Number(match[2]) - 1
-    const angle = (thumb ? [0.3, 0.7, 0.35] : match[1] === 'Index' ? [0.45, 1.05, 0.65] : [0.8, 1.25, 0.8])[joint]
+    const angle = (thumb ? [0.95, 0.7, 0.55] : match[1] === 'Index' ? [0.45, 1.05, 0.65] : [0.8, 1.25, 0.8])[joint]
     const axis = new THREE.Vector3(0, 0, 1).applyQuaternion(rig.group.getWorldQuaternion(new THREE.Quaternion()))
-      .applyQuaternion(node.getWorldQuaternion(new THREE.Quaternion()).invert())
+    if (thumb && joint === 0 && node.children[0]) {
+      const root = node.getWorldPosition(new THREE.Vector3())
+      const direction = node.children[0].getWorldPosition(new THREE.Vector3()).sub(root)
+      const towardsGrip = hand.localToWorld(palm.clone()).sub(root)
+      axis.crossVectors(direction, towardsGrip).normalize()
+    }
+    axis.applyQuaternion(node.getWorldQuaternion(new THREE.Quaternion()).invert())
     fingers.push({ node, rotation: node.quaternion.clone(), axis, angle, thumb })
   })
   hand.add(racket)
@@ -108,7 +128,11 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
       .multiply(hand.getWorldScale(new THREE.Vector3())).applyQuaternion(handRotation))
     retargetLimb(rightArm, facing, wrist)
     rotate(rightArm.end, handRotation)
-    retargetLimb(limbs.find(limb => limb.source === rig.leftArm)!, facing)
+    retargetLimb(leftArm, facing)
+    const forearm = leftArm.end.node.getWorldPosition(new THREE.Vector3())
+      .sub(leftArm.lower.node.getWorldPosition(new THREE.Vector3())).normalize().applyQuaternion(facing.clone().invert())
+    rotate(leftArm.end, new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), forearm)
+      .multiply(leftArm.end.rotation).premultiply(facing))
     for (const finger of fingers) {
       const angle = player?.grip === 'backhand' && finger.thumb ? finger.angle * 0.2 : finger.angle
       finger.node.quaternion.copy(finger.rotation).multiply(new THREE.Quaternion().setFromAxisAngle(finger.axis, angle))

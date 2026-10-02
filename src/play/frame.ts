@@ -10,6 +10,7 @@ import type { PlayViewState } from './viewState'
 import { advanceSimulation } from './simulation'
 import { predictLandingPoint } from '../physics/shuttlecock'
 import { getShotTarget } from '../character/stroke'
+import { predictShotOpportunity, type ShotOpportunity } from '../character/interception'
 
 export interface PlaySceneObjects {
   awayGroundMarker: THREE.Group
@@ -25,6 +26,9 @@ export interface PlaySceneObjects {
   serviceMarker: THREE.Mesh
   trail: TrailSystem
   predictionAt: number
+  receptionMarker: THREE.Mesh
+  opportunity: ShotOpportunity | null
+  opportunityAt: number
 }
 
 export function stepFrame(now: number, state: GameState, view: PlayViewState, configs?: TickAIConfigs): GameState {
@@ -50,7 +54,7 @@ export function syncFrameView(now: number, state: GameState, view: PlayViewState
     objects.shuttleShadow.scale.setScalar(shadow.scale)
     ;(objects.shuttleShadow.material as THREE.MeshBasicMaterial).opacity = shadow.opacity
     if (state.rallyHits > view.lastHitCount) {
-      spawnImpactEffect(state.shuttle.pos, 0.6)
+      spawnImpactEffect(state.shuttle.pos, state.players[state.lastHitter ?? 0]?.swing.shot === 'SMASH' ? 1 : 0.6)
       view.lastHitCount = state.rallyHits
     }
     if (prediction && now >= objects.predictionAt) {
@@ -72,6 +76,19 @@ export function syncFrameView(now: number, state: GameState, view: PlayViewState
     updateGroundMarker(marker, state.elapsed)
   }
   const home = state.players[0]
+  const incoming = home && state.shuttle && state.phase === 'playing' && state.lastHitter === 1 && !state.netTouched
+  if (now >= objects.opportunityAt || !incoming) {
+    objects.opportunity = incoming ? predictShotOpportunity(home, state.shuttle!, home.swing.phase === 'ready' ? home.selectedShot : home.swing.shot) : null
+    // This expensive visual prediction is transient; it never enters GameState.
+    objects.opportunityAt = now + 80
+  }
+  objects.receptionMarker.visible = !!objects.opportunity
+  if (objects.opportunity) {
+    objects.receptionMarker.position.set(objects.opportunity.position[0], 0.04, objects.opportunity.position[2])
+    const material = objects.receptionMarker.material as THREE.MeshBasicMaterial
+    material.color.setHex(home?.selectedShot === 'SMASH' ? 0xffb45e : 0x7de5ef)
+    material.opacity = 0.55 + Math.sin(now * 0.008) * 0.15
+  }
   if (home) {
     const target = getShotTarget(home, home.selectedShot, home.aim)
     objects.targetMarker.position.set(target[0], 0.045, target[2])

@@ -12,16 +12,18 @@
 - 两套素材均为 **CC0 1.0 Universal**，允许修改、商用和随源码再分发；
   完整许可保存在 `quaternius-cc0-license.txt`。
 
-`quaternius-player.glb` 约 836KB。准备脚本保留原始人体网格、蒙皮权重和骨长，
-把 UE 骨骼名映射为现有绑定器支持的 Mixamo 名称，使用轻量材质划分皮肤、队服和短裤。
+`quaternius-player.glb` 约 807KB，`quaternius-player.png` 约 18KB。准备脚本保留原始人体网格、蒙皮权重和骨长，
+把 UE 骨骼名映射为现有绑定器支持的 Mixamo 名称，按原始 UV 绘制运动服、号码、领口、侧条和裤边。
+纹理在每个三角形内插值人体坐标，衣服边缘不再沿三角形呈锯齿；UV 岛边缘带滤波留白。
 原模型的裸足面由项目现有运动鞋、袜子替换，球鞋仍跟随模型踝关节。
-模型使用内置材质，无额外贴图请求；比赛时队服材质染为主场蓝 / 客场红。
+模型的 `Player_Kit` 使用同目录 PNG，复用 `createTeamTexture` 将红色队服染为主场蓝 / 客场红，
+保留皮肤、头发、号码和短裤颜色。GLB 与 PNG 都随游戏打包并纳入离线缓存。
 
 GLB 同时保留官方动画库的 `Idle_Loop`、`Walk_Loop`、`Sprint_Loop`，
 对应 `idle`、`walk`、`run`，每段仅导出左右大腿、小腿、脚的六条旋转轨道。
 世界移动、起跳和挥拍继续由比赛状态及本地运动学驱动。
 
-从官方免费包解压后，可重新生成素材：
+从官方免费包解压后，用 Python 3 + NumPy 可重新生成素材：
 
 ```sh
 python3 scripts/prepare-quaternius-player.py \
@@ -29,8 +31,10 @@ python3 scripts/prepare-quaternius-player.py \
   '/path/Universal Animation Library[Standard]/Unreal-Godot/UAL1_Standard.glb'
 ```
 
-球拍以掌心为握柄点，使用公共 `RACKET_IN_RIGHT_HAND` 校准手掌方向。
-右手指屈曲包住拍柄，反手时拇指较直；上身跟随公共骨架的持拍肩位置，避免侧身后
+球拍以掌心为握柄点；带手指的模型由食指、小指根部确定横过掌心的柄轴，
+其余模型保留公共 `RACKET_IN_RIGHT_HAND` 校准。
+右手指屈曲包住拍柄，拇指根部向握柄收拢，反手时拇指较直；非持拍手沿前臂抬起。
+上身跟随公共骨架的持拍肩位置，避免侧身后
 模型手腕与实际触球点错开。腿部落点随髋朝向，引拍时肩髋继续分离，头部回看球网。
 
 加载或骨骼绑定失败时显示程序构造球员。`/?model=` 可查看回退；

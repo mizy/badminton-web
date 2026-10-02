@@ -3,21 +3,21 @@ import { createPlayer } from '../game/playerFactory'
 import { advanceSwing, beginSwing, canPlayShot, CHARGE, getShotTarget, RACKETS, releaseSwing } from './stroke'
 
 describe('charged strokes', () => {
-  it('holds the windup while charging and strikes only on release', () => {
+  it('holds the windup while charging and buffers released input until contact', () => {
     let player = beginSwing(createPlayer(0))
     expect(player.swing.phase).toBe('preparing')
     player = advanceSwing(player, 0.13)
     expect(player.swing.phase).toBe('preparing')
     expect(beginSwing(player)).toBe(player)
     player = releaseSwing(player)
-    expect(player.swing.phase).toBe('swinging')
+    expect(player.swing.phase).toBe('queued')
     expect(player.swing.charge01).toBeGreaterThan(0.15)
     let struck = advanceSwing(player, 0.35)
-    expect(struck.swing.phase).toBe('recovery')
-    expect(struck.feedback).toContain('挥空')
-    struck = advanceSwing(struck, 0.5)
+    expect(struck.swing.phase).toBe('queued')
+    struck = advanceSwing(struck, 0.7)
     expect(struck.swing.phase).toBe('ready')
     expect(struck.wantsToSwing).toBe(false)
+    expect(struck.feedback).toContain('未接到')
     const tapped = releaseSwing(beginSwing(createPlayer(0)))
     expect(tapped.swing.charge01).toBe(0)
   })

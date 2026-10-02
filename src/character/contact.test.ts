@@ -94,7 +94,7 @@ describe('shot contact model', () => {
     expect(result.reachable).toBe(false)
   })
 
-  it('punishes a visible off-center cork even when the technique is valid', () => {
+  it('reduces off-center quality while keeping a near-center return playable', () => {
     const input = createInput(DRIVE_CONTACT, 'DRIVE', 0)
     const offCenter: Vec3 = [DRIVE_CONTACT[0], DRIVE_CONTACT[1] + 0.035, DRIVE_CONTACT[2]]
     input.shuttle = {
@@ -105,9 +105,9 @@ describe('shot contact model', () => {
 
     expect(result.outcome).toBe('hit')
     expect(result.contactError).toBeCloseTo(0.035, 3)
-    expect(result.sweetSpot).toBeLessThan(0.35)
-    expect(result.quality).toBeLessThan(0.35)
-    expect(result.reason).toBe('off center')
+    expect(result.sweetSpot).toBeLessThan(0.8)
+    expect(result.quality).toBeLessThan(evaluateContact(createInput(DRIVE_CONTACT, 'DRIVE', 0)).quality)
+    expect(result.quality).toBeGreaterThan(0.4)
   })
 
   it.each([
@@ -124,7 +124,7 @@ describe('shot contact model', () => {
 
     expect(result.outcome).toBe(outcome)
     expect(result.contactError).toBeCloseTo(error, 5)
-    if (outcome === 'hit') expect(result.reason).toBe('off center')
+    if (outcome === 'hit') expect(result.sweetSpot).toBeLessThan(0.7)
     else expect(result.reason).toBe('racket contact')
   })
 

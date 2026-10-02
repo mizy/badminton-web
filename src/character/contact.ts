@@ -80,7 +80,7 @@ export const MAX_PLAYABLE_CONTACT_ERROR = 0.18
 const TECHNIQUES: Record<ShotType, TechniqueProfile> = {
   SMASH: {
     baseSpeed: 42, elevationDeg: -8, faceDeg: -18,
-    height: 2.05, heightTolerance: 0.4, reach: 0.92, reachTolerance: 0.42, targetX: 4.55,
+    height: 2.25, heightTolerance: 0.55, reach: 0.55, reachTolerance: 0.55, targetX: 4.55,
   },
   CLEAR: {
     baseSpeed: 28, elevationDeg: 42, faceDeg: 18,
@@ -115,7 +115,8 @@ export function evaluateContact(input: ContactInput): ContactResult {
   const technique = resolveTechnique(input, shuttleCorkCenter)
   const profile = TECHNIQUES[technique]
   const idealPoint = idealContactPoint(input.playerPos, input.playerSide, technique)
-  const sweetSpot = clamp01(1 - contactError / MAX_CONTACT_ERROR)
+  const sweetSpot = contactError <= MAX_CONTACT_ERROR ? clamp01(1 - contactError / MAX_CONTACT_ERROR * 0.35)
+    : 0.65 * clamp01(1 - (contactError - MAX_CONTACT_ERROR) / (MAX_PLAYABLE_CONTACT_ERROR - MAX_CONTACT_ERROR))
   const techniqueFit = computeTechniqueFit(input, technique, shuttleCorkCenter)
   const faceScore = computeFaceScore(input.racketFaceDeg, profile.faceDeg)
   const quality = clamp01(timingScore * sweetSpot * techniqueFit * faceScore)

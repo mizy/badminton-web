@@ -24,9 +24,9 @@ interface PlayStartObjects extends PlaySceneObjects {
 
 export function startGame(): () => void {
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x061b19)
+  scene.background = new THREE.Color(0x101d33)
   // 雾只压很远处的背景（球场全长约 13.4m，相机距近端 ~10m）：远端不至于把对手糊掉。
-  scene.fog = new THREE.Fog(0x071d1a, 24, 64)
+  scene.fog = new THREE.Fog(0x101d33, 28, 65)
   const objects = createPlayObjects(scene)
   const recorder = new Recorder()
   const view = createViewState()
@@ -76,7 +76,7 @@ export function startGame(): () => void {
     state = gameReducer(state, action)
     if (!wasPaused && state.phase === 'paused') input.disconnect()
     if (wasPaused && state.phase !== 'paused' && active) input.connect(handleInput)
-    ui.update(state)
+    ui.update(state, objects.opportunity)
     if (wasPaused && state.phase !== 'paused' && active) objects.renderer.domElement.focus({ preventScroll: true })
   }
 
@@ -100,7 +100,7 @@ export function startGame(): () => void {
     view.lastTime = performance.now()
     view.lastRallyId = -1
     input.connect(handleInput)
-    ui.update(state)
+    ui.update(state, objects.opportunity)
     objects.renderer.domElement.focus({ preventScroll: true })
     unlockAudio()
   }
@@ -123,6 +123,25 @@ export function startGame(): () => void {
     oscillator.start()
     oscillator.stop(audio.currentTime + duration)
     oscillator.onended = () => { oscillator.disconnect(); gain.disconnect() }
+  }
+
+  function playImpact(smash: boolean): void {
+    if (!soundEnabled || !audio || audio.state !== 'running') return
+    const duration = smash ? 0.13 : 0.07
+    const buffer = audio.createBuffer(1, Math.ceil(audio.sampleRate * duration), audio.sampleRate)
+    const samples = buffer.getChannelData(0)
+    for (let i = 0; i < samples.length; i++) samples[i] = (Math.random() * 2 - 1) * Math.exp(-i / samples.length * 9)
+    const noise = audio.createBufferSource()
+    noise.buffer = buffer
+    const filter = audio.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.value = smash ? 1500 : 2800
+    filter.Q.value = 0.8
+    const gain = audio.createGain()
+    gain.gain.value = smash ? 0.24 : 0.14
+    noise.connect(filter).connect(gain).connect(audio.destination)
+    noise.start()
+    noise.onended = () => { noise.disconnect(); filter.disconnect(); gain.disconnect() }
   }
 
   async function toggleRecording(): Promise<void> {
@@ -179,9 +198,9 @@ export function startGame(): () => void {
     if (active) {
       state = stepFrame(now, state, view, { away: getAIConfig(options.difficulty, options.style, options.mode === 'training') , home: undefined })
       if (state.rallyHits > previous.rallyHits) {
-        playTone(1050, 0.055)
         // 重杀命中抖得更狠，普通击球也有一点回馈。
         const hitter = state.players[state.lastHitter ?? 0]
+        playImpact(hitter?.swing.shot === 'SMASH')
         shake(hitter?.swing.shot === 'SMASH' ? 0.85 : 0.28)
       }
       if (state.lastPoint && state.lastPoint !== previous.lastPoint) {
@@ -199,7 +218,7 @@ export function startGame(): () => void {
     }
     syncFrameView(now, state, view, objects, prediction)
     objects.arena.update(now / 1000, active ? state.rallyHits : 0)
-    ui.update(state)
+    ui.update(state, objects.opportunity)
     applyShake(now)
     objects.renderer.render(scene, objects.camera)
     if (recorder.isRecording()) {
@@ -255,7 +274,7 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.08
+  renderer.toneMappingExposure = 1.18
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.domElement.setAttribute('aria-label', '羽毛球单打球场')
@@ -264,9 +283,9 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   document.body.appendChild(renderer.domElement)
   const camera = createGameCamera()
   const arena = createCourt(scene)
-  scene.add(new THREE.HemisphereLight(0xdff5ff, 0x18342e, 1.35))
+  scene.add(new THREE.HemisphereLight(0xf0f5ff, 0x3a485d, 2))
   const light = new THREE.DirectionalLight(0xfff7e8, 2.45)
-  light.position.set(-5, 12, 5)
+  light.position.set(-3, 14, 5)
   light.castShadow = true
   light.shadow.mapSize.set(1024, 1024)
   light.shadow.camera.left = -11
@@ -278,13 +297,13 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   light.shadow.bias = -0.0002
   light.shadow.normalBias = 0.025
   // 冷暖双补光把球员与深色看台分开，同时维持白色边线和羽球的辨识度。
-  const rimLight = new THREE.DirectionalLight(0x75d9cf, 0.62)
+  const rimLight = new THREE.DirectionalLight(0x87cfff, 1.1)
   rimLight.position.set(7, 5, -9)
   const warmFill = new THREE.DirectionalLight(0xffb47c, 0.46)
   warmFill.position.set(-8, 3, -4)
   scene.add(light, rimLight, warmFill)
   const shuttleGroup = createShuttlecockMesh()
-  shuttleGroup.scale.setScalar(1.65)
+  shuttleGroup.scale.setScalar(2)
   // 队服配色：主场电光蓝+青霓虹、客场猩红+琥珀，和绿色球场拉开对比。
   const modelParams = new URLSearchParams(window.location.search)
   const modelOverride = modelParams.get('model')
@@ -303,9 +322,11 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   const shuttleShadow = marker(0x000000, 0, 0.11, 0.75)
   const landingMarker = marker(0xf0eee4, 0.24, 0.3, 0.9)
   const targetMarker = marker(0xe7eb80, 0.3, 0.35, 0.65)
+  const receptionMarker = marker(0x7de5ef, 0.62, 0.67, 0.65)
   const serviceMarker = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 2.5), new THREE.MeshBasicMaterial({ color: 0xe7eb80, transparent: true, opacity: 0.12, depthWrite: false }))
   serviceMarker.rotation.x = -Math.PI / 2
   scene.add(shuttleGroup, homeMesh, awayMesh, homeGroundMarker, awayGroundMarker, serviceMarker)
   return { renderer, arena, camera, scene, shuttleGroup, homeMesh, awayMesh, homeGroundMarker, awayGroundMarker,
-    shuttleShadow, landingMarker, targetMarker, serviceMarker, trail: createTrailSystem(scene), predictionAt: 0 }
+    shuttleShadow, landingMarker, targetMarker, receptionMarker, serviceMarker, trail: createTrailSystem(scene), predictionAt: 0,
+    opportunity: null, opportunityAt: 0 }
 }

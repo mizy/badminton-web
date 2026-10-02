@@ -33,7 +33,7 @@ export interface ShotAim {
 }
 
 export interface SwingState {
-  phase: 'ready' | 'preparing' | 'swinging' | 'recovery'
+  phase: 'ready' | 'preparing' | 'queued' | 'swinging' | 'recovery'
   elapsed: number
   shot: ShotType
   aim: ShotAim

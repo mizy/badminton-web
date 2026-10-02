@@ -15,7 +15,7 @@ import * as THREE from 'three'
 type CameraMode = 'overhead' | 'third_person'
 let currentMode: CameraMode = 'third_person'
 
-const TARGET_Y = -0.3
+const TARGET_Y = 0.6
 const WORLD_UP = new THREE.Vector3(0, 1, 0)
 const viewDirection = new THREE.Vector3()
 const screenRight = new THREE.Vector3()
@@ -24,9 +24,9 @@ const offset = new THREE.Vector3()
 /** 每帧的注视点与取景原点：竖屏时向对场偏移，见 PORTRAIT_TARGET_OFFSET。 */
 const frameTarget = new THREE.Vector3(0, TARGET_Y, 0)
 
-const BASE_DISTANCE = 19
+const BASE_DISTANCE = 14.5
 /** 宽屏（aspect ≥ 1）垂直 FOV；竖屏用 PORTRAIT_FOV 补回横向视锥。 */
-const LANDSCAPE_FOV = 50
+const LANDSCAPE_FOV = 46
 /** 球对 distance 的最大抬升比例（相对基准 distance）。 */
 const SHUTTLE_EXTRA_RATIO = 0.06
 /** distance 平滑时间常数（秒）。 */
@@ -38,9 +38,9 @@ const PORTRAIT_FRAME_MARGIN = 0.92
 
 /** 基准包围角点：覆盖半场（x 由 side 镜像）、双打边线与 y=6 高点。 */
 const FRAME_CORNERS: ReadonlyArray<readonly [number, number, number]> = [
-  [-7.5, 0, -3.6], [-7.5, 0, 3.6], [7.5, 0, -3.6], [7.5, 0, 3.6],
+  [-7, 0, -3.4], [-7, 0, 3.4], [7, 0, -3.4], [7, 0, 3.4],
   [-6, 2.8, -3.6], [-6, 2.8, 3.6], [6, 2.8, -3.6], [6, 2.8, 3.6],
-  [-2, 6, -3.6], [-2, 6, 3.6], [2, 6, -3.6], [2, 6, 3.6],
+  [-2, 4, -3.4], [-2, 4, 3.4], [2, 4, -3.4], [2, 4, 3.4],
 ]
 
 /** 竖屏取景（手机竖握）。横向视锥只有横屏的 1/4：按 FRAME_CORNERS 取景会把相机推到 28 单位外，
@@ -153,7 +153,7 @@ export function updateCamera(
   camera.fov = portrait ? PORTRAIT_FOV : LANDSCAPE_FOV
 
   if (currentMode === 'third_person') {
-    viewDirection.set(playerSide === 0 ? -1 : 1, portrait ? PORTRAIT_PITCH_Y : 0.75, 0).normalize()
+    viewDirection.set(playerSide === 0 ? -1 : 1, portrait ? PORTRAIT_PITCH_Y : 0.95, 0).normalize()
   } else {
     viewDirection.set(0, 0.9, 1).normalize()
   }
@@ -168,7 +168,7 @@ export function updateCamera(
   // 竖屏不再吃 BASE_DISTANCE 的下限：宽屏那个 19 是按横屏角点定的，竖屏套上去球场只有屏宽的 6 成。
   const base = portrait
     ? requiredDistance(PORTRAIT_FRAME_CORNERS, camera, PORTRAIT_FRAME_MARGIN)
-    : Math.max(BASE_DISTANCE, requiredDistance(FRAME_CORNERS, camera))
+    : Math.max(BASE_DISTANCE, requiredDistance(FRAME_CORNERS, camera, 0.9))
   let target = base
   if (shuttlePos) {
     // 弱影响：球坐标先压回场地附近，超出基准的部分最多抬 6%。
@@ -193,7 +193,7 @@ export function updateCamera(
   }
   cameraState.set(camera, { distance, side: playerSide, mode: currentMode, portrait })
 
-  camera.position.copy(frameTarget).addScaledVector(viewDirection, distance + 2.5)
+  camera.position.copy(frameTarget).addScaledVector(viewDirection, distance + (portrait ? 2.5 : 0.5))
   camera.up.copy(WORLD_UP)
   camera.lookAt(frameTarget)
   camera.far = Math.max(200, distance + 30)

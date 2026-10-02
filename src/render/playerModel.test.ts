@@ -42,7 +42,9 @@ describe('glTF player binding', () => {
       expect(clip.tracks.every(track => /(?:Left|Right)(?:UpLeg|Leg|Foot)\.quaternion$/.test(track.name))).toBe(true)
     }
     const finger = model.getObjectByName('RightHandMiddle2')!
+    const thumb = model.getObjectByName('RightHandThumb1')!
     const openFinger = finger.quaternion.clone()
+    const openThumb = thumb.quaternion.clone()
     const updateModel = bindHumanoidModel(rig, model, animations)
     const player = createPlayer(0)
     player.movement.footwork = 'lunge'
@@ -59,6 +61,7 @@ describe('glTF player binding', () => {
     expect(world(racket).distanceTo(world(bones.rightHand!))).toBeLessThan(0.09)
     expect(world(model.getObjectByName('racket-string-center')!).distanceTo(world(racket))).toBeCloseTo(0.46, 5)
     expect(finger.quaternion.angleTo(openFinger)).toBeGreaterThan(0.5)
+    expect(thumb.quaternion.angleTo(openThumb)).toBeGreaterThan(0.8)
     expect(model.getObjectByName('right-shoe')?.parent).toBe(bones.rightFoot)
     expect(model.getObjectByName('left-shoe')?.parent).toBe(bones.leftFoot)
   })

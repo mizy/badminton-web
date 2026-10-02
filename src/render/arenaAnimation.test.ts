@@ -10,13 +10,15 @@ describe('playable arena animation', () => {
     const before = new THREE.Matrix4()
     const after = new THREE.Matrix4()
 
-    expect(bodies.count).toBe(136)
+    expect(bodies.count).toBe(272)
     expect(bodies.instanceMatrix.usage).toBe(THREE.DynamicDrawUsage)
     arena.update(0, 0)
     bodies.getMatrixAt(0, before)
     arena.update(0.8, 12)
     bodies.getMatrixAt(0, after)
 
+    expect(before.elements.every(Number.isFinite)).toBe(true)
+    expect(after.elements.every(Number.isFinite)).toBe(true)
     expect(after.equals(before)).toBe(false)
   })
 

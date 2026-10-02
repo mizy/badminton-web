@@ -92,7 +92,7 @@ function localContactPose(parent: THREE.Object3D, pose: RacketContactPose): ArmP
 }
 
 function applyArmPose(rig: PlayerMotion, pose: ArmPose): void {
-  poseLimb(rig.rightArm, pose.grip, new THREE.Vector3(-1, -0.6, -0.25))
+  poseLimb(rig.rightArm, pose.grip, new THREE.Vector3(-1, pose.grip.y > 1.5 ? 0.3 : -0.6, -0.35))
   // The racket is a wrist child: hand, grip and string bed turn together.
   rig.rightArm.end.quaternion.copy(rig.rightArm.root.quaternion).multiply(rig.rightArm.joint.quaternion).invert().multiply(pose.rotation)
   rig.racket.quaternion.identity()
@@ -114,7 +114,7 @@ function leftArmTarget(player: PlayerState, cycle: number, speed: number): THREE
   if (player.body.phase === 'airborne') return new THREE.Vector3(0.40, 1.54, 0.08)
   const depth = player.movement.footworkPoint?.split('-')[0]
   if (depth === 'front') return new THREE.Vector3(0.40, 1.22, -0.48)
-  if (player.swing.phase === 'preparing' || depth === 'back') return new THREE.Vector3(0.28, 1.66, 0.30)
+  if (player.swing.phase === 'preparing' || player.swing.phase === 'queued' || depth === 'back') return new THREE.Vector3(0.28, 1.66, 0.30)
   if (player.swing.phase === 'swinging' || player.swing.phase === 'recovery') return new THREE.Vector3(0.34, 1.13, 0.20)
   const sway = Math.sin(cycle) * Math.min(speed / 5, 1) * 0.12
   return new THREE.Vector3(0.26, 1.23, 0.24 + sway)
@@ -160,7 +160,7 @@ export function updatePlayerMotion(rig: PlayerMotion, player: PlayerState, elaps
   const gripSide = player.grip === 'backhand' ? 1 : -1
   const postureSide = pointSide || gripSide
   // 六点步点先决定侧身方向，后场交叉步比中场并步转得更多；引拍继续沿正/反手侧加深。
-  const windup = phase === 'preparing' ? smooth(player.swing.elapsed / timing.preparation)
+  const windup = phase === 'queued' ? 1 : phase === 'preparing' ? smooth(player.swing.elapsed / timing.preparation)
     : phase === 'swinging' ? 1 - smooth(player.swing.elapsed / SWING_DURATION) : 0
   const shot = phase === 'ready' ? player.selectedShot : player.swing.shot
   const overhead = shot === 'CLEAR' || shot === 'DROP' || shot === 'SMASH'
@@ -177,7 +177,8 @@ export function updatePlayerMotion(rig: PlayerMotion, player: PlayerState, elaps
   // 各阶段首尾取值相接（0.08 → 0.32 → -0.22 → 0.08），球拍不会在阶段切换时瞬跳。
   const recoveryDuration = Math.max(SWING_DURATION + 1e-6, timing.recovery)
   let separationAngle = 0.08
-  if (phase === 'preparing') separationAngle = 0.08 + 0.24 * THREE.MathUtils.clamp(player.swing.elapsed / timing.preparation, 0, 1)
+  if (phase === 'queued') separationAngle = 0.32
+  else if (phase === 'preparing') separationAngle = 0.08 + 0.24 * THREE.MathUtils.clamp(player.swing.elapsed / timing.preparation, 0, 1)
   else if (phase === 'swinging') separationAngle = 0.32 - 0.54 * THREE.MathUtils.clamp(player.swing.elapsed / SWING_DURATION, 0, 1)
   else if (phase === 'recovery') separationAngle = -0.22 + 0.30 * THREE.MathUtils.clamp((player.swing.elapsed - SWING_DURATION) / (recoveryDuration - SWING_DURATION), 0, 1)
   const shoulderSeparation = turn * 0.35 + postureSide * separationAngle
@@ -232,9 +233,9 @@ function poseSwing(rig: PlayerMotion, player: PlayerState, visualPos: Vec3, newC
     const followDuration = Math.min(0.12, duration * 0.45)
     pose = age < followDuration ? blendPose(rig.contact.pose, follow, age / followDuration)
       : blendPose(follow, ready, (age - followDuration) / (duration - followDuration))
-  } else if (player.swing.phase === 'preparing') {
+  } else if (player.swing.phase === 'preparing' || player.swing.phase === 'queued') {
     // 按住蓄力：在引拍位保持，不随按住时长继续位移。
-    pose = blendPose(ready, preparation, THREE.MathUtils.clamp(player.swing.elapsed / timing.preparation, 0, 1))
+    pose = blendPose(ready, preparation, player.swing.phase === 'queued' ? 1 : THREE.MathUtils.clamp(player.swing.elapsed / timing.preparation, 0, 1))
   } else if (player.swing.phase === 'swinging') {
     const shared = createReachableRacketPose({
       desiredContact: idealContactPoint(visualPos, player.side, shot),

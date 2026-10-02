@@ -12,22 +12,22 @@ const activeEffects: ImpactEffect[] = []
 
 export function spawnImpactEffect(
   pos: [number, number, number],
-  _intensity: number = 1,
+  intensity: number = 1,
 ): ImpactEffect {
-  const ringGeo = new THREE.RingGeometry(0.1, 0.5, 16)
+  const ringGeo = new THREE.RingGeometry(0.06, 0.18, 32)
   const mesh = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
-    color: 0xffff00,
+    color: intensity > 0.8 ? 0xffbe78 : 0xd3f7ff,
     transparent: true,
     opacity: 0.8,
     side: THREE.DoubleSide,
     depthWrite: false,
   }))
-  mesh.position.set(pos[0], pos[1] + 0.2, pos[2])
+  mesh.position.set(pos[0], pos[1], pos[2])
   mesh.rotation.x = -Math.PI / 2
   const effect: ImpactEffect = {
     mesh,
     startTime: performance.now(),
-    duration: 400,
+    duration: 260,
   }
   activeEffects.push(effect)
   return effect
@@ -45,6 +45,7 @@ export function updateEffects(
     if (progress >= 1) {
       scene.remove(e.mesh)
       e.mesh.geometry.dispose()
+      ;(e.mesh.material as THREE.Material).dispose()
       activeEffects.splice(i, 1)
       continue
     }

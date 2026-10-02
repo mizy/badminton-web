@@ -44,7 +44,7 @@ export function createCourt(scene: THREE.Scene): ArenaAnimation {
 function addHallFloor(scene: THREE.Scene): void {
   // 铺得足够远：远端整片沉进场景雾里淡出成背景色，屏幕上就不会出现一条硬边的空洞。
   const geo = new THREE.PlaneGeometry(COURT_LENGTH + 90, COURT_WIDTH + 44)
-  const mat = new THREE.MeshStandardMaterial({ color: 0x0b211f, roughness: 0.94 })
+  const mat = new THREE.MeshStandardMaterial({ color: 0x18243a, roughness: 0.84 })
   const floor = new THREE.Mesh(geo, mat)
   floor.rotation.x = -Math.PI / 2
   // 压在草皮下面一点点，避免与球场平面 z-fighting。
@@ -56,14 +56,14 @@ function addHallFloor(scene: THREE.Scene): void {
 function addCourtApron(scene: THREE.Scene): void {
   const apron = new THREE.Mesh(
     new THREE.PlaneGeometry(APRON_LENGTH, APRON_WIDTH),
-    new THREE.MeshStandardMaterial({ color: 0x19433f, roughness: 0.86 }),
+    new THREE.MeshStandardMaterial({ color: 0x234363, roughness: 0.72 }),
   )
   apron.rotation.x = -Math.PI / 2
   apron.position.y = -0.012
   apron.receiveShadow = true
   scene.add(apron)
 
-  const border = new THREE.MeshBasicMaterial({ color: 0x75948c })
+  const border = new THREE.MeshBasicMaterial({ color: 0x558bb2 })
   addLine(scene, border, APRON_LENGTH, 0.045, 0, APRON_WIDTH / 2)
   addLine(scene, border, APRON_LENGTH, 0.045, 0, -APRON_WIDTH / 2)
   addLine(scene, border, 0.045, APRON_WIDTH, APRON_LENGTH / 2, 0)
@@ -72,11 +72,43 @@ function addCourtApron(scene: THREE.Scene): void {
 
 function addFloor(scene: THREE.Scene): void {
   const courtGeo = new THREE.PlaneGeometry(COURT_LENGTH, COURT_WIDTH)
-  const courtMat = new THREE.MeshStandardMaterial({ color: 0x28644e, roughness: 0.88 })
+  const courtMat = new THREE.MeshStandardMaterial({ color: 0x188778, roughness: 0.82,
+    map: createCourtTexture() })
   const court = new THREE.Mesh(courtGeo, courtMat)
   court.rotation.x = -Math.PI / 2
   court.receiveShadow = true
   scene.add(court)
+}
+
+/** Subtle rubber grain and printed event mark keep the mat readable at play distance. */
+function createCourtTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1024
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, 1024, 512)
+  for (let y = 0; y < 512; y += 4) {
+    ctx.fillStyle = y % 8 ? '#eef5f2' : '#f7faf8'
+    ctx.fillRect(0, y, 1024, 1)
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'
+  ctx.font = 'bold 36px Arial'
+  ctx.textAlign = 'center'
+  ctx.save()
+  ctx.translate(128, 256)
+  ctx.rotate(Math.PI / 2)
+  ctx.fillStyle = '#c6e4db'
+  ctx.fillText('RALLY', 0, 0)
+  ctx.restore()
+  ctx.save()
+  ctx.translate(896, 256)
+  ctx.rotate(-Math.PI / 2)
+  ctx.fillText('ARENA', 0, 0)
+  ctx.restore()
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  return texture
 }
 
 function addCourtLines(scene: THREE.Scene): void {
@@ -154,8 +186,8 @@ function addNet(scene: THREE.Scene): void {
 function addArenaBackdrop(scene: THREE.Scene): void {
   const group = new THREE.Group()
   group.name = 'arena-backdrop'
-  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x122927, roughness: 0.92 })
-  const panelMaterial = new THREE.MeshStandardMaterial({ color: 0x1d3935, roughness: 0.82 })
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x16273f, roughness: 0.92 })
+  const panelMaterial = new THREE.MeshStandardMaterial({ color: 0x294059, roughness: 0.82 })
   const wall = new THREE.Mesh(new THREE.BoxGeometry(30, 7.2, 0.24), wallMaterial)
   wall.position.set(0, 3.6, -10.9)
   wall.receiveShadow = true
@@ -183,6 +215,25 @@ function addArenaBackdrop(scene: THREE.Scene): void {
   )
   banner.position.set(0, 5.65, -10.72)
   group.add(banner)
+  // Both baseline views see an illuminated end wall, with real arena depth behind play.
+  for (const side of [-1, 1]) {
+    // The inside face is visible; the near wall must not occlude the portrait camera.
+    const endWall = new THREE.Mesh(new THREE.PlaneGeometry(21, 6), wallMaterial)
+    endWall.position.set(side * 14, 3, 0)
+    endWall.rotation.y = -side * Math.PI / 2
+    group.add(endWall)
+    const event = new THREE.Mesh(new THREE.PlaneGeometry(9, 1), banner.material)
+    event.position.set(side * 13.85, 4.2, 0)
+    event.rotation.y = -side * Math.PI / 2
+    group.add(event)
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(18, 0.05), new THREE.MeshBasicMaterial({ color: 0x85d9ed }))
+    strip.position.set(side * 13.8, 3.45, 0)
+    strip.rotation.y = -side * Math.PI / 2
+    group.add(strip)
+    const boards = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.7, 7.8), new THREE.MeshStandardMaterial({ color: 0xffffff, map: createArenaBannerTexture(), emissive: 0x17425a, emissiveIntensity: 0.5 }))
+    boards.position.set(side * 9.6, 0.36, 0)
+    group.add(boards)
+  }
   scene.add(group)
 }
 
@@ -190,32 +241,15 @@ function addCeilingStructure(scene: THREE.Scene): void {
   const group = new THREE.Group()
   group.name = 'arena-roofline'
   const steel = new THREE.MeshStandardMaterial({ color: 0x263c3e, metalness: 0.45, roughness: 0.48 })
-  const roof = new THREE.Mesh(
-    new THREE.PlaneGeometry(30, 4.8),
-    new THREE.MeshStandardMaterial({ color: 0x101f22, side: THREE.DoubleSide, roughness: 0.92 }),
-  )
-  roof.rotation.x = -Math.PI / 2
-  roof.position.set(0, 8.15, -8.7)
-  group.add(roof)
-
-  const beam = new THREE.Mesh(new THREE.BoxGeometry(29, 0.18, 0.18), steel)
-  beam.position.set(0, 7.7, -9.7)
-  group.add(beam)
-  const braceGeometry = new THREE.BoxGeometry(0.14, 1.1, 2.6)
-  for (let x = -12; x <= 12; x += 4) {
-    const brace = new THREE.Mesh(braceGeometry, steel)
-    brace.position.set(x, 7.62, -9)
-    brace.rotation.x = -0.34
-    group.add(brace)
-  }
-
-  const panelGeometry = new THREE.BoxGeometry(2.15, 0.08, 0.42)
+  const panelGeometry = new THREE.BoxGeometry(0.32, 0.85, 2.2)
   const panelMaterial = new THREE.MeshBasicMaterial({ color: 0xe9fbff })
-  for (const x of [-7.2, -2.4, 2.4, 7.2]) {
+  for (const x of [-12, 12]) for (const z of [-9.5, 9.5]) {
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 6, 8), steel)
+    mast.position.set(x, 3, z)
     const panel = new THREE.Mesh(panelGeometry, panelMaterial)
-    panel.position.set(x, 7.35, -5.35)
-    panel.rotation.z = -0.03 * Math.sign(x)
-    group.add(panel)
+    panel.position.set(x, 5.8, z)
+    panel.rotation.z = -Math.sign(x) * 0.3
+    group.add(mast, panel)
   }
   scene.add(group)
 }
@@ -227,16 +261,16 @@ function createArenaBannerTexture(): THREE.CanvasTexture {
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Unable to create arena banner canvas')
   const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0)
-  gradient.addColorStop(0, '#153d39')
-  gradient.addColorStop(0.5, '#245d53')
-  gradient.addColorStop(1, '#153d39')
+  gradient.addColorStop(0, '#18314d')
+  gradient.addColorStop(0.5, '#285371')
+  gradient.addColorStop(1, '#18314d')
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.fillStyle = '#e8f2df'
   ctx.font = '600 48px Arial, sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('COURT 01  ·  INDOOR BADMINTON', canvas.width / 2, canvas.height / 2)
+  ctx.fillText('RALLY ARENA  /  CHAMPIONSHIP', canvas.width / 2, canvas.height / 2)
   ctx.fillStyle = '#83e6cf'
   ctx.fillRect(40, 16, 180, 5)
   ctx.fillStyle = '#f3ad68'

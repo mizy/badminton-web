@@ -11,6 +11,7 @@ import { checkPoint } from './match'
 import { evaluateContact, getTechniqueRacketFaceDeg, resolveContactGrip } from '../character/contact'
 import { createReachableRacketPose, getShuttleCorkCenter } from '../character/racketKinematics'
 import { advanceSwing, beginSwing, canPlayShot, getShotTarget, isContactWindowOpen, releaseSwing, RACKETS, SHOT_NAMES } from '../character/stroke'
+import { predictShotOpportunity } from '../character/interception'
 
 export interface TickAIConfigs {
   home?: AIConfig
@@ -20,10 +21,35 @@ export interface TickAIConfigs {
 export function processGameTick(state: GameState, dt: number, aiConfigs?: TickAIConfigs): GameState {
   if (state.phase === 'paused' || state.phase === 'set_end' || state.phase === 'match_end') return state
   let next = updateAI(state, aiConfigs)
+  const assists = next.players.map((p, i) => p && next.controls[i] === 'human' && p.swing.phase === 'queued'
+    && next.lastHitter !== i && next.shuttle && !next.netTouched ? predictShotOpportunity(p, next.shuttle, p.swing.shot) : null)
+  next = { ...next, players: next.players.map((player, index) => {
+    const opportunity = assists[index]
+    // The arm reaches impact in 70ms; released input waits until that contact is near.
+    if (!player || !opportunity || opportunity.time > 0.1 || next.phase !== 'playing'
+      || !getLegalShots(player, next.shuttle!).includes(player.swing.shot)) return player
+    return { ...player, movement: { ...player.movement, targetDir: { x: 0, z: 0 } },
+      swing: { ...player.swing, phase: 'swinging' as const, elapsed: 0 } }
+  }) as GameState['players'] }
   const count = Math.max(1, Math.ceil(dt * 240))
   const step = dt / count
   for (let i = 0; i < count; i++) {
-    const players = next.players.map(p => p && advanceSwing(updateStamina(updateMovement(advanceBody(p, step), step), step), step)) as GameState['players']
+    const players = next.players.map((p, index) => {
+      if (!p) return null
+      const opportunity = assists[index]
+      const input = p.movement.targetDir
+      let moving = advanceBody(p, step)
+      if (opportunity && p.swing.phase === 'queued' && Math.hypot(input.x, input.z) < 0.1 && opportunity.distance <= 0.8) {
+        const dx = opportunity.position[0] - p.pos[0]
+        const dz = opportunity.position[2] - p.pos[2]
+        const distance = Math.hypot(dx, dz)
+        const speed = Math.min(0.48, distance / Math.max(0.14, opportunity.time) / 6)
+        const dir = distance > 0.04 ? { x: dx / distance * speed, z: dz / distance * speed } : { x: 0, z: 0 }
+        moving = { ...moving, movement: { ...moving.movement, targetDir: dir } }
+      }
+      const moved = updateMovement(moving, step)
+      return advanceSwing(updateStamina({ ...moved, movement: { ...moved.movement, targetDir: input } }, step), step, next.controls[index] === 'human')
+    }) as GameState['players']
     const previousPlayer = next.players[0]
     const moved = previousPlayer && players[0] ? Math.hypot(players[0].pos[0] - previousPlayer.pos[0], players[0].pos[2] - previousPlayer.pos[2]) : 0
     next = { ...next, players, elapsed: next.elapsed + step, phaseTime: next.phaseTime + step,
@@ -65,7 +91,7 @@ function updateAI(state: GameState, configs?: TickAIConfigs): GameState {
     // AI 已引拍：等球真正进入可击区再出拍，避免按预测提前挥空；超时兜底出拍。
     if (original.swing.phase === 'preparing') {
       if (getLegalShots(original, shuttle).length > 0 || original.swing.elapsed >= RACKETS[original.loadout].preparation + 0.5) {
-        return releaseSwing(original)
+        return releaseSwing(original, 0, false)
       }
       return original
     }
@@ -117,17 +143,25 @@ function contactPlayers(state: GameState): GameState {
     const offset = (player.swing.elapsed - 0.07) * 1000
     const readiness = player.movement.readiness
     const fatigue = 0.65 + 0.35 * player.stamina / player.maxStamina
-    const target = player.swing.target ?? getShotTarget(player, technique, player.swing.aim)
+    let target = player.swing.target ?? getShotTarget(player, technique, player.swing.aim)
+    // A low standing smash must land shorter to clear the net; jumps can drive deeper.
+    if (technique === 'SMASH') target = [Math.sign(target[0]) * Math.min(Math.abs(target[0]), Math.max(1.7, (cork[1] - 1.9) * 6)), 0, target[2]]
     const result = evaluateContact({ intent: technique, playerPos: player.pos, playerSide: player.side,
       power: Math.min(1, (0.68 + readiness * 0.25 + player.swing.charge01 * 0.3) * fatigue * spec.power), racket, racketFaceDeg: face,
       shuttle, swingOffsetMs: offset / spec.sweetSpot, target, targetZ: target[2], slice: player.swing.slice })
     if (result.outcome !== 'hit') continue
+    // Wait through the edge of the reach envelope rather than spending a prepared
+    // shot on a weak frame scrape. Late contacts still get a rescue return.
+    const threshold = technique === 'SMASH' ? 0.45 : technique === 'CLEAR' ? 0.4 : 0
+    if (state.controls[i] === 'human' && result.quality < threshold && player.swing.elapsed < 0.22) continue
     const quality = result.quality * (0.7 + readiness * 0.3) * fatigue
     const feedback = result.netClearance !== null && result.netClearance < 0 ? '下网风险：触球过低或位置太靠后'
       : result.targetError > 0.8 ? '回球偏短：到位、体力或力量不足'
       : offset < -65 ? '击球偏早：等球进入拍前'
       : offset > 65 ? '击球偏晚：更早启动挥拍'
       : readiness < 0.55 ? '被动回球：先制动再出拍'
+      : result.sweetSpot < 0.45 ? '擦拍救球'
+      : quality < 0.5 ? '被动回球'
       : '干净触球'
     const bodyShot = technique === 'SMASH' && player.body.phase === 'airborne'
       ? player.body.action === 'scissor' ? '蹬转杀' : '跳杀' : SHOT_NAMES[technique]

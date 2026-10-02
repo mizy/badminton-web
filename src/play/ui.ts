@@ -6,6 +6,7 @@ import { RACKETS, SHOT_NAMES, SHOT_ORDER, charge01 } from '../character/stroke'
 import { getMatchPoint } from '../game/match'
 import { PERSONAS, getPersona, type PersonaId } from '../ai/personas'
 import { getLegalShots } from '../ai/tactical'
+import type { ShotOpportunity } from '../character/interception'
 import './ui.css'
 import './touchControls.css'
 
@@ -62,7 +63,7 @@ const SHOT_ACCENTS: Record<ShotType, string> = {
 export function chargeView(swing: PlayerState['swing'] | undefined): { active: boolean; value: number; label: string } {
   if (!swing || swing.phase === 'ready') return { active: false, value: 0, label: '力量' }
   const value = swing.phase === 'preparing' ? charge01(swing.elapsed) : swing.charge01
-  return { active: true, value, label: `${swing.phase === 'preparing' ? '蓄力' : '力量'} ${Math.round(value * 100)}%` }
+  return { active: true, value, label: `${swing.phase === 'preparing' ? '蓄力' : swing.phase === 'queued' ? '已准备' : '力量'} ${Math.round(value * 100)}%` }
 }
 
 /** 触屏瞄准读数（纯函数）：把连续落点翻译成拇指能读的一句话，写在瞄准区上方。 */
@@ -127,7 +128,7 @@ export interface PlayUIOptions {
 
 /** Owns DOM only. Session changes, audio, prediction and recording belong to the caller. */
 export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = {}): {
-  update(state: GameState): void
+  update(state: GameState, opportunity?: ShotOpportunity | null): void
   showMenu(): void
   setRecording(recording: boolean): void
   /** 触屏操作层的容器；桌面设备下同样存在但隐藏，供键盘路径忽略。 */
@@ -142,7 +143,9 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
   root.innerHTML = `
     <div class="play-hud" data-ui="hud" hidden>
       <div class="play-vignette" aria-hidden="true"></div>
-      <div class="play-court-brand" aria-hidden="true"><b>COURT / 01</b><span>单人 · 离线 · 羽毛球</span></div>
+      <div class="play-court-brand" aria-hidden="true"><b>RALLY / ARENA</b><span>羽毛球 · 单人竞技</span></div>
+      <div class="play-shot-cue" data-ui="shot-cue" data-active="false"><b data-ui="shot-cue-title"></b><span data-ui="shot-cue-note"></span></div>
+      <div class="play-impact-readout" data-ui="impact" data-active="false" aria-hidden="true"></div>
       <header class="play-scoreboard" aria-label="比赛记分牌">
         <div class="play-score-top">
           <span class="play-eyebrow" data-ui="mode-label">单打比赛</span>
@@ -182,7 +185,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
           <div class="play-technique"><span data-ui="footwork">步法 · 准备</span><span data-ui="grip">握拍 · 正手</span><span data-ui="body">身体 · 站稳</span><span data-ui="aim">落点 · 中路 / 标准深度</span></div>
         </div>
         <ol class="play-shots" data-ui="shots" aria-label="J K L U I O 直接击球；数字 1 至 6 同效；等待发球时仅选球"></ol>
-        <div class="play-contact-window" data-ui="contact-window" hidden><strong>当前可打窗口</strong><span data-ui="legal-shots">等待发球</span><small>仅提示身体可达，仍需提前引拍；不保证命中。</small></div>
+        <div class="play-contact-window" data-ui="contact-window" hidden><strong>接球时机</strong><span data-ui="legal-shots">等待发球</span><small>可提前准备球路 · 接球圈指示站位</small></div>
         <div class="play-key-hints" aria-label="键盘操作">
           <span><kbd>W A S D</kbd> 移动</span><span><kbd>J K I L</kbd> 直接发球</span><span><kbd>Space</kbd> 起跳</span><span><kbd>Q</kbd> 蹬转</span><span>击球按住蓄力 · <kbd>WASD</kbd> 定方向 · 松开出拍</span><span><kbd>Esc</kbd> 暂停</span>
           <span><kbd>Space</kbd> → <kbd>L</kbd> 跳杀</span><span><kbd>Q</kbd> → <kbd>L</kbd> 蹬转杀</span><span><kbd>Shift + J</kbd> 滑板高远</span><span><kbd>Shift + K</kbd> 切削吊球</span>
@@ -209,18 +212,18 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     </div>
     <div class="play-modal-layer" data-ui="layer">
       <section class="play-menu" data-ui="menu-dialog" role="dialog" aria-modal="true" aria-labelledby="play-menu-title" aria-describedby="play-menu-description" tabindex="-1">
-        <header class="play-menu-masthead"><span>COURT / 01</span><span>羽毛球单打实验场</span><span>OFFLINE EDITION</span></header>
+        <header class="play-menu-masthead"><span>RALLY ARENA</span><span>羽毛球单打</span><span>PLAY THE NEXT SHOT</span></header>
         <div class="play-install" data-ui="install-panel" hidden>
           <button type="button" class="play-button-quiet" data-ui="install">手机安装方法</button>
           <p data-ui="install-note" role="status">安装到主屏幕 · 首次联网加载后可离线游玩</p>
         </div>
         <div class="play-menu-grid">
           <div class="play-editorial">
-            <p class="play-eyebrow">LESS NOISE. MORE RALLIES.</p>
-            <h1 id="play-menu-title">把每一拍，<br>打到实处<span>。</span></h1>
-            <p id="play-menu-description" class="play-lead">从第一拍到决胜分。用站位、节奏与落点，<br class="play-desktop-break">打出属于你的单打。</p>
+            <p class="play-eyebrow">READ. MOVE. STRIKE.</p>
+            <h1 id="play-menu-title">掌控回合<span>。</span><br>一拍制胜</h1>
+            <p id="play-menu-description" class="play-lead">拉开角度，制造机会，高点杀球。<br class="play-desktop-break">下一拍，由你决定。</p>
             <div class="play-court-sketch" aria-hidden="true"><span></span><i></i><b>01</b></div>
-            <div class="play-editorial-note"><span>纯单机 / 无需联网</span><p>没有数值升级。练习到位，读懂来球，<br>再把下一拍打得更好。</p></div>
+            <div class="play-editorial-note"><span>六种球路 / 三种对手风格</span><p>移动到接球圈，提前准备球路。<br>按住蓄力，松手后角色等球到位出拍。</p></div>
           </div>
           <div class="play-setup">
             <div class="play-section-heading"><h2>设定你的球局</h2><span>SESSION SETUP</span></div>
@@ -234,15 +237,15 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
             <div class="play-field"><label for="play-loadout">04 / 球拍配置</label><select id="play-loadout" aria-describedby="play-loadout-note play-equipment-disclaimer"><option value="balanced">均衡拍 / BALANCED</option><option value="power">头重拍 / POWER</option><option value="control">轻快拍 / CONTROL</option></select></div>
             <div class="play-equipment-note"><p id="play-loadout-note"></p><span data-ui="racket-spec"></span><p id="play-equipment-disclaimer">三种配置各有取舍，并非强弱等级。参数为简化模拟，不是精密器材标定。</p></div>
             <div class="play-mode-actions">
-              <button type="button" class="play-mode-button play-button-primary" data-ui="start-training"><span>自由训练 <b aria-hidden="true">↗</b></span><small>无比分压力 · 五步练习 · 落点预测</small></button>
+              <button type="button" class="play-mode-button play-button-primary" data-ui="start-training"><span>热身训练 <b aria-hidden="true">↗</b></span><small>熟悉接球节奏 · 落点预测 · 六种球路</small></button>
               <button type="button" class="play-mode-button play-button-paper" data-ui="start-match"><span>人机比赛 <b aria-hidden="true">↗</b></span><small>三局两胜 · 21 分制 · 决胜到最后一拍</small></button>
             </div>
           </div>
         </div>
         <footer class="play-menu-footer">
           <div class="play-menu-controls" data-ui="keyboard-controls"><span><kbd>WASD</kbd> 移动 <kbd>Space</kbd> 起跳 <kbd>Q</kbd> 蹬转</span><span>发球 <kbd>J</kbd> 高远 <kbd>K</kbd> 小球 <kbd>I</kbd> 反手小 <kbd>L</kbd> 平射（按下即发）· 击球 <kbd>J</kbd> 高远 <kbd>K</kbd> 吊球 <kbd>L</kbd> 杀球 <kbd>U</kbd> 平抽 <kbd>I</kbd> 放网 <kbd>O</kbd> 挑球</span><span>击球按住蓄力、<kbd>WASD</kbd> 定落点 · <kbd>Space → L</kbd> 跳杀 <kbd>Q → L</kbd> 蹬转杀 <kbd>Shift + J</kbd> 滑板高远 <kbd>Shift + K</kbd> 切削吊球</span></div>
-          <p class="play-keyboard-note">球路键按下即击球，数字 1–6 同效；等待发球时仅选球。Shift 单独不挥拍。</p>
-          <p class="play-keyboard-note">先到位再起跳，空中不能二次起跳，落地要恢复。推荐桌面 + 键盘 · 支持 Tab / Enter 操作菜单</p>
+          <p class="play-keyboard-note">球路键可提前短按准备；按住蓄力、松手等球出拍，近距离自动调整一步。数字 1–6 同效。</p>
+          <p class="play-keyboard-note">金色接球圈是杀球机会；移动到位后按 L，Space 起跳可提高击球点。支持键盘和触屏。</p>
           <div class="play-touch-controls" data-ui="touch-controls">
             <span>左下区域滑动移动：落指生成摇杆，轻推慢走、推满冲刺，拖远时底座跟随，松手回位</span><span>右侧六个球路键：短按直接打，按住蓄力、拖动瞄准，松手出拍；拖动不切换球路</span><span>起跳键：轻点起跳 / 发球，长按蹬转；等待发球时也可短按球路键发球</span><span>右上角暂停：声音 / 预测 / 录像都在暂停里</span>
           </div>
@@ -387,6 +390,8 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
   let toastStamp = Number.NEGATIVE_INFINITY
   /** 得分横幅去重键与收起定时器（destroy 时必须清掉，避免销毁后写 DOM）。 */
   let lastPointKey = ''
+  let lastHitKey = ''
+  let hitUntil = 0
   let bannerTimer: ReturnType<typeof setTimeout> | null = null
   let latestState: GameState | null = null
   let activeDialog: DialogKind = null
@@ -588,7 +593,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     }, 1500)
   }
 
-  function update(state: GameState): void {
+  function update(state: GameState, opportunity?: ShotOpportunity | null): void {
     if (destroyed) return
     latestState = state
     mode = state.mode
@@ -631,6 +636,21 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     text(trainingSummary, `最长 ${best} 拍 · 球路 ${shotCount} / 6${tasks.every(Boolean) ? ' · 全部完成' : ''}`)
 
     const player = state.players[0]
+    const hitKey = `${state.rallyId}:${state.rallyHits}`
+    if (state.rallyHits > 0 && state.lastHitter === 0 && hitKey !== lastHitKey) {
+      lastHitKey = hitKey
+      hitUntil = performance.now() + 750
+      const impact = ui('impact')
+      text(impact, `${SHOT_NAMES[player!.swing.shot]} · ${player!.contactQuality >= 0.72 ? '漂亮一拍' : '接到了'}`)
+      impact.dataset.quality = player!.contactQuality >= 0.72 ? 'clean' : 'good'
+    }
+    ui('impact').dataset.active = String(state.phase === 'playing' && performance.now() < hitUntil)
+    const cue = ui('shot-cue')
+    const queued = player?.swing.phase === 'queued'
+    cue.dataset.active = String(!!opportunity || queued)
+    cue.dataset.smash = String(player?.selectedShot === 'SMASH')
+    text(ui('shot-cue-title'), queued ? `${SHOT_NAMES[player!.swing.shot]}已准备` : player?.selectedShot === 'SMASH' ? '杀球机会' : '来球 · 准备接球')
+    text(ui('shot-cue-note'), opportunity && opportunity.distance > 0.8 ? '移动到接球圈' : queued ? '跟住来球 · 到位后出拍' : touch ? '短按球路键 · 按住蓄力' : 'J 高远 / K 吊球 / L 杀球')
     const ratio = player && player.maxStamina > 0 ? player.stamina / player.maxStamina : 0
     const percent = Number.isFinite(ratio) ? Math.round(Math.max(0, Math.min(1, ratio)) * 100) : 0
     if (stamina.value !== percent) stamina.value = percent
@@ -650,7 +670,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     const shuttle = state.shuttle
     const ownHalf = player && shuttle && (player.side === 0 ? shuttle.pos[0] < -0.025 : shuttle.pos[0] > 0.025)
     const canReceive = state.phase === 'playing' && state.lastHitter === 1 && !state.netTouched && ownHalf
-    const legalShots = training && canReceive && player && shuttle ? getLegalShots(player, shuttle) : []
+    const legalShots = canReceive && player && shuttle ? getLegalShots(player, shuttle) : []
     const recovering = player?.swing.phase === 'recovery'
     const open = legalShots.length > 0 && !recovering
     contactWindow.hidden = !training
@@ -666,7 +686,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     }
     shotItems.forEach((item, index) => {
       const shot = SHOT_ORDER[index]
-      const available = String(training && open && legalShots.includes(shot))
+      const available = String(open && legalShots.includes(shot))
       if (item.dataset.available !== available) item.dataset.available = available
       const selected = shot === player?.selectedShot
       if (item.dataset.selected === String(selected)) return
@@ -679,7 +699,7 @@ export function createPlayUI(callbacks: PlayCallbacks, options: PlayUIOptions = 
     let heldShotName = ''
     for (const button of touchShotButtons) {
       const shot = button.dataset.shot as ShotType
-      const available = String(training && open && legalShots.includes(shot))
+      const available = String(open && legalShots.includes(shot))
       if (button.dataset.available !== available) button.dataset.available = available
       const selected = String(shot === player?.selectedShot)
       if (button.dataset.selected !== selected) button.dataset.selected = selected

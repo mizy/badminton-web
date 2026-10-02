@@ -33,6 +33,7 @@ interface CrowdMember {
 }
 
 interface CrowdView {
+  arms: THREE.InstancedMesh
   bodies: THREE.InstancedMesh
   dummy: THREE.Object3D
   heads: THREE.InstancedMesh
@@ -79,21 +80,24 @@ export function createArenaAnimation(scene: THREE.Scene): ArenaAnimation {
 function addSpectatorStands(scene: THREE.Scene): CrowdView {
   const group = new THREE.Group()
   group.name = 'spectator-stands'
-  const standMaterial = new THREE.MeshStandardMaterial({ color: 0x1b292d, roughness: 0.9 })
+  const standMaterial = new THREE.MeshStandardMaterial({ color: 0x283c57, roughness: 0.9 })
   const railMaterial = new THREE.MeshStandardMaterial({ color: 0x53696b, metalness: 0.35, roughness: 0.48 })
   const stepGeometry = new THREE.BoxGeometry(20.5, 1, STAND_DEPTH)
 
-  for (const side of [-1, 1]) {
+  for (const end of [false, true]) for (const side of [-1, 1]) {
     for (let row = 0; row < STAND_ROWS; row += 1) {
       const height = 0.25 + row * STAND_HEIGHT
       const step = new THREE.Mesh(stepGeometry, standMaterial)
       step.scale.y = height
-      step.position.set(0, height / 2, side * (STAND_FRONT + row * STAND_DEPTH))
+      const offset = side * ((end ? 10.1 : STAND_FRONT) + row * STAND_DEPTH)
+      step.position.set(end ? offset : 0, height / 2, end ? 0 : offset)
+      if (end) { step.rotation.y = Math.PI / 2; step.scale.x = 0.75 }
       step.receiveShadow = true
       group.add(step)
     }
     const rail = new THREE.Mesh(new THREE.BoxGeometry(20.8, 0.06, 0.06), railMaterial)
-    rail.position.set(0, 0.72, side * (STAND_FRONT - 0.42))
+    rail.position.set(end ? side * 9.65 : 0, 0.72, end ? 0 : side * (STAND_FRONT - 0.42))
+    if (end) { rail.rotation.y = Math.PI / 2; rail.scale.x = 0.75 }
     group.add(rail)
   }
 
@@ -103,11 +107,14 @@ function addSpectatorStands(scene: THREE.Scene): CrowdView {
 }
 
 function createCrowd(group: THREE.Group): CrowdView {
-  const count = STAND_ROWS * CROWD_COLUMNS * 2
-  const bodies = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.52, 0.24),
+  const count = STAND_ROWS * CROWD_COLUMNS * 4
+  const bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.17, 0.24, 3, 6),
     new THREE.MeshStandardMaterial({ roughness: 0.88 }), count)
   const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.14, 8, 6),
     new THREE.MeshStandardMaterial({ roughness: 0.92 }), count)
+  const arms = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.045, 0.23, 2, 5), new THREE.MeshStandardMaterial({ roughness: 0.86 }), count * 2)
+  arms.name = 'crowd-arms'
+  arms.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
   bodies.name = 'crowd-bodies'
   heads.name = 'crowd-heads'
   bodies.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
@@ -115,7 +122,10 @@ function createCrowd(group: THREE.Group): CrowdView {
   const members: CrowdMember[] = []
   let index = 0
 
-  for (const side of [-1, 1]) {
+  const seats = new THREE.InstancedMesh(new THREE.BoxGeometry(0.45, 0.1, 0.4), new THREE.MeshStandardMaterial({ color: 0x4784aa, roughness: 0.78 }), count)
+  seats.name = 'crowd-seats'
+  const seat = new THREE.Object3D()
+  for (const end of [false, true]) for (const side of [-1, 1]) {
     for (let row = 0; row < STAND_ROWS; row += 1) {
       const platformHeight = 0.25 + row * STAND_HEIGHT
       for (let column = 0; column < CROWD_COLUMNS; column += 1) {
@@ -123,15 +133,22 @@ function createCrowd(group: THREE.Group): CrowdView {
         members.push({
           bodyY: platformHeight + 0.42 + variation,
           energy: ((column * 11 + row * 5 + index) % 9) / 8,
-          facing: side === 1 ? Math.PI : 0,
+          facing: end ? -side * Math.PI / 2 : side === 1 ? Math.PI : 0,
           headY: platformHeight + 0.82 + variation * 1.5,
           phase: ((column * 13 + row * 17 + index) % 37) / 37 * Math.PI * 2,
           scale: 0.9 + variation,
-          x: -9 + column * (18 / (CROWD_COLUMNS - 1)) + (row % 2 ? 0.12 : -0.08),
-          z: side * (STAND_FRONT + row * STAND_DEPTH - 0.04),
+          x: end ? side * (10.1 + row * STAND_DEPTH - 0.04) : -9 + column * (18 / (CROWD_COLUMNS - 1)),
+          z: end ? -7 + column * (14 / (CROWD_COLUMNS - 1)) : side * (STAND_FRONT + row * STAND_DEPTH - 0.04),
         })
         bodies.setColorAt(index, new THREE.Color(CROWD_COLORS[(column + row * 2) % CROWD_COLORS.length]))
         heads.setColorAt(index, new THREE.Color(SKIN_COLORS[(column * 3 + row) % SKIN_COLORS.length]))
+        arms.setColorAt(index * 2, new THREE.Color(CROWD_COLORS[(column + row * 2) % CROWD_COLORS.length]))
+        arms.setColorAt(index * 2 + 1, new THREE.Color(CROWD_COLORS[(column + row * 2) % CROWD_COLORS.length]))
+        const member = members[index]
+        seat.position.set(member.x, platformHeight + 0.16, member.z)
+        seat.rotation.y = member.facing
+        seat.updateMatrix()
+        seats.setMatrixAt(index, seat.matrix)
         index += 1
       }
     }
@@ -141,8 +158,8 @@ function createCrowd(group: THREE.Group): CrowdView {
   heads.receiveShadow = true
   if (bodies.instanceColor) bodies.instanceColor.needsUpdate = true
   if (heads.instanceColor) heads.instanceColor.needsUpdate = true
-  group.add(bodies, heads)
-  const view = { bodies, dummy: new THREE.Object3D(), heads, members }
+  group.add(bodies, heads, arms, seats)
+  const view = { arms, bodies, dummy: new THREE.Object3D(), heads, members }
   updateCrowd(view, 0, 0, null)
   return view
 }
@@ -161,8 +178,9 @@ function updateCrowd(view: CrowdView, elapsed: number, rallyHits: number, reacti
     const breath = Math.sin(elapsed * (1.05 + member.energy * 0.32) + member.phase)
       * (0.008 + anticipation * 0.006)
     const sway = Math.sin(elapsed * 0.55 + member.phase) * (0.018 + anticipation * 0.01)
-    const bounce = cheer * Math.max(0, Math.sin(age * (8.5 + member.energy * 2) + member.phase))
+    const bounce = cheer > 0 ? cheer * Math.max(0, Math.sin(age * (8.5 + member.energy * 2) + member.phase))
       * (0.025 + member.energy * 0.055)
+      : 0
 
     dummy.position.set(member.x, member.bodyY + breath + bounce, member.z)
     dummy.rotation.set(0, member.facing, sway + cheer * Math.sin(member.phase) * 0.08)
@@ -175,9 +193,19 @@ function updateCrowd(view: CrowdView, elapsed: number, rallyHits: number, reacti
     dummy.scale.setScalar(0.92 + (member.scale - 0.9) + cheer * 0.025)
     dummy.updateMatrix()
     view.heads.setMatrixAt(index, dummy.matrix)
+    for (const [arm, sign] of [-1, 1].entries()) {
+      const raised = cheer * (0.7 + member.energy * 0.3)
+      dummy.position.set(member.x + Math.cos(member.facing) * sign * 0.2,
+        member.bodyY - 0.03 + raised * 0.3 + bounce, member.z - Math.sin(member.facing) * sign * 0.2)
+      dummy.rotation.set(0, member.facing, sign * (0.2 + raised * 2.3))
+      dummy.scale.setScalar(member.scale)
+      dummy.updateMatrix()
+      view.arms.setMatrixAt(index * 2 + arm, dummy.matrix)
+    }
   }
   view.bodies.instanceMatrix.needsUpdate = true
   view.heads.instanceMatrix.needsUpdate = true
+  view.arms.instanceMatrix.needsUpdate = true
 }
 
 function addOfficials(scene: THREE.Scene): OfficialsView {

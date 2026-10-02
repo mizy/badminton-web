@@ -123,21 +123,27 @@ async function loadPlayerModel(modelUrl: string, textureUrl?: string, bodyColor?
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js')
     loaded = await new GLTFLoader().loadAsync(modelUrl)
   }
-  if (textureUrl) await applyModelTexture(loaded.scene, textureUrl, bodyColor)
+  const body = loaded.scene.getObjectByName('SuperHero_Male')
+  const hasKit = body instanceof THREE.Mesh && !Array.isArray(body.material) && body.material.name === 'Player_Kit'
+  if (textureUrl || hasKit) await applyModelTexture(loaded.scene, textureUrl ?? modelUrl.replace(/\.glb(?:\?.*)?$/, '.png'), bodyColor)
   return loaded
 }
 
 async function applyModelTexture(model: THREE.Group, textureUrl: string, bodyColor?: number): Promise<void> {
   const source = await new THREE.TextureLoader().loadAsync(textureUrl)
   source.colorSpace = THREE.SRGBColorSpace
+  const body = model.getObjectByName('SuperHero_Male')
+  const hasKit = body instanceof THREE.Mesh && !Array.isArray(body.material) && body.material.name === 'Player_Kit'
+  if (hasKit) source.flipY = false
   const texture = bodyColor === undefined ? source : createTeamTexture(source, bodyColor)
   if (texture !== source) source.dispose()
   model.traverse(node => {
     if (!(node instanceof THREE.Mesh)) return
     for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
       if (!(material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhongMaterial)) continue
+      if (hasKit && material.name !== 'Player_Kit') continue
       material.map = texture
-      material.color.set(0xc8c8c8)
+      material.color.set(0xffffff)
       // Kenney's FBX exports TransparencyFactor=1 although the atlas itself is opaque.
       material.opacity = 1
       material.transparent = false

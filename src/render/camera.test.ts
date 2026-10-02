@@ -22,7 +22,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const TARGET = new THREE.Vector3(0, -0.3, 0)
+const TARGET = new THREE.Vector3(0, 0.6, 0)
 
 /** 跑 n 帧（默认 60fps）并返回平滑后的取景 distance。 */
 function settle(shuttle: [number, number, number] | undefined, frames: number, side: 0 | 1 = 0, dt = 1 / 60, aspect = 16 / 9): number {
@@ -106,7 +106,7 @@ describe('updateCamera framing stability', () => {
     }
     // 竖屏横向视锥窄，但仍应贴着横屏机位；旧实现在 393x852 下退到 28（球场缩成中间一条）。
     expect(portrait.fov).toBe(55)
-    expect(landscape.fov).toBe(50)
+    expect(landscape.fov).toBe(46)
     expect(currentDistance(landscape)).toBeLessThan(21)
     expect(currentDistance(portrait)).toBeLessThanOrEqual(24)
   })
