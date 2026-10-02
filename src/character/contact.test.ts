@@ -31,7 +31,7 @@ describe('shot contact model', () => {
   })
 
   it('misses when the swing is far outside the timing window', () => {
-    const result = evaluateContact({ ...baseInput, swingOffsetMs: 310 })
+    const result = evaluateContact({ ...baseInput, swingOffsetMs: 430 })
 
     expect(result.outcome).toBe('miss')
     expect(result.timing).toBe('miss')
@@ -113,8 +113,9 @@ describe('shot contact model', () => {
   it.each([
     { error: 0.05, outcome: 'hit' },
     { error: 0.075, outcome: 'hit' },
-    { error: 0.085, outcome: 'miss' },
-  ] as const)('uses a small racket-edge allowance at $error m', ({ error, outcome }) => {
+    { error: 0.17, outcome: 'hit' },
+    { error: 0.185, outcome: 'miss' },
+  ] as const)('allows forgiving contact at $error m while preserving off-center quality', ({ error, outcome }) => {
     const input = createInput(DRIVE_CONTACT, 'DRIVE', 0)
     const cork: Vec3 = [DRIVE_CONTACT[0], DRIVE_CONTACT[1], DRIVE_CONTACT[2] + error]
     input.shuttle = { ...input.shuttle, pos: placeShuttleForCorkCenter(cork, INCOMING_VELOCITY) }

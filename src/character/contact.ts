@@ -71,11 +71,11 @@ const TIMING = {
   perfectMs: 38,
   goodMs: 105,
   lateMs: 190,
-  missMs: 270,
+  missMs: 360,
 } as const
 
-/** 5cm remains the sweet spot; the outer 3cm represents a weak racket-frame contact. */
-export const MAX_PLAYABLE_CONTACT_ERROR = 0.08
+/** Keep the 5cm sweet spot; an 18cm assist catches near misses with reduced quality. */
+export const MAX_PLAYABLE_CONTACT_ERROR = 0.18
 
 const TECHNIQUES: Record<ShotType, TechniqueProfile> = {
   SMASH: {

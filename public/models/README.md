@@ -1,8 +1,44 @@
 # Badminton Character Assets
 
-## 默认球员：Kenney Animated Characters Protagonists
+## 默认球员：Quaternius Universal Base Characters
 
-游戏默认使用 Kenney 的 **Animated Characters Protagonists 1.1**：
+游戏和球员展示页默认使用 Quaternius 的 **Universal Base Characters [Standard]**
+中的 `Superhero_Male_FullBody`，带完整人体骨架和手指关节。
+
+- 作者：Quaternius / Tomás Laulhé。
+- 官方模型页：https://quaternius.com/packs/universalbasecharacters.html
+- 官方免费下载：https://quaternius.itch.io/universal-base-characters
+- 步态来源：https://quaternius.itch.io/universal-animation-library
+- 两套素材均为 **CC0 1.0 Universal**，允许修改、商用和随源码再分发；
+  完整许可保存在 `quaternius-cc0-license.txt`。
+
+`quaternius-player.glb` 约 836KB。准备脚本保留原始人体网格、蒙皮权重和骨长，
+把 UE 骨骼名映射为现有绑定器支持的 Mixamo 名称，使用轻量材质划分皮肤、队服和短裤。
+原模型的裸足面由项目现有运动鞋、袜子替换，球鞋仍跟随模型踝关节。
+模型使用内置材质，无额外贴图请求；比赛时队服材质染为主场蓝 / 客场红。
+
+GLB 同时保留官方动画库的 `Idle_Loop`、`Walk_Loop`、`Sprint_Loop`，
+对应 `idle`、`walk`、`run`，每段仅导出左右大腿、小腿、脚的六条旋转轨道。
+世界移动、起跳和挥拍继续由比赛状态及本地运动学驱动。
+
+从官方免费包解压后，可重新生成素材：
+
+```sh
+python3 scripts/prepare-quaternius-player.py \
+  '/path/Universal Base Characters[Standard]/Base Characters/Godot - UE' \
+  '/path/Universal Animation Library[Standard]/Unreal-Godot/UAL1_Standard.glb'
+```
+
+球拍以掌心为握柄点，使用公共 `RACKET_IN_RIGHT_HAND` 校准手掌方向。
+右手指屈曲包住拍柄，反手时拇指较直；上身跟随公共骨架的持拍肩位置，避免侧身后
+模型手腕与实际触球点错开。腿部落点随髋朝向，引拍时肩髋继续分离，头部回看球网。
+
+加载或骨骼绑定失败时显示程序构造球员。`/?model=` 可查看回退；
+`?model=/models/xbot.glb` 可查看 Xbot。外部 FBX 可用 `texture` 查询参数指定贴图。
+
+## Kenney 兼容模型
+
+`kenney-player.glb` 与 `kenney-player.png` 保留为 **Animated Characters Protagonists 1.1** 兼容素材：
 
 - 作者 / 发布者：Kenney（https://kenney.nl）
 - 原始素材页：https://kenney.nl/assets/animated-characters-protagonists
@@ -22,10 +58,6 @@
 Hips、Spine、Chest、UpperChest、Head 以及左右 Arm / ForeArm / Hand / UpLeg /
 Leg / Foot 骨骼。原模型没有内置动作片段，现有 `playerMotion` / `playerFootwork`
 直接驱动这些骨骼，因此六点步法、球拍接触标定与世界位置仍由比赛状态统一控制。
-这套轻量二次元外观比 Xbot 更接近可辨认的运动员，同时显著降低默认下载与手机蒙皮负担。
-
-加载或骨骼绑定失败时仍显示程序构造球员。访问 `/?model=` 可主动查看该回退；
-`?model=/models/xbot.glb` 可切回 Xbot，外部 FBX 可用 `texture` 查询参数指定贴图。
 
 ## Xbot 兼容模型
 
@@ -45,8 +77,8 @@ badminton code.
   `createPlayerMotion` 和 `updatePlayerMotion`，不导入人物外观或 glTF 加载器。
   支持暂停、慢放、逐帧、时间轴、两侧朝向、六点步法和六种挥拍；显示骨长误差和落脚轨迹。
 - **渲染 / 球员展示** 用同一组动作样本验证模型绑定。`modelUrl` 默认为
-  `/models/kenney-player.glb`，留空可查看程序构造的运动员，填入其他模型路径可替换外观。
-- 游戏默认加载 Kenney 球员（包含在离线缓存中），主客场保留蓝 / 红配色。
+  `/models/quaternius-player.glb`，留空可查看程序构造的运动员，填入其他模型路径可替换外观。
+- 游戏默认加载 Quaternius 球员（包含在离线缓存中），主客场保留蓝 / 红配色。
   模型加载或骨骼映射失败时保留程序外观。
 
 动作骨架与模型的调用关系：
@@ -63,7 +95,7 @@ Toes 别名，绑定姿态朝 +Z。需要 Hips、上胸，以及左右 Arm / For
 UpLeg / Leg / Foot。
 模型自动归一到 1.78 米；绑定层保留原始骨长和静止轴向，按动作落点做双骨 IK，
 球拍挂在模型右手并保持米制尺寸。其他骨骼命名需在 `humanoidModel.ts` 中增加映射。
-比赛通过 Three.js `AnimationMixer` 播放 Xbot 自带的 `idle` / `walk` / `run`，
+比赛通过 Three.js `AnimationMixer` 播放模型包含的 `idle` / `walk` / `run`，
 只读取腿部旋转轨道，忽略平移、缩放和上身轨道。世界位置与跳跃仍由游戏模拟控制。
 直线后退反向播放步态，腿部朝向按实际世界速度转换；开始、急停恢复、六点专项步法、
 起跳和挥拍阶段平滑切回程序骨架 IK，接触帧立即保持原有球拍校准。

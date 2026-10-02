@@ -9,7 +9,7 @@ import { mountScene } from './threeHelper'
 const meta: Meta<{ motion: MotionDemo; modelUrl: string; modelTextureUrl: string; source: 'procedural' | 'hdm05'; clipId: string; fullTake: boolean }> = {
   title: '渲染/球员展示',
   tags: ['autodocs'],
-  args: { motion: 'sixPoints', modelUrl: '/models/kenney-player.glb', modelTextureUrl: '/models/kenney-player.png', source: 'procedural', clipId: 'dg-04-smash', fullTake: false },
+  args: { motion: 'sixPoints', modelUrl: '/models/quaternius-player.glb', modelTextureUrl: '', source: 'procedural', clipId: 'dg-04-smash', fullTake: false },
   argTypes: { motion: { control: 'select', options: MOTION_DEMOS }, modelUrl: { control: 'text' },
     modelTextureUrl: { control: 'text' },
     source: { control: 'inline-radio', options: ['procedural', 'hdm05'] }, clipId: { control: 'select', options: HDM05_CLIPS }, fullTake: { control: 'boolean' } },

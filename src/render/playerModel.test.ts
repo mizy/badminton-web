@@ -10,6 +10,8 @@ import { bindHumanoidModel } from './playerModel'
 import { findHumanoidBones } from './humanoidModel'
 import { applyHdm05PlayerMotion } from './hdm05PlayerMotion'
 import { createHdm05StrikeClip, type Hdm05Motion } from './hdm05BadmintonMocap'
+import { createReachableRacketPose } from '../character/racketKinematics'
+import { idealContactPoint } from '../character/contact'
 
 const world = (node: THREE.Object3D) => node.getWorldPosition(new THREE.Vector3())
 async function xbot() {
@@ -17,24 +19,31 @@ async function xbot() {
   return new GLTFLoader().parseAsync(data, '')
 }
 
-async function kenneyPlayer() {
-  const data = readFileSync(new URL('../../public/models/kenney-player.glb', import.meta.url))
-  const { scene: model } = await new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), '')
-  return { bytes: data.byteLength, model }
+async function quaterniusPlayer() {
+  const data = readFileSync(new URL('../../public/models/quaternius-player.glb', import.meta.url))
+  const { scene: model, animations } = await new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), '')
+  return { bytes: data.byteLength, model, animations }
 }
 
 describe('glTF player binding', () => {
-  it('binds the compact default Kenney skin to the gameplay skeleton', async () => {
+  it('binds the default CC0 athlete with leg clips, a palm grip and court shoes', async () => {
     const rig = createPlayerSkeleton()
     attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
     const motion = createPlayerMotion(rig)
-    const { bytes, model } = await kenneyPlayer()
+    const { bytes, model, animations } = await quaterniusPlayer()
     const bones = findHumanoidBones(model)
 
-    expect(bytes).toBeLessThan(450_000)
-    expect(bones.spine2?.name).toBe('UpperChest')
+    expect(bytes).toBeLessThan(900_000)
+    expect(bones.spine2?.name).toBe('Spine2')
     expect(bones.rightHand?.name).toBe('RightHand')
-    const updateModel = bindHumanoidModel(rig, model)
+    expect(animations.map(clip => clip.name)).toEqual(['idle', 'walk', 'run'])
+    for (const clip of animations) {
+      expect(clip.tracks).toHaveLength(6)
+      expect(clip.tracks.every(track => /(?:Left|Right)(?:UpLeg|Leg|Foot)\.quaternion$/.test(track.name))).toBe(true)
+    }
+    const finger = model.getObjectByName('RightHandMiddle2')!
+    const openFinger = finger.quaternion.clone()
+    const updateModel = bindHumanoidModel(rig, model, animations)
     const player = createPlayer(0)
     player.movement.footwork = 'lunge'
     player.movement.footworkPoint = 'front-right'
@@ -45,7 +54,35 @@ describe('glTF player binding', () => {
     expect(model.name).toBe('player-model')
     expect(new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).y).toBeGreaterThan(1.4)
     expect(world(bones.rightFoot!).toArray().every(Number.isFinite)).toBe(true)
-    expect(world(model.getObjectByName('racket-string-center')!).distanceTo(world(bones.rightHand!))).toBeCloseTo(0.46, 5)
+    const racket = model.getObjectByName('player-racket')!
+    expect(world(racket).distanceTo(world(bones.rightHand!))).toBeGreaterThan(0.04)
+    expect(world(racket).distanceTo(world(bones.rightHand!))).toBeLessThan(0.09)
+    expect(world(model.getObjectByName('racket-string-center')!).distanceTo(world(racket))).toBeCloseTo(0.46, 5)
+    expect(finger.quaternion.angleTo(openFinger)).toBeGreaterThan(0.5)
+    expect(model.getObjectByName('right-shoe')?.parent).toBe(bones.rightFoot)
+    expect(model.getObjectByName('left-shoe')?.parent).toBe(bones.leftFoot)
+  })
+
+  it.each([0, 1] as const)('turns the actual skin side-on then contacts at the calibrated strings on side %s', async side => {
+    const rig = createPlayerSkeleton()
+    attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
+    const motion = createPlayerMotion(rig)
+    const { model, animations } = await quaterniusPlayer()
+    const updateModel = bindHumanoidModel(rig, model, animations)
+    const bones = findHumanoidBones(model)
+    const player = createPlayer(side)
+    player.swing = { ...player.swing, phase: 'preparing', shot: 'CLEAR', elapsed: 0.09 }
+    updatePlayerMotion(motion, player, 0)
+    updateModel(player, 0)
+    const shoulders = world(bones.rightArm!).sub(world(bones.leftArm!))
+    expect(Math.abs(shoulders.x)).toBeGreaterThan(Math.abs(shoulders.z) * 2)
+
+    const point = idealContactPoint(player.pos, side, 'CLEAR')
+    player.contactPose = createReachableRacketPose({ desiredContact: point, playerPos: player.pos, playerSide: side, racketFaceDeg: 18 })
+    player.swing = { ...player.swing, phase: 'recovery', elapsed: 0.07 }
+    updatePlayerMotion(motion, player, 1 / 60)
+    updateModel(player, 1 / 60)
+    expect(world(model.getObjectByName('racket-string-center')!).distanceTo(new THREE.Vector3(...point))).toBeLessThan(0.05)
   })
 
   it('retargets the real Xbot skin, preserves bind lengths, and keeps equipment in metres', async () => {

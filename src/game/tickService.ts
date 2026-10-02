@@ -111,6 +111,8 @@ function contactPlayers(state: GameState): GameState {
     const face = getTechniqueRacketFaceDeg(technique)
     const cork = getShuttleCorkCenter(shuttle.pos, shuttle.vel)
     const racket = createReachableRacketPose({ desiredContact: cork, playerPos: player.pos, playerSide: player.side, racketFaceDeg: face })
+    // Human near-miss assistance must not make the AI hit early with zero sweet-spot quality.
+    if (state.controls[i] === 'ai' && !racket.reachable) continue
     const spec = RACKETS[player.loadout]
     const offset = (player.swing.elapsed - 0.07) * 1000
     const readiness = player.movement.readiness

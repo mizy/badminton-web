@@ -80,8 +80,9 @@ describe('independent player motion', () => {
     expect(frontRight.hips).toBeLessThan(-0.35)
     expect(frontLeft.hips).toBeGreaterThan(0.35)
     expect(backRight.hips).toBeLessThan(frontRight.hips)
-    expect(frontRight.chest - frontRight.hips).toBeGreaterThan(0.1)
-    expect(frontLeft.chest - frontLeft.hips).toBeLessThan(-0.1)
+    expect(frontRight.chest - frontRight.hips).toBeLessThan(-0.1)
+    expect(frontLeft.chest - frontLeft.hips).toBeGreaterThan(0.1)
+    expect(Math.abs(backRight.chest)).toBeGreaterThan(1.15)
     for (const angle of [frontRight.hips, frontRight.chest, frontLeft.hips, frontLeft.chest, backRight.hips, backRight.chest]) {
       expect(Math.abs(angle)).toBeLessThan(Math.PI / 2)
     }

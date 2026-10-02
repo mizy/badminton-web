@@ -18,8 +18,7 @@ import { createFootwork, updateFootwork, type FootworkMotion } from './playerFoo
 const UP = new THREE.Vector3(0, 1, 0)
 const RIGHT_SHOULDER = new THREE.Vector3(-SHOULDER_HALF_WIDTH, SHOULDER_HEIGHT, 0.04)
 const SWING_DURATION = 0.16
-/** 无明确步点时仍保留轻微侧身，避免准备姿态完全正对球网。 */
-const SIDE_ON_YAW = 0.30
+const SIDE_ON_YAW = 0.18
 
 interface ArmPose {
   grip: THREE.Vector3
@@ -163,15 +162,17 @@ export function updatePlayerMotion(rig: PlayerMotion, player: PlayerState, elaps
   // 六点步点先决定侧身方向，后场交叉步比中场并步转得更多；引拍继续沿正/反手侧加深。
   const windup = phase === 'preparing' ? smooth(player.swing.elapsed / timing.preparation)
     : phase === 'swinging' ? 1 - smooth(player.swing.elapsed / SWING_DURATION) : 0
-  const footworkYaw = depth === 'back' ? 0.48 : depth === 'front' ? 0.38 : depth === 'mid' ? 0.28 : SIDE_ON_YAW
-  const stanceYaw = postureSide * (footworkYaw + windup * 0.22)
+  const shot = phase === 'ready' ? player.selectedShot : player.swing.shot
+  const overhead = shot === 'CLEAR' || shot === 'DROP' || shot === 'SMASH'
+  const footworkYaw = depth === 'back' ? 0.95 : depth === 'front' ? 0.48 : depth === 'mid' ? 0.28 : SIDE_ON_YAW
+  const stanceYaw = postureSide * Math.min(1.18, footworkYaw + windup * (overhead && depth !== 'front' ? 0.9 : 0.25))
   // 尚未分类到步点的启动帧，先按横向输入轻转；明确步点后由上面的稳定角度接管。
   const targetLength = Math.hypot(player.movement.targetDir.x, player.movement.targetDir.z)
   const anatomicalLateral = targetLength > 0.01
     ? player.movement.targetDir.z / targetLength * (player.side === 0 ? 1 : -1)
     : 0
   const movementYaw = pointSide === 0 ? -anatomicalLateral * 0.1 : 0
-  const hipYaw = THREE.MathUtils.clamp(turn + stanceYaw + movementYaw, -0.72, 0.72)
+  const hipYaw = THREE.MathUtils.clamp(turn + stanceYaw + movementYaw, -1.25, 1.25)
   // 髋先转、肩后转：引拍逐帧加大分离，出拍时髋先回正、肩带再释放。
   // 各阶段首尾取值相接（0.08 → 0.32 → -0.22 → 0.08），球拍不会在阶段切换时瞬跳。
   const recoveryDuration = Math.max(SWING_DURATION + 1e-6, timing.recovery)
@@ -179,13 +180,14 @@ export function updatePlayerMotion(rig: PlayerMotion, player: PlayerState, elaps
   if (phase === 'preparing') separationAngle = 0.08 + 0.24 * THREE.MathUtils.clamp(player.swing.elapsed / timing.preparation, 0, 1)
   else if (phase === 'swinging') separationAngle = 0.32 - 0.54 * THREE.MathUtils.clamp(player.swing.elapsed / SWING_DURATION, 0, 1)
   else if (phase === 'recovery') separationAngle = -0.22 + 0.30 * THREE.MathUtils.clamp((player.swing.elapsed - SWING_DURATION) / (recoveryDuration - SWING_DURATION), 0, 1)
-  const shoulderSeparation = turn * 0.35 - postureSide * separationAngle
+  const shoulderSeparation = turn * 0.35 + postureSide * separationAngle
   rig.body.rotation.y = 0
   rig.hips.rotation.y = THREE.MathUtils.lerp(rig.hips.rotation.y, hipYaw, blend)
   rig.hips.position.y = 0.94 - (player.body.phase === 'airborne' ? 0 : 0.055) + Math.sin(rig.stride * 2) * rig.pace * 0.014
   // 肩带角度 = 髋的实际朝向 + 肩髋分离角。
-  const chestYaw = THREE.MathUtils.clamp(hipYaw + shoulderSeparation, -1.15, 1.15)
+  const chestYaw = THREE.MathUtils.clamp(hipYaw + shoulderSeparation, -1.48, 1.48)
   rig.chest.rotation.y = THREE.MathUtils.lerp(rig.chest.rotation.y, chestYaw, blend)
+  rig.head.rotation.y = -rig.chest.rotation.y * 0.75
   const visualPos: Vec3 = [player.pos[0], player.pos[1] - crouch, player.pos[2]]
   // group 已经承担世界位置与朝网旋转；body 只是局部锚点，重复塞入世界坐标会二次变换。
   rig.body.position.set(0, visualPos[1] - player.pos[1], 0)

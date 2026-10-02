@@ -67,12 +67,12 @@ export function createPlayerMesh(colors?: PlayerMeshColors, label = 'P', options
         model.traverse(node => {
           if (!(node instanceof THREE.Mesh) || !colors) return
           for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
-            if (material instanceof THREE.MeshStandardMaterial && material.name.includes('Beta_')) {
+            if (material instanceof THREE.MeshStandardMaterial && (material.name.includes('Beta_') || material.name === 'Player_Jersey')) {
               material.color.setHex(colors.body).multiplyScalar(material.name.includes('Joints') ? 0.4 : 1)
             }
           }
         })
-        appearance.forEach(node => { node.visible = false })
+        appearance.forEach(node => { node.visible = node.name.includes('-shoe-') || node.name.endsWith('-sole') || node.name.endsWith('-sock') })
         view.model()
       } catch (error) { console.warn('球员模型无法绑定，保留默认外观', error) }
     }).catch(error => { console.warn('球员模型加载失败，保留默认外观', error) })

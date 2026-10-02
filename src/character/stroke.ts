@@ -14,8 +14,8 @@ export const RACKETS: Record<Loadout, { name: string; balance: number; tension: 
 
 /** 蓄力窗口：按住 CHARGE.min 起算，CHARGE.max 蓄满封顶（秒）。 */
 export const CHARGE = { min: 0.05, max: 0.4 } as const
-/** The visual strike ends at 0.16s; a short follow-through grace catches near-edge timing. */
-export const CONTACT_WINDOW_SECONDS = 0.22
+/** Keep contact active into follow-through so a slightly early press still returns the ball. */
+export const CONTACT_WINDOW_SECONDS = 0.34
 const CHARGE_DEPTH_SPAN = 1.2
 
 export function charge01(heldSeconds: number): number {

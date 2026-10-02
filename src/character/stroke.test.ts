@@ -12,7 +12,7 @@ describe('charged strokes', () => {
     player = releaseSwing(player)
     expect(player.swing.phase).toBe('swinging')
     expect(player.swing.charge01).toBeGreaterThan(0.15)
-    let struck = advanceSwing(player, 0.23)
+    let struck = advanceSwing(player, 0.35)
     expect(struck.swing.phase).toBe('recovery')
     expect(struck.feedback).toContain('挥空')
     struck = advanceSwing(struck, 0.5)

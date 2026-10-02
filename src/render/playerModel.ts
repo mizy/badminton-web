@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import type { PlayerState } from '../character/types'
 import { findHumanoidBones, normalizeHumanoidModel } from './humanoidModel'
 import { ANKLE_HEIGHT, type Limb, type PlayerSkeleton } from './playerSkeleton'
+import { RACKET_IN_RIGHT_HAND } from './skeletalRacket'
 
 interface Joint {
   node: THREE.Object3D
@@ -38,6 +39,7 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
   model.updateWorldMatrix(true, true)
   const hips = restJoint(bones.hips!, rig.group)
   const chest = restJoint(bones.spine2!, rig.group)
+  const shoulder = chest.node.worldToLocal(bones.rightArm!.getWorldPosition(new THREE.Vector3()))
   const head = bones.head ? restJoint(bones.head, rig.group) : null
   const limbs: ModelLimb[] = []
   for (const side of ['right', 'left'] as const) {
@@ -52,9 +54,30 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
     }
   }
   const racket = rig.racket.getObjectByName('player-racket')!
-  bones.rightHand!.add(racket)
+  const hand = bones.rightHand!
+  const palm = hand.getObjectByName('RightHandMiddle1')?.position.clone().multiplyScalar(0.65) ?? new THREE.Vector3()
+  const rightArm = limbs.find(limb => limb.source === rig.rightArm)!
+  const gripRotation = RACKET_IN_RIGHT_HAND.clone().invert()
+  const fingers: { node: THREE.Object3D; rotation: THREE.Quaternion; axis: THREE.Vector3; angle: number; thumb: boolean }[] = []
+  hand.traverse(node => {
+    const match = /RightHand(Thumb|Index|Middle|Ring|Pinky)([123])$/.exec(node.name)
+    if (!match) return
+    const thumb = match[1] === 'Thumb'
+    const joint = Number(match[2]) - 1
+    const angle = (thumb ? [0.3, 0.7, 0.35] : match[1] === 'Index' ? [0.45, 1.05, 0.65] : [0.8, 1.25, 0.8])[joint]
+    const axis = new THREE.Vector3(0, 0, 1).applyQuaternion(rig.group.getWorldQuaternion(new THREE.Quaternion()))
+      .applyQuaternion(node.getWorldQuaternion(new THREE.Quaternion()).invert())
+    fingers.push({ node, rotation: node.quaternion.clone(), axis, angle, thumb })
+  })
+  hand.add(racket)
   model.traverse(node => { if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true } })
   const legs = limbs.filter(limb => limb.source === rig.rightLeg || limb.source === rig.leftLeg)
+  const shoes = legs.map(limb => ({ object: limb.source.end.getObjectByName(limb.source === rig.rightLeg ? 'right-shoe' : 'left-shoe')!, limb }))
+  for (const shoe of shoes) {
+    const side = shoe.limb.source === rig.rightLeg ? 'right' : 'left'
+    shoe.object.add(shoe.limb.source.end.getObjectByName(`${side}-sock`)!)
+    shoe.limb.end.node.add(shoe.object)
+  }
   const animateLegs = createLegAnimation(rig, clips, legs)
   return (player, elapsed) => {
     rig.group.updateWorldMatrix(true, true)
@@ -66,8 +89,31 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
     // Mixer samples feed this pose writer; IK alone owns the model bones.
     // Full mocap previews continue to use the same retargeting path.
     if (!animateLegs?.(player, elapsed)) legs.forEach(limb => retargetLimb(limb, facing))
-    limbs.filter(limb => !legs.includes(limb)).forEach(limb => retargetLimb(limb, facing))
-    racket.position.set(0, 0, 0)
+    // The torso follows the calibrated shoulder after hip turns and foot planting.
+    // Matching rotations alone leaves the skin's wrist short of the real impact.
+    const chestPosition = chest.node.getWorldPosition(new THREE.Vector3())
+      .add(rig.rightArm.root.getWorldPosition(new THREE.Vector3()))
+      .sub(chest.node.localToWorld(shoulder.clone()))
+    chest.node.position.copy(chest.node.parent!.worldToLocal(chestPosition))
+    chest.node.updateWorldMatrix(false, true)
+    for (const { object, limb } of shoes) {
+      object.position.set(0, 0, 0)
+      object.scale.copy(rig.group.getWorldScale(new THREE.Vector3())).divide(limb.end.node.getWorldScale(new THREE.Vector3()))
+      object.quaternion.copy(limb.end.node.getWorldQuaternion(new THREE.Quaternion()).invert())
+        .multiply(limb.source.end.getWorldQuaternion(new THREE.Quaternion()))
+    }
+    const handRotation = rig.racket.getWorldQuaternion(new THREE.Quaternion())
+      .multiply(gripRotation).multiply(rightArm.end.rotation)
+    const wrist = rig.rightArm.end.getWorldPosition(new THREE.Vector3()).sub(palm.clone()
+      .multiply(hand.getWorldScale(new THREE.Vector3())).applyQuaternion(handRotation))
+    retargetLimb(rightArm, facing, wrist)
+    rotate(rightArm.end, handRotation)
+    retargetLimb(limbs.find(limb => limb.source === rig.leftArm)!, facing)
+    for (const finger of fingers) {
+      const angle = player?.grip === 'backhand' && finger.thumb ? finger.angle * 0.2 : finger.angle
+      finger.node.quaternion.copy(finger.rotation).multiply(new THREE.Quaternion().setFromAxisAngle(finger.axis, angle))
+    }
+    racket.position.copy(palm)
     // glTF bones may use centimetres; attached equipment stays in court metres.
     racket.scale.copy(rig.group.getWorldScale(new THREE.Vector3()))
       .divide(bones.rightHand!.getWorldScale(new THREE.Vector3()))
@@ -175,9 +221,8 @@ function aim(joint: Joint, direction: THREE.Vector3, facing: THREE.Quaternion): 
   rotate(joint, rotation)
 }
 
-function retargetLimb(limb: ModelLimb, facing: THREE.Quaternion): void {
+function retargetLimb(limb: ModelLimb, facing: THREE.Quaternion, target = limb.source.end.getWorldPosition(new THREE.Vector3())): void {
   const root = limb.upper.node.getWorldPosition(new THREE.Vector3())
-  const target = limb.source.end.getWorldPosition(new THREE.Vector3())
   const direction = target.clone().sub(root)
   const [a, b] = limb.lengths
   const distance = THREE.MathUtils.clamp(direction.length(), Math.abs(a - b) + 1e-6, a + b - 1e-6)

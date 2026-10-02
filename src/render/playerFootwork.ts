@@ -45,8 +45,8 @@ function landingOffset(player: PlayerState, direction: THREE.Vector3, sign: numb
 }
 
 function groundTarget(rig: PlayerSkeleton, player: PlayerState, sign: number, speed: number): THREE.Vector3 {
-  // Court-relative steps must not rotate with the upper body's backswing.
-  const rotation = rig.group.getWorldQuaternion(new THREE.Quaternion())
+  // Feet follow the hip stance; the chest can wind up independently above them.
+  const rotation = rig.hips.getWorldQuaternion(new THREE.Quaternion())
   const direction = new THREE.Vector3(player.movement.currentVel.x, 0, player.movement.currentVel.z)
     .applyQuaternion(rotation.clone().invert())
   if (direction.lengthSq() < 0.01) direction.set(0, 0, 1)

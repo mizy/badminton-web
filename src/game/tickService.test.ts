@@ -117,7 +117,7 @@ describe('ordered rally events', () => {
     })
   }
 
-  it('keeps contact open through the first 60ms of visual recovery', () => {
+  it('keeps late contact open for 340ms without allowing a second hit', () => {
     const makeState = (elapsed: number) => {
       const state = session()
       const home = createPlayer(0)
@@ -130,10 +130,11 @@ describe('ordered rally events', () => {
         shuttle: { pos: placeShuttleForCorkCenter(contact, velocity), vel: velocity, spin: [0, 0, 0] as [number, number, number] } }
     }
 
-    const lateEdge = gameReducer(makeState(0.18), { type: 'TICK', dt: 1 / 120 })
+    const lateEdge = gameReducer(makeState(0.30), { type: 'TICK', dt: 1 / 120 })
     expect(lateEdge.lastHitter).toBe(0)
     expect(lateEdge.players[0]?.feedback).toContain('偏晚')
-    expect(gameReducer(makeState(0.225), { type: 'TICK', dt: 1 / 120 }).lastHitter).toBe(1)
+    expect(gameReducer(lateEdge, { type: 'TICK', dt: 1 / 120 }).rallyHits).toBe(1)
+    expect(gameReducer(makeState(0.345), { type: 'TICK', dt: 1 / 120 }).lastHitter).toBe(1)
   })
 
   it('accepts a racket-edge contact just outside the strict arm sphere', () => {
@@ -148,5 +149,24 @@ describe('ordered rally events', () => {
       shuttle: { pos: placeShuttleForCorkCenter(contact, velocity), vel: velocity, spin: [0, 0, 0] as [number, number, number] } }
 
     expect(gameReducer(edge, { type: 'TICK', dt: 1 / 120 }).lastHitter).toBe(0)
+  })
+
+  it('returns a ball 15cm beyond arm reach but still misses one 25cm away', () => {
+    const makeState = (extra: number) => {
+      const state = session()
+      const home = createPlayer(0)
+      home.pos = [-2.4, 0, 0]
+      home.swing = { ...beginSwing(home).swing, phase: 'swinging', elapsed: 0.04, shot: 'DRIVE' }
+      const velocity: [number, number, number] = [-7, -1, 0]
+      const lateral = Math.sqrt((1.1 + extra) ** 2 - 0.72 ** 2 - 0.21 ** 2) + 0.2
+      const contact: [number, number, number] = [-1.64, 1.25, lateral]
+      return { ...state, phase: 'playing' as const, lastHitter: 1 as const,
+        players: [home, state.players[1]] as typeof state.players,
+        shuttle: { pos: placeShuttleForCorkCenter(contact, velocity), vel: velocity, spin: [0, 0, 0] as [number, number, number] } }
+    }
+    expect(gameReducer(makeState(0.15), { type: 'TICK', dt: 1 / 120 }).lastHitter).toBe(0)
+    expect(gameReducer(makeState(0.25), { type: 'TICK', dt: 1 / 120 }).lastHitter).toBe(1)
+    const ai = { ...makeState(0.15), controls: ['ai', 'ai'] as ['ai', 'ai'] }
+    expect(gameReducer(ai, { type: 'TICK', dt: 1 / 120 }).lastHitter).toBe(1)
   })
 })
