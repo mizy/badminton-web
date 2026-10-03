@@ -88,6 +88,9 @@ pnpm verify:pwa
 
 # 构建完成后：模拟连续发布，验证自动更新、比赛保护、多窗口和断网恢复
 pnpm verify:pwa-update
+
+# Storybook 运行后：二次元模型、正反手弓箭步、反手平抽/高远及专家动捕参考
+pnpm verify:player
 ```
 
 `PLAY_URL` 可覆盖检查地址，截图写入已忽略的 `.workbuddy/mobile-pwa/`。

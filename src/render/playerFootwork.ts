@@ -32,7 +32,7 @@ function landingOffset(player: PlayerState, direction: THREE.Vector3, sign: numb
   if (player.movement.footwork === 'start') return offset.add(new THREE.Vector3(-sign * 0.08, 0, sign * 0.04))
   if (player.movement.footwork === 'recover') return offset
   if (depth === 'front' || player.movement.footwork === 'lunge') {
-    return offset.addScaledVector(direction, sign === 1 ? 0.42 : -0.20)
+    return offset.addScaledVector(direction, sign === 1 ? 0.48 : -0.72)
   }
   if (depth === 'back' && Math.abs(direction.x) > 0.3) {
     offset.x += sign === -lateral ? -lateral * 0.42 : lateral * 0.02
@@ -48,7 +48,8 @@ function groundTarget(rig: PlayerSkeleton, player: PlayerState, sign: number, sp
   // Feet follow the hip stance; the chest can wind up independently above them.
   const rotation = rig.hips.getWorldQuaternion(new THREE.Quaternion())
   const direction = new THREE.Vector3(player.movement.currentVel.x, 0, player.movement.currentVel.z)
-    .applyQuaternion(rotation.clone().invert())
+  if (direction.lengthSq() < 0.01) direction.set(player.movement.targetDir.x, 0, player.movement.targetDir.z)
+  direction.applyQuaternion(rotation.clone().invert())
   if (direction.lengthSq() < 0.01) direction.set(0, 0, 1)
   direction.normalize()
   const target = landingOffset(player, direction, sign).applyQuaternion(rotation)
@@ -84,14 +85,30 @@ export function updateFootwork(rig: PlayerSkeleton, motion: FootworkMotion, play
     motion.initialized = false
     return
   }
+  // Step towards reachable plants, so a deep lunge does not repeatedly chase
+  // an unreachable rear-foot target after reaching its visible limit.
+  targets.forEach((target, i) => reachable(i === 0 ? rig.rightLeg : rig.leftLeg, target))
   if (reset) {
     motion.feet.forEach((foot, i) => { foot.position.copy(targets[i]); foot.duration = 0 })
     motion.initialized = true
   }
   advanceFeet(motion, targets, speed, Math.min(dt, 0.05))
+  const knee = player.movement.footwork === 'lunge'
+    ? new THREE.Vector3(player.movement.currentVel.x, 0, player.movement.currentVel.z)
+      .applyQuaternion(rig.hips.getWorldQuaternion(new THREE.Quaternion()).invert())
+    : new THREE.Vector3(0, 0, 1)
+  if (knee.lengthSq() < 0.01 && player.movement.footwork === 'lunge') {
+    knee.set(player.movement.targetDir.x, 0, player.movement.targetDir.z)
+      .applyQuaternion(rig.hips.getWorldQuaternion(new THREE.Quaternion()).invert())
+  }
+  if (knee.lengthSq() < 0.01) knee.set(0, 0, 1)
   for (const [i, chain] of [rig.rightLeg, rig.leftLeg].entries()) {
     reachable(chain, motion.feet[i].position)
-    poseLimb(chain, rig.hips.worldToLocal(motion.feet[i].position.clone()), new THREE.Vector3(0, 0, 1))
+    poseLimb(chain, rig.hips.worldToLocal(motion.feet[i].position.clone()), knee)
+    if (player.movement.footwork === 'lunge') {
+      const toe = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(knee.x, knee.z))
+      chain.end.quaternion.copy(chain.root.quaternion).multiply(chain.joint.quaternion).invert().multiply(toe)
+    }
   }
 }
 

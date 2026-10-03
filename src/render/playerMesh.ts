@@ -7,6 +7,7 @@ import { createPlayerMotion, updatePlayerMotion, updateRacketMotion, type Player
 import { attachPlayerAppearance, type PlayerMeshColors, type PlayerAppearanceOptions } from './playerAppearance'
 import { bindHumanoidModel } from './playerModel'
 import { applyHdm05PlayerMotion } from './hdm05PlayerMotion'
+import { applyMultiSensePlayerMotion, type MultiSenseCapture } from './multisensePlayerMotion'
 import type { Hdm05Motion } from './hdm05BadmintonMocap'
 export type { PlayerMeshColors } from './playerAppearance'
 
@@ -88,10 +89,11 @@ export function syncPlayerMotion(group: THREE.Group, player: PlayerState, elapse
 }
 
 /** @entry Captured motion uses the same skeleton and model binding as gameplay. */
-export function syncPlayerMocap(group: THREE.Group, motion: Hdm05Motion<string>, time: number): void {
+export function syncPlayerMocap(group: THREE.Group, motion: Hdm05Motion<string> | MultiSenseCapture, time: number): void {
   const view = players.get(group)
   if (!view) return
-  applyHdm05PlayerMotion(view.motion, motion, time)
+  if ('globalPositions' in motion) applyMultiSensePlayerMotion(view.motion, motion, time)
+  else applyHdm05PlayerMotion(view.motion, motion, time)
   view.model?.()
 }
 

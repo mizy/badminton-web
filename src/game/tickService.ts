@@ -122,7 +122,8 @@ function updateAI(state: GameState, configs?: TickAIConfigs): GameState {
     if (!predicted.shotType || !canPlayShot(predicted.shotType, future.pos, contactPlayer.pos[1]) || !onOwnSide(player, future)) return player
     const pose = createReachableRacketPose({ desiredContact: getShuttleCorkCenter(future.pos, future.vel), playerPos: contactPlayer.pos, playerSide: player.side, racketFaceDeg: getTechniqueRacketFaceDeg(predicted.shotType) })
     if (!pose.reachable) return player
-    player = beginSwing({ ...player, selectedShot: predicted.shotType })
+    player = beginSwing({ ...player, selectedShot: predicted.shotType,
+      grip: resolveContactGrip(contactPlayer.pos, player.side, pose.stringCenter) })
     return { ...player, swing: { ...player.swing, target: predicted.target } }
   }) as GameState['players']
   return { ...state, players }

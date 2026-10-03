@@ -17,6 +17,44 @@ function expectLengths(rig: ReturnType<typeof createPlayerMotion>) {
 }
 
 describe('independent player motion', () => {
+  it.each([0, 1] as const)('uses a distinct cross-body backhand preparation on side %s', side => {
+    const wrists = ['forehand', 'backhand'].map(grip => {
+      const rig = createPlayerMotion(createPlayerSkeleton())
+      const player = createPlayer(side)
+      player.grip = grip as 'forehand' | 'backhand'
+      player.swing = { ...player.swing, phase: 'preparing', shot: 'DRIVE', elapsed: 0.4 }
+      updatePlayerMotion(rig, player, 0)
+      expectLengths(rig)
+      return rig.chest.worldToLocal(world(rig.rightArm.end))
+    })
+    expect(wrists[0].x).toBeLessThan(-0.25)
+    expect(wrists[1].x).toBeGreaterThan(0.05)
+  })
+
+  it.each([0, 1] as const)('plants a racket-leg lunge with a bent front knee and extended support leg on side %s', side => {
+    const rig = createPlayerMotion(createPlayerSkeleton())
+    const player = createPlayer(side)
+    const forward = side === 0 ? 1 : -1
+    player.movement.footwork = 'lunge'
+    player.movement.footworkPoint = 'front-right'
+    player.movement.targetDir = { x: forward, z: forward }
+    updatePlayerMotion(rig, player, 0)
+    const direction = new THREE.Vector3(forward, 0, forward).normalize()
+    const right = world(rig.rightLeg.end)
+    const left = world(rig.leftLeg.end)
+    expect(right.clone().sub(left).dot(direction)).toBeGreaterThan(0.9)
+    const kneeAngle = (limb: typeof rig.rightLeg) => world(limb.root).sub(world(limb.joint))
+      .angleTo(world(limb.end).sub(world(limb.joint))) * 180 / Math.PI
+    expect(kneeAngle(rig.rightLeg)).toBeGreaterThan(70)
+    expect(kneeAngle(rig.rightLeg)).toBeLessThan(140)
+    expect(kneeAngle(rig.leftLeg)).toBeGreaterThan(145)
+    for (let frame = 1; frame <= 60; frame++) {
+      updatePlayerMotion(rig, player, frame / 60)
+      expect(world(rig.rightLeg.end).distanceTo(right)).toBeLessThan(1e-6)
+      expect(world(rig.leftLeg.end).distanceTo(left)).toBeLessThan(1e-6)
+      expectLengths(rig)
+    }
+  })
   it('runs moving, turning and braking without a character model or changing bind lengths', () => {
     const rig = createPlayerMotion(createPlayerSkeleton())
     const player = createPlayer(0)

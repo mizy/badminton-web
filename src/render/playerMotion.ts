@@ -68,7 +68,18 @@ function readyPose(): ArmPose {
   return armPose([-0.29, 1.18, 0.28], [0.08, 0.94, 0.33])
 }
 
-function strokePoses(shot: ShotType): { preparation: ArmPose; follow: ArmPose } {
+function strokePoses(shot: ShotType, backhand = false): { preparation: ArmPose; follow: ArmPose } {
+  if (backhand) {
+    if (shot === 'LIFT' || shot === 'NET_DROP') {
+      return { preparation: armPose([0.18, 1.02, 0.16], [0.60, -0.65, 0.46]), follow: armPose([0.15, 1.30, 0.43], [0.28, 0.80, 0.53]) }
+    }
+    if (shot === 'DRIVE') {
+      return { preparation: armPose([0.12, 1.28, 0.18], [0.80, 0.32, -0.50]), follow: armPose([0.16, 1.22, 0.45], [0.32, 0.12, 0.94]) }
+    }
+    // High backhand: racket folds across the opposite shoulder, elbow leads,
+    // then the forearm extends above the backhand side rather than behind the head.
+    return { preparation: armPose([0.13, 1.50, 0.10], [0.66, 0.52, -0.54]), follow: armPose([0.20, 1.32, 0.42], [0.55, -0.25, 0.80]) }
+  }
   if (shot === 'LIFT' || shot === 'NET_DROP') {
     return { preparation: armPose([-0.35, 1.01, 0.12], [0.12, -0.82, 0.56]), follow: armPose([-0.28, 1.34, 0.40], [0.05, 0.84, 0.54]) }
   }
@@ -91,8 +102,10 @@ function localContactPose(parent: THREE.Object3D, pose: RacketContactPose): ArmP
   return { grip, rotation: racketRotation(center.sub(grip), normal) }
 }
 
-function applyArmPose(rig: PlayerMotion, pose: ArmPose): void {
-  poseLimb(rig.rightArm, pose.grip, new THREE.Vector3(-1, pose.grip.y > 1.5 ? 0.3 : -0.6, -0.35))
+function applyArmPose(rig: PlayerMotion, pose: ArmPose, backhand = false): void {
+  const elbow = backhand ? new THREE.Vector3(0.35, -0.55, 0.85)
+    : new THREE.Vector3(-1, pose.grip.y > 1.5 ? 0.3 : -0.6, -0.35)
+  poseLimb(rig.rightArm, pose.grip, elbow)
   // The racket is a wrist child: hand, grip and string bed turn together.
   rig.rightArm.end.quaternion.copy(rig.rightArm.root.quaternion).multiply(rig.rightArm.joint.quaternion).invert().multiply(pose.rotation)
   rig.racket.quaternion.identity()
@@ -105,7 +118,7 @@ function bodyCrouch(player: PlayerState, speed: number): number {
   const base = Math.min(speed / 5, 1) * 0.065 + (player.movement.footwork === 'start' ? 0.035 : 0)
   const depth = player.movement.footworkPoint?.split('-')[0]
   // 前场跨步把重心压得更低；中场并步和后场交叉步只是轻微降重心，避免像蹲跑。
-  const posture = depth === 'front' ? 0.15 : depth === 'back' ? 0.07 : depth === 'mid' ? 0.05 : 0
+  const posture = player.movement.footwork === 'lunge' ? 0.28 : depth === 'front' ? 0.15 : depth === 'back' ? 0.07 : depth === 'mid' ? 0.05 : 0
   return Math.max(base, posture)
 }
 
@@ -114,6 +127,9 @@ function leftArmTarget(player: PlayerState, cycle: number, speed: number): THREE
   if (player.body.phase === 'airborne') return new THREE.Vector3(0.40, 1.54, 0.08)
   const depth = player.movement.footworkPoint?.split('-')[0]
   if (depth === 'front') return new THREE.Vector3(0.40, 1.22, -0.48)
+  if (player.grip === 'backhand' && (player.swing.phase === 'preparing' || player.swing.phase === 'queued' || depth === 'back')) {
+    return new THREE.Vector3(0.38, 1.20, -0.14)
+  }
   if (player.swing.phase === 'preparing' || player.swing.phase === 'queued' || depth === 'back') return new THREE.Vector3(0.28, 1.66, 0.30)
   if (player.swing.phase === 'swinging' || player.swing.phase === 'recovery') return new THREE.Vector3(0.34, 1.13, 0.20)
   const sway = Math.sin(cycle) * Math.min(speed / 5, 1) * 0.12
@@ -213,7 +229,8 @@ function poseSwing(rig: PlayerMotion, player: PlayerState, visualPos: Vec3, newC
   const active = phase === 'swinging' || phase === 'recovery'
   const ready = readyPose()
   const shot = player.swing.phase === 'ready' ? player.selectedShot : player.swing.shot
-  const { preparation, follow } = strokePoses(shot)
+  const backhand = player.grip === 'backhand'
+  const { preparation, follow } = strokePoses(shot, backhand)
   if (rig.phase !== phase && phase === 'swinging') {
     // 短按也从上一帧实际引拍位置出发，避免松手瞬间跳到完整背弓姿态。
     rig.release = {
@@ -237,8 +254,10 @@ function poseSwing(rig: PlayerMotion, player: PlayerState, visualPos: Vec3, newC
     // 按住蓄力：在引拍位保持，不随按住时长继续位移。
     pose = blendPose(ready, preparation, player.swing.phase === 'queued' ? 1 : THREE.MathUtils.clamp(player.swing.elapsed / timing.preparation, 0, 1))
   } else if (player.swing.phase === 'swinging') {
+    const desiredContact = idealContactPoint(visualPos, player.side, shot)
+    if (backhand) desiredContact[2] -= (player.side === 0 ? 1 : -1) * 0.40
     const shared = createReachableRacketPose({
-      desiredContact: idealContactPoint(visualPos, player.side, shot),
+      desiredContact,
       playerPos: visualPos, playerSide: player.side, racketFaceDeg: getTechniqueRacketFaceDeg(shot),
     })
     const strike = localContactPose(rig.chest, shared)
@@ -248,7 +267,7 @@ function poseSwing(rig: PlayerMotion, player: PlayerState, visualPos: Vec3, newC
     const start = SWING_DURATION
     pose = blendPose(follow, ready, (player.swing.elapsed - start) / (timing.recovery - start))
   }
-  applyArmPose(rig, pose)
+  applyArmPose(rig, pose, backhand)
 }
 
 /** Legacy stories animate the same wrist/arm rig; no detached decorative racket. */

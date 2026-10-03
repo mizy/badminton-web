@@ -29,7 +29,7 @@ try {
       return { names, paths: (await cache.keys()).map(request => new URL(request.url).pathname) }
     })
     assert.equal(cached.names.length, 1)
-    for (const file of ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'models/quaternius-player.glb', 'models/quaternius-player.png']) {
+    for (const file of ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'models/anime-player.glb']) {
       assert.ok(cached.paths.some(path => path.endsWith(`/${file}`)), `${name}: cache missing ${file}`)
     }
     await page.setOfflineMode(true)

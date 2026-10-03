@@ -1,0 +1,15 @@
+HairSample_Male by pixiv Inc. — CC0 1.0 Universal
+
+Official conditions of use:
+https://vroid.pixiv.help/hc/en-us/articles/4402614652569-Do-VRoid-Studio-s-sample-models-come-with-conditions-of-use
+CC0 legal text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+Source mirror (unmodified official VRoid beta sample):
+https://raw.githubusercontent.com/madjin/vrm-samples/master/vroid/beta/HairSample_Male.vrm
+Source SHA-256: 7aeca142dabbc26ba0f5b9c998c8f3cb6df341287d67788427ac837223785a3f
+Embedded VRM metadata: title HairSample_Male, licenseName CC0,
+commercialUssageName Allow, allowedUserName Everyone.
+
+Sports adaptation by badminton-web: compact glTF, shared humanoid bone names,
+team jacket, dark training trousers, and existing court shoes/racket.
+The original face, hair, body skin weights and bind lengths are retained.

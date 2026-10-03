@@ -25,8 +25,22 @@ async function quaterniusPlayer() {
   return { bytes: data.byteLength, model, animations }
 }
 
+async function animePlayer() {
+  const source = readFileSync(new URL('../../public/models/anime-player.glb', import.meta.url))
+  const size = source.readUInt32LE(12)
+  const doc = JSON.parse(source.subarray(20, 20 + size).toString())
+  // Node verifies the real skin and bones; browser acceptance decodes its images.
+  for (const material of doc.materials) delete material.pbrMetallicRoughness.baseColorTexture
+  const json = Buffer.from(JSON.stringify(doc))
+  const padded = Buffer.concat([json, Buffer.alloc((4 - json.length % 4) % 4, 32)])
+  const data = Buffer.concat([source.subarray(0, 20), padded, source.subarray(20 + size)])
+  data.writeUInt32LE(data.length, 8)
+  data.writeUInt32LE(padded.length, 12)
+  return new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), '')
+}
+
 describe('glTF player binding', () => {
-  it('binds the default CC0 athlete with leg clips, a palm grip and court shoes', async () => {
+  it('binds the Quaternius athlete with leg clips, a palm grip and court shoes', async () => {
     const rig = createPlayerSkeleton()
     attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
     const motion = createPlayerMotion(rig)
@@ -64,6 +78,53 @@ describe('glTF player binding', () => {
     expect(thumb.quaternion.angleTo(openThumb)).toBeGreaterThan(0.8)
     expect(model.getObjectByName('right-shoe')?.parent).toBe(bones.rightFoot)
     expect(model.getObjectByName('left-shoe')?.parent).toBe(bones.leftFoot)
+  })
+
+  it.each([0, 1] as const)('binds the anime athlete with fixed bones and calibrated forehand/backhand contact on side %s', async side => {
+    const rig = createPlayerSkeleton()
+    attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
+    const motion = createPlayerMotion(rig)
+    const { scene: model } = await animePlayer()
+    const bones = findHumanoidBones(model)
+    const lengths = [bones.rightForeArm!, bones.rightHand!, bones.rightLeg!, bones.rightFoot!]
+      .map(node => ({ node, position: node.position.clone() }))
+    const updateModel = bindHumanoidModel(rig, model)
+    const player = createPlayer(side)
+    const forward = side === 0 ? 1 : -1
+    for (const grip of ['forehand', 'backhand'] as const) {
+      player.grip = grip
+      for (const height of [0.65, 1.5, 2.3]) {
+        const point: [number, number, number] = [player.pos[0] + forward * 0.5, height, grip === 'backhand' ? -forward * 0.4 : 0]
+        player.contactPose = createReachableRacketPose({ desiredContact: point, playerPos: player.pos, playerSide: side, racketFaceDeg: 0 })
+        player.swing = { ...player.swing, phase: 'recovery', shot: height > 2 ? 'CLEAR' : height < 1 ? 'NET_DROP' : 'DRIVE', elapsed: 0.07 }
+        updatePlayerMotion(motion, player, 0)
+        updateModel(player, 0)
+        expect(world(model.getObjectByName('racket-string-center')!).distanceTo(new THREE.Vector3(...point))).toBeLessThan(0.05)
+        for (const { node, position } of lengths) expect(node.position.distanceTo(position)).toBeLessThan(1e-8)
+        for (const bone of Object.values(bones)) expect(world(bone!).toArray().every(Number.isFinite)).toBe(true)
+      }
+    }
+  })
+
+  it.each([0, 1] as const)('keeps both anime shoes planted during a deep lunge on side %s', async side => {
+    const rig = createPlayerSkeleton()
+    attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
+    const motion = createPlayerMotion(rig)
+    const { scene: model } = await animePlayer()
+    const bones = findHumanoidBones(model)
+    const updateModel = bindHumanoidModel(rig, model)
+    const player = createPlayer(side)
+    const forward = side === 0 ? 1 : -1
+    for (const lateral of [forward, -forward]) {
+      player.movement.footwork = 'lunge'
+      player.movement.footworkPoint = lateral === forward ? 'front-right' : 'front-left'
+      player.movement.targetDir = { x: forward, z: lateral }
+      motion.feet.initialized = false
+      updatePlayerMotion(motion, player, 0)
+      updateModel(player, 0)
+      expect(world(bones.rightFoot!).y).toBeCloseTo(world(rig.rightLeg.end).y, 4)
+      expect(world(bones.leftFoot!).y).toBeCloseTo(world(rig.leftLeg.end).y, 4)
+    }
   })
 
   it.each([0, 1] as const)('turns the actual skin side-on then contacts at the calibrated strings on side %s', async side => {

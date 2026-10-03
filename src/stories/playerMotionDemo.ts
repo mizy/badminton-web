@@ -3,7 +3,8 @@ import type { PlayerState } from '../character/types'
 import { RACKETS, SHOT_ORDER } from '../character/stroke'
 import type { ShotType } from '../character/shotSynthesis'
 
-export const MOTION_DEMOS = ['ready', 'lateral', 'forward', 'retreat', 'turn', 'stop', 'sixPoints', 'jump', 'scissor', ...SHOT_ORDER] as const
+export const MOTION_DEMOS = ['ready', 'lateral', 'forward', 'retreat', 'turn', 'stop', 'sixPoints',
+  'forehandLunge', 'backhandLunge', 'backhandDrive', 'backhandClear', 'jump', 'scissor', ...SHOT_ORDER] as const
 export type MotionDemo = typeof MOTION_DEMOS[number]
 
 /** @entry Display samples only; gameplay continues to use reducer-owned PlayerState. */
@@ -17,15 +18,34 @@ export function sampleMotionDemo(player: PlayerState, motion: MotionDemo, time: 
   player.movement.footworkPoint = null
   player.body = { phase: 'grounded', action: null, elapsed: 0, verticalVelocity: 0 }
   player.swing.phase = 'ready'
+  player.grip = motion.startsWith('backhand') ? 'backhand' : 'forehand'
+  if (motion === 'forehandLunge' || motion === 'backhandLunge') {
+    const backhand = motion === 'backhandLunge'
+    const advance = Math.min(cycle / 0.6, 1)
+    const retreat = Math.max(0, (cycle - 1.4) / 1)
+    const travel = advance * advance * (3 - 2 * advance) - retreat * retreat * (3 - 2 * retreat)
+    const rate = cycle < 0.6 ? 6 * advance * (1 - advance) / 0.6 : cycle > 1.4 ? -6 * retreat * (1 - retreat) : 0
+    const lateral = (backhand ? -1 : 1) * forward
+    player.pos = [origin + travel * forward * 0.55, 0, travel * lateral * 0.45]
+    player.movement.currentVel = { x: rate * forward * 0.55, z: rate * lateral * 0.45 }
+    player.movement.targetDir = { x: forward, z: lateral }
+    player.movement.footwork = cycle < 0.25 ? 'start' : cycle < 1.4 ? 'lunge' : 'recover'
+    player.movement.footworkPoint = backhand ? 'front-left' : 'front-right'
+    player.selectedShot = player.swing.shot = 'NET_DROP'
+    player.swing.phase = cycle < 0.6 ? 'preparing' : cycle < 0.76 ? 'swinging' : cycle < 1.1 ? 'recovery' : 'ready'
+    player.swing.elapsed = cycle < 0.6 ? cycle : cycle - 0.6
+    return
+  }
+  const shot = motion === 'backhandDrive' ? 'DRIVE' : motion === 'backhandClear' ? 'CLEAR' : motion as ShotType
   if (motion === 'jump' || motion === 'scissor') {
     const flight = cycle - 0.2
     player.body.action = motion
     player.body.phase = cycle < 0.2 ? 'loading' : cycle < 0.85 ? 'airborne' : cycle < 1.1 ? 'landing' : 'grounded'
     player.body.elapsed = cycle < 0.2 ? cycle : cycle < 0.85 ? flight : cycle - 0.85
     player.pos[1] = player.body.phase === 'airborne' ? Math.sin(Math.PI * flight / 0.65) * 0.45 : 0
-  } else if (SHOT_ORDER.includes(motion as ShotType)) {
-    player.swing.shot = motion as ShotType
-    player.selectedShot = motion as ShotType
+  } else if (SHOT_ORDER.includes(shot)) {
+    player.swing.shot = shot
+    player.selectedShot = shot
     const prep = RACKETS[player.loadout].preparation + 0.3
     const recovery = RACKETS[player.loadout].recovery
     player.swing.phase = cycle < prep ? 'preparing' : cycle < prep + 0.16 ? 'swinging' : cycle < prep + recovery ? 'recovery' : 'ready'

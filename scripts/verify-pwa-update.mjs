@@ -71,12 +71,14 @@ try {
     await page.waitForFunction(() => document.documentElement.dataset.release === '3')
     assert.equal(navigations, 3, 'returning to menu applies the activated release once')
 
-    release = 4
     await page.setOfflineMode(true)
     await page.evaluate(() => window.dispatchEvent(new Event('online')))
     assert.equal(navigations, 3, 'offline check preserves the working release')
     await page.reload({ waitUntil: 'networkidle0' })
     assert.equal(await page.$eval('html', node => node.dataset.release), '3', 'offline restart uses cached release')
+    // Publish only after the offline restart, so an in-flight startup check
+    // cannot legitimately download release 4 before emulated disconnection.
+    release = 4
     await page.setOfflineMode(false)
     await page.evaluate(() => window.dispatchEvent(new Event('online')))
     await page.waitForFunction(() => document.documentElement.dataset.release === '4')

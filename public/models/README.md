@@ -1,8 +1,28 @@
 # Badminton Character Assets
 
-## 默认球员：Quaternius Universal Base Characters
+## 默认球员：VRoid 二次元运动员
 
-游戏和球员展示页默认使用 Quaternius 的 **Universal Base Characters [Standard]**
+`anime-player.glb` 来源于 pixiv 的 **HairSample_Male**（VRoid 旧版官方样例），
+官方许可页与 VRM 内的 `licenseName: CC0` 都确认其为 CC0 1.0：
+https://vroid.pixiv.help/hc/en-us/articles/4402614652569-Do-VRoid-Studio-s-sample-models-come-with-conditions-of-use
+
+保留原作者的脸、发型、人体骨架与蒙皮权重；改为主客场运动外套、深色训练裤，
+复用现有球鞋与球拍。模型约 3.38MB、13 个绘制批次；贴图内嵌并随默认 PWA 离线缓存。
+预处理移除游戏未使用的表情数据与法线贴图，合并同材质头发，压缩贴图，
+把 VRM 骨骼映射到现有绑定器并校正 +Z 朝向。许可与来源校验值见 `anime-player-license.txt`。
+
+```sh
+uv run --with pillow python scripts/prepare-anime-player.py /path/HairSample_Male.vrm
+```
+
+反手有独立的跨体引拍、肘部方向和随挥。弓箭步由现有六点步法驱动，
+前膝弯曲、后腿伸展、脚尖随进步方向；较短模型腿通过降低骨盆保持落脚位置，
+骨长不拉伸。较短手臂在伸展极限时前移肩带，让掌心和拍弦保持在实际触球点。
+球拍的实际命中位置仍以现有接触几何为准。
+
+## Quaternius 兼容球员：Universal Base Characters
+
+兼容素材使用 Quaternius 的 **Universal Base Characters [Standard]**
 中的 `Superhero_Male_FullBody`，带完整人体骨架和手指关节。
 
 - 作者：Quaternius / Tomás Laulhé。
@@ -81,7 +101,7 @@ badminton code.
   `createPlayerMotion` 和 `updatePlayerMotion`，不导入人物外观或 glTF 加载器。
   支持暂停、慢放、逐帧、时间轴、两侧朝向、六点步法和六种挥拍；显示骨长误差和落脚轨迹。
 - **渲染 / 球员展示** 用同一组动作样本验证模型绑定。`modelUrl` 默认为
-  `/models/quaternius-player.glb`，留空可查看程序构造的运动员，填入其他模型路径可替换外观。
+  `/models/anime-player.glb`，留空可查看程序构造的运动员，填入其他模型路径可替换外观。
 - 游戏默认加载 Quaternius 球员（包含在离线缓存中），主客场保留蓝 / 红配色。
   模型加载或骨骼映射失败时保留程序外观。
 

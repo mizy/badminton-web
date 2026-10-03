@@ -106,6 +106,17 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
     rotate(hips, rig.hips.getWorldQuaternion(new THREE.Quaternion()).multiply(hips.rotation))
     rotate(chest, rig.chest.getWorldQuaternion(new THREE.Quaternion()).multiply(chest.rotation))
     if (head) rotate(head, rig.head.getWorldQuaternion(new THREE.Quaternion()).multiply(head.rotation))
+    // Shorter avatar legs need a lower pelvis to reach the same planted feet.
+    // Preserve authored bone lengths instead of stretching the skin or floating.
+    const drop = Math.max(0, ...legs.map(limb => {
+      const root = limb.upper.node.getWorldPosition(new THREE.Vector3())
+      const target = limb.source.end.getWorldPosition(new THREE.Vector3())
+      const horizontal = (root.x - target.x) ** 2 + (root.z - target.z) ** 2
+      const length = limb.lengths[0] + limb.lengths[1] - 1e-6
+      return root.y - target.y - Math.sqrt(Math.max(0, length * length - horizontal))
+    }))
+    hips.node.position.y -= drop / hips.node.parent!.getWorldScale(new THREE.Vector3()).y
+    hips.node.updateWorldMatrix(false, true)
     // Mixer samples feed this pose writer; IK alone owns the model bones.
     // Full mocap previews continue to use the same retargeting path.
     if (!animateLegs?.(player, elapsed)) legs.forEach(limb => retargetLimb(limb, facing))
@@ -114,18 +125,28 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
     const chestPosition = chest.node.getWorldPosition(new THREE.Vector3())
       .add(rig.rightArm.root.getWorldPosition(new THREE.Vector3()))
       .sub(chest.node.localToWorld(shoulder.clone()))
-    chest.node.position.copy(chest.node.parent!.worldToLocal(chestPosition))
+    chest.node.position.copy(chest.node.parent!.worldToLocal(chestPosition.clone()))
     chest.node.updateWorldMatrix(false, true)
+    const handRotation = rig.racket.getWorldQuaternion(new THREE.Quaternion())
+      .multiply(gripRotation).multiply(rightArm.end.rotation)
+    const wrist = rig.rightArm.end.getWorldPosition(new THREE.Vector3()).sub(palm.clone()
+      .multiply(hand.getWorldScale(new THREE.Vector3())).applyQuaternion(handRotation))
+    // A compact avatar reaches by advancing its shoulder, while the calibrated
+    // hand/strings stay at the real contact and authored arm lengths stay fixed.
+    const extension = wrist.clone().sub(rightArm.upper.node.getWorldPosition(new THREE.Vector3()))
+    const distance = extension.length()
+    const reach = rightArm.lengths[0] + rightArm.lengths[1] - 1e-6
+    if (distance > reach) {
+      chestPosition.addScaledVector(extension, (distance - reach) / distance)
+      chest.node.position.copy(chest.node.parent!.worldToLocal(chestPosition.clone()))
+      chest.node.updateWorldMatrix(false, true)
+    }
     for (const { object, limb } of shoes) {
       object.position.set(0, 0, 0)
       object.scale.copy(rig.group.getWorldScale(new THREE.Vector3())).divide(limb.end.node.getWorldScale(new THREE.Vector3()))
       object.quaternion.copy(limb.end.node.getWorldQuaternion(new THREE.Quaternion()).invert())
         .multiply(limb.source.end.getWorldQuaternion(new THREE.Quaternion()))
     }
-    const handRotation = rig.racket.getWorldQuaternion(new THREE.Quaternion())
-      .multiply(gripRotation).multiply(rightArm.end.rotation)
-    const wrist = rig.rightArm.end.getWorldPosition(new THREE.Vector3()).sub(palm.clone()
-      .multiply(hand.getWorldScale(new THREE.Vector3())).applyQuaternion(handRotation))
     retargetLimb(rightArm, facing, wrist)
     rotate(rightArm.end, handRotation)
     retargetLimb(leftArm, facing)

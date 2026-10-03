@@ -13,6 +13,17 @@ function session() {
 }
 
 describe('player ownership and service', () => {
+  it('selects the backhand grip when an AI starts preparing, before contact', () => {
+    const base = session()
+    base.players[0]!.pos = [-3, 0, 0]
+    const state = { ...base, phase: 'playing' as const, controls: ['ai', 'ai'] as ['ai', 'ai'],
+      elapsed: 1, lastHitter: 1 as const,
+      shuttle: { pos: [-2.8, 1.75, -0.55] as [number, number, number], vel: [-1, -0.4, 0] as [number, number, number], spin: [0, 0, 0] as [number, number, number] } }
+    const next = gameReducer(state, { type: 'TICK', dt: 1 / 120, aiConfigs: { home: getAIConfig('hard', 'rally', true) } })
+    expect(next.lastHitter).toBe(1)
+    expect(next.players[0]?.swing.phase).toBe('preparing')
+    expect(next.players[0]?.grip).toBe('backhand')
+  })
   it('waits indefinitely for a human serve; only the server may serve', () => {
     let state = session()
     for (let i = 0; i < 600; i++) state = gameReducer(state, { type: 'TICK', dt: 1 / 120, aiConfigs: { home: getAIConfig('hard'), away: getAIConfig('hard') } })

@@ -15,7 +15,8 @@
     "capture": "node scripts/capture.mjs",
     "verify:mobile": "node scripts/verify-mobile.mjs",
     "verify:pwa": "node scripts/verify-offline.mjs",
-    "verify:pwa-update": "node scripts/verify-pwa-update.mjs"
+    "verify:pwa-update": "node scripts/verify-pwa-update.mjs",
+    "verify:player": "node scripts/verify-player-motion.mjs"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",
