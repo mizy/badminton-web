@@ -26,7 +26,10 @@ export default defineConfig({
         source: `const CACHE = 'badminton-${version}';
 const FILES = ${JSON.stringify(files)};
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(file => new Request(new URL(file, self.registration.scope), { cache: 'reload' })))));
+});
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') event.waitUntil(self.skipWaiting());
 });
 self.addEventListener('activate', event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('badminton-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim()));

@@ -66,9 +66,10 @@ pnpm typecheck
 - iPhone：在 Safari 打开地址，通过「共享 → 添加到主屏幕」安装。
 - 安装后从主屏幕图标打开，使用独立应用窗口；已安装状态下隐藏安装入口。
 - 首次联网加载并完成缓存后，默认训练和人机比赛可以离线重开。Storybook、动作库和 URL 参数指定的外部球员模型不在默认离线缓存内。
-- 更新会先下载新缓存；关闭旧游戏窗口后，新窗口启用新版本，避免正在进行的比赛被强制刷新。
+- 启动、回到前台、恢复联网时自动检查更新，前台每分钟再检查一次。新缓存下载完成后在主菜单自动切换版本；比赛和录像期间推迟到返回菜单、录像导出完成后应用。
+- 此前没有自动切换逻辑的旧版，首次升级仍需所有旧游戏窗口完全关闭后重新打开；载入本版后，后续版本按上述流程自动更新。
 
-应用清单在 `public/manifest.webmanifest`，图标源文件在 `public/icons/court.svg`，离线缓存复用 `vite.config.ts` 中的构建钩子和 `src/main.ts` 的注册入口。
+应用清单在 `public/manifest.webmanifest`，图标源文件在 `public/icons/court.svg`，离线缓存复用 `vite.config.ts` 中的构建钩子；`play/update.ts` 管理检查和切换，`play/start.ts` 用现有比赛与录像状态决定何时应用。
 
 浏览器回归检查使用本地 Chrome（可用 `CHROME_PATH` 指定其他安装路径）：
 
@@ -84,6 +85,9 @@ PROFILE_FRAMES=1 PLAY_URL=http://127.0.0.1:3000 node scripts/verify-gameplay.mjs
 
 # pnpm build && pnpm preview 后：清单、安装条件、离线重开和触屏发球
 pnpm verify:pwa
+
+# 构建完成后：模拟连续发布，验证自动更新、比赛保护、多窗口和断网恢复
+pnpm verify:pwa-update
 ```
 
 `PLAY_URL` 可覆盖检查地址，截图写入已忽略的 `.workbuddy/mobile-pwa/`。

@@ -38,7 +38,7 @@ try {
     assert.ok(start)
     await start.click()
     if (mobile) {
-      const shot = await page.$eval('[data-touch="shot"][data-shot="CLEAR"]', node => {
+      const shot = await page.$eval('[data-touch="shot"][data-direction="up"]', node => {
         const r = node.getBoundingClientRect()
         return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
       })

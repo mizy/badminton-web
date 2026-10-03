@@ -16,6 +16,7 @@ import { createShuttlecockMesh } from '../render/shuttlecockMesh'
 import { createTrailSystem } from '../render/trajectory'
 import { createViewState } from './viewState'
 import { createPlayUI, type SessionOptions } from './ui'
+import { connectAutoUpdate } from './update'
 
 interface PlayStartObjects extends PlaySceneObjects {
   arena: ArenaAnimation
@@ -38,6 +39,7 @@ export function startGame(): () => void {
   let audio: AudioContext | null = null
   let animation = 0
   let recordingBusy = false
+  const updates = connectAutoUpdate(() => !active && !recorder.isRecording() && !recordingBusy)
   // 打击感：命中重杀 / 丢分时抖一下画布（transform 只动 canvas，录像取样不受影响）。
   let shakePower = 0
   let shakeUntil = 0
@@ -54,6 +56,7 @@ export function startGame(): () => void {
       active = false
       input.disconnect()
       ui.showMenu()
+      updates.apply()
     },
     record: () => { void toggleRecording() },
     sound: enabled => { soundEnabled = enabled; if (enabled) unlockAudio() },
@@ -175,6 +178,7 @@ export function startGame(): () => void {
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } finally {
       recordingBusy = false
+      updates.apply()
     }
   }
 
@@ -256,6 +260,7 @@ export function startGame(): () => void {
   }
   animate()
   return () => {
+    updates.dispose()
     cancelAnimationFrame(animation)
     input.disconnect()
     disconnectHotkeys()

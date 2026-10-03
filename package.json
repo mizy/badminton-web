@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "capture": "node scripts/capture.mjs",
     "verify:mobile": "node scripts/verify-mobile.mjs",
-    "verify:pwa": "node scripts/verify-offline.mjs"
+    "verify:pwa": "node scripts/verify-offline.mjs",
+    "verify:pwa-update": "node scripts/verify-pwa-update.mjs"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",
