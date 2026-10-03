@@ -9,16 +9,33 @@ const files = JSON.parse(sw.match(/const FILES = (\[.*\]);/)[1])
 const assets = new Map(await Promise.all([...files, 'sw.js'].map(async file => [file, await readFile(`dist/${file}`)])))
 const types = { html: 'text/html', js: 'application/javascript', css: 'text/css', webmanifest: 'application/manifest+json', png: 'image/png', glb: 'model/gltf-binary' }
 let release = 1
+let legacy = false
+let waitingOnly = false
+// Match the pre-auto-update entry and worker: cache-first, no activation message.
+const legacyEntry = "navigator.serviceWorker.register('/badminton-web/sw.js')"
+const legacyWorker = `const CACHE = 'badminton-test-legacy';
+self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(['index.html', 'legacy-entry.js']))));
+self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('badminton-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
+self.addEventListener('fetch', event => {
+  const key = event.request.mode === 'navigate' ? new URL('index.html', self.registration.scope).href : event.request;
+  event.respondWith(caches.open(CACHE).then(async cache => await cache.match(key) || fetch(event.request)));
+});`
 const server = createServer((request, response) => {
   const pathname = new URL(request.url, 'http://localhost').pathname
   const file = pathname.replace(/^\/badminton-web\//, '').replace(/^\//, '') || 'index.html'
   let body = assets.get(file)
+  if (file === 'legacy-entry.js') body = legacyEntry
+  if (legacy && file === 'index.html') body = '<!doctype html><html data-release="legacy"><link rel="icon" href="data:,"><script type="module" src="/badminton-web/legacy-entry.js"></script></html>'
+  if (legacy && file === 'sw.js') body = legacyWorker
   if (!body) {
     response.writeHead(404).end()
     return
   }
-  if (file === 'sw.js') body = sw.replace(/const CACHE = '[^']+';/, `const CACHE = 'badminton-test-${release}';`)
-  if (file === 'index.html') body = body.toString().replace('<html', `<html data-release="${release}"`)
+  if (!legacy && file === 'sw.js') {
+    body = sw.replace(/const CACHE = '[^']+';/, `const CACHE = 'badminton-test-${release}';`)
+    if (waitingOnly) body = body.replace('if (await needsLegacyMigration()) await self.skipWaiting();', '')
+  }
+  if (!legacy && file === 'index.html') body = body.toString().replace('<html', `<html data-release="${release}"`)
   response.writeHead(200, { 'Content-Type': types[file.split('.').at(-1)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' })
   response.end(body)
 })
@@ -110,6 +127,48 @@ try {
     assert.deepEqual(failedResponses, [])
     await context.close()
     console.log(`${mobile ? 'mobile' : 'desktop'}: first install, menu update, match deferral, multi-tab activation, offline restart and reconnect passed`)
+
+    // A legacy user may already have downloaded an earlier update into a
+    // separate waiting cache. That cache must not hide the active legacy build.
+    legacy = true
+    const oldContext = await browser.createBrowserContext()
+    const oldPage = await oldContext.newPage()
+    await oldPage.setViewport(mobile ? { width: 393, height: 852, isMobile: true, hasTouch: true } : { width: 1440, height: 900 })
+    let oldNavigations = 0
+    let tabNavigations = 0
+    oldPage.on('framenavigated', frame => { if (frame === oldPage.mainFrame()) oldNavigations++ })
+    oldPage.on('pageerror', error => errors.push(error.message))
+    oldPage.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+    oldPage.on('response', response => { if (response.status() >= 400) failedResponses.push(response.url()) })
+    await oldPage.goto(url, { waitUntil: 'networkidle0' })
+    await oldPage.waitForFunction(() => !!navigator.serviceWorker.controller)
+    const oldTab = await oldContext.newPage()
+    oldTab.on('framenavigated', frame => { if (frame === oldTab.mainFrame()) tabNavigations++ })
+    oldTab.on('pageerror', error => errors.push(error.message))
+    oldTab.on('response', response => { if (response.status() >= 400) failedResponses.push(response.url()) })
+    await oldTab.goto(url, { waitUntil: 'networkidle0' })
+    await oldPage.bringToFront()
+    legacy = false
+    waitingOnly = true
+    release = 7
+    await oldPage.evaluate(async () => { await (await navigator.serviceWorker.getRegistration()).update() })
+    await oldPage.waitForFunction(async () => !!(await navigator.serviceWorker.getRegistration()).waiting)
+    assert.equal(await oldPage.$eval('html', node => node.dataset.release), 'legacy')
+    waitingOnly = false
+    release = 8
+    await oldPage.evaluate(async () => { void (await navigator.serviceWorker.getRegistration()).update() })
+    await oldPage.waitForFunction(() => document.documentElement.dataset.release === '8')
+    await oldTab.waitForFunction(() => document.documentElement.dataset.release === '8', { polling: 100 })
+    await oldPage.waitForFunction(async () => (await caches.keys()).filter(key => key.startsWith('badminton-')).length === 1)
+    assert.equal(oldNavigations, 2, 'legacy migration reloads once')
+    assert.equal(tabNavigations, 2, 'background legacy tab migrates once')
+    await oldPage.setOfflineMode(true)
+    await oldPage.reload({ waitUntil: 'networkidle0' })
+    assert.equal(await oldPage.$eval('html', node => node.dataset.release), '8')
+    assert.deepEqual(errors, [])
+    assert.deepEqual(failedResponses, [])
+    await oldContext.close()
+    console.log(`${mobile ? 'mobile' : 'desktop'}: legacy migration, pre-existing waiting update, two old tabs and offline restart passed`)
   }
 } finally {
   await browser.close()
