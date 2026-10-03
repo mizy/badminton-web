@@ -115,10 +115,10 @@ function bodyCrouch(player: PlayerState, speed: number): number {
   if (player.body.phase === 'loading') return 0.12 * smooth(player.body.elapsed / (player.body.action === 'scissor' ? 0.075 : 0.1))
   if (player.body.phase === 'landing') return 0.12 * (1 - smooth(player.body.elapsed / (player.body.action === 'scissor' ? 0.18 : 0.24)))
   if (player.body.phase === 'airborne') return 0
-  const base = Math.min(speed / 5, 1) * 0.065 + (player.movement.footwork === 'start' ? 0.035 : 0)
+  const base = Math.min(speed / 5, 1) * 0.12 + (player.movement.footwork === 'start' ? 0.035 : 0)
   const depth = player.movement.footworkPoint?.split('-')[0]
   // 前场跨步把重心压得更低；中场并步和后场交叉步只是轻微降重心，避免像蹲跑。
-  const posture = player.movement.footwork === 'lunge' ? 0.28 : depth === 'front' ? 0.15 : depth === 'back' ? 0.07 : depth === 'mid' ? 0.05 : 0
+  const posture = player.movement.footwork === 'lunge' && speed < 2.8 ? 0.28 : depth === 'front' ? 0.10 : depth === 'back' ? 0.07 : depth === 'mid' ? 0.05 : 0
   return Math.max(base, posture)
 }
 

@@ -3,6 +3,8 @@ import * as THREE from 'three'
 import { createPlayer } from '../game/playerFactory'
 import { createPlayerSkeleton } from './playerSkeleton'
 import { createPlayerMotion, updatePlayerMotion } from './playerMotion'
+import { updateMovement } from '../character/movement'
+import { FOOTWORK_POINTS } from '../character/footwork'
 
 const world = (node: THREE.Object3D) => node.getWorldPosition(new THREE.Vector3())
 
@@ -17,6 +19,46 @@ function expectLengths(rig: ReturnType<typeof createPlayerMotion>) {
 }
 
 describe('independent player motion', () => {
+  it.each([0, 1] as const)('steps through all six corners and recovers without dragging support feet on side %s', side => {
+    const forward = side === 0 ? 1 : -1
+    for (const point of FOOTWORK_POINTS) {
+      const rig = createPlayerMotion(createPlayerSkeleton())
+      let player = createPlayer(side)
+      player.pos = [-forward * 3.7, 0, 0]
+      const x = point.startsWith('front') ? forward : point.startsWith('back') ? -forward : 0
+      const z = point.endsWith('left') ? -forward : forward
+      let plants = 0
+      let lift = 0
+      for (let frame = 0; frame < 180; frame++) {
+        player.movement.targetDir = frame < 45 ? { x, z } : frame < 65 ? { x: 0, z: 0 }
+          : frame < 110 ? { x: -x, z: -z } : { x: 0, z: 0 }
+        player = updateMovement(player, 1 / 60)
+        updatePlayerMotion(rig, player, frame / 60)
+        for (const [i, limb] of [rig.rightLeg, rig.leftLeg].entries()) {
+          const ankle = world(limb.end)
+          lift = Math.max(lift, ankle.y - 0.09)
+          if (rig.feet.feet[i].duration === 0) {
+            plants++
+            expect(ankle.distanceTo(rig.feet.feet[i].position)).toBeLessThan(1e-5)
+          }
+        }
+        expectLengths(rig)
+      }
+      expect(plants).toBeGreaterThan(80)
+      expect(lift).toBeGreaterThan(0.075)
+      for (const foot of rig.feet.feet) {
+        expect(foot.duration).toBe(0)
+        expect(foot.position.y).toBeCloseTo(0.09, 6)
+      }
+      const feet = rig.feet.feet.map(foot => ({ position: foot.position.clone(), rotation: foot.rotation.clone() }))
+      updatePlayerMotion(rig, player, 179 / 60)
+      feet.forEach((foot, i) => {
+        expect(rig.feet.feet[i].position.distanceTo(foot.position)).toBeLessThan(1e-6)
+        expect(rig.feet.feet[i].rotation.angleTo(foot.rotation)).toBeLessThan(1e-6)
+      })
+    }
+  })
+
   it.each([0, 1] as const)('uses a distinct cross-body backhand preparation on side %s', side => {
     const wrists = ['forehand', 'backhand'].map(grip => {
       const rig = createPlayerMotion(createPlayerSkeleton())

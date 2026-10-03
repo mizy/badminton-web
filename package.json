@@ -16,7 +16,8 @@
     "verify:mobile": "node scripts/verify-mobile.mjs",
     "verify:pwa": "node scripts/verify-offline.mjs",
     "verify:pwa-update": "node scripts/verify-pwa-update.mjs",
-    "verify:player": "node scripts/verify-player-motion.mjs"
+    "verify:player": "node scripts/verify-player-motion.mjs",
+    "verify:footwork": "node scripts/verify-footwork.mjs"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",

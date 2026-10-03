@@ -13,7 +13,7 @@ const meta: Meta<{ motion: MotionDemo; modelUrl: string; modelTextureUrl: string
   args: { motion: 'sixPoints', modelUrl: '/models/anime-player.glb', modelTextureUrl: '', source: 'procedural', clipId: 'dg-04-smash', fullTake: false, paused: false, time: 0 },
   argTypes: { motion: { control: 'select', options: MOTION_DEMOS }, modelUrl: { control: 'text' },
     modelTextureUrl: { control: 'text' },
-    paused: { control: 'boolean' }, time: { control: { type: 'range', min: 0, max: 2.4, step: 0.01 } },
+    paused: { control: 'boolean' }, time: { control: { type: 'range', min: 0, max: 18, step: 0.01 } },
     source: { control: 'inline-radio', options: ['procedural', 'hdm05', 'multisense'] }, clipId: { control: 'select', options: HDM05_CLIPS }, fullTake: { control: 'boolean' } },
   render: ({ motion, modelUrl, modelTextureUrl, source, clipId, fullTake, paused, time }) => {
     const container = document.createElement('div')
@@ -68,6 +68,12 @@ const meta: Meta<{ motion: MotionDemo; modelUrl: string; modelTextureUrl: string
         } else if (source === 'procedural') {
           sampleMotionDemo(player, motion, elapsed, narrow ? -2.2 : -2.2 - side * 1.4)
           syncPlayerMotion(meshes[i], player, elapsed)
+          if (i === 0 && motion === 'sixPoints') {
+            const point = player.movement.footworkPoint
+            const depth = point?.startsWith('front') ? '前场' : point?.startsWith('back') ? '后场' : '中场'
+            const step = { ready: '准备', start: '分腿启动', chasse: '并步', cross: '交叉步', lunge: '跨步到位', retreat: '退步', recover: '蹬地回位' }[player.movement.footwork]
+            legend.textContent = `六点步法 · ${point ? depth + (point.endsWith('left') ? '左侧' : '右侧') : '中心'} · ${step}`
+          }
         }
       })
     }

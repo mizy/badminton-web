@@ -20,6 +20,15 @@ uv run --with pillow python scripts/prepare-anime-player.py /path/HairSample_Mal
 骨长不拉伸。较短手臂在伸展极限时前移肩带，让掌心和拍弦保持在实际触球点。
 球拍的实际命中位置仍以现有接触几何为准。
 
+此 VRoid 模型没有内置走跑片段。六点移动由 `playerFootwork` 的足部关键帧轨迹
+和两节腿部 IK 驱动，复用同一模型绑定；不标为专业球员动捕。
+启动时先做小幅分腿垫步，前场减速跨步、中场并步、后场交叉步，再蹬地回位。
+落脚位置保存在世界坐标中，按摆动结束时的预计身体位置安排下一步；
+转向时平滑修正未落地的目标，已落地的支撑脚不随髋移动。
+长追步按实际距离放慢，高速步允许短暂腾空；骨盆适量下降保持足底接触，
+脚尖在支撑期保持落地朝向。人物页的六点展示每个方向完成启动、到位、回位，
+18 秒循环，不再在相邻方向之间直接跳位置。
+
 ## Quaternius 兼容球员：Universal Base Characters
 
 兼容素材使用 Quaternius 的 **Universal Base Characters [Standard]**

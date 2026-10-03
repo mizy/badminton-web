@@ -79,24 +79,29 @@ function moveSample(player: PlayerState, motion: MotionDemo, time: number, origi
     z = Math.sin(move * Math.PI / 2.8) * 1.2 - 0.6
     vz = cycle < 1.4 ? Math.cos(move * Math.PI / 2.8) * Math.PI / 2.8 * 1.2 : 0
   } else if (motion === 'sixPoints') {
-    const index = Math.floor(time / 2) % 6
+    const index = Math.floor(time / 3) % 6
     const depth = ['front', 'mid', 'back'][Math.floor(index / 2)]
     const side = index % 2 ? 'right' : 'left'
-    const t = time % 2
-    const travel = Math.sin(t * Math.PI / 2)
-    const rate = Math.cos(t * Math.PI / 2) * Math.PI / 2
+    const t = time % 3
+    const outward = Math.min(t / 0.85, 1)
+    const inward = Math.max(0, Math.min((t - 1.2) / 1.1, 1))
+    const travel = outward * outward * (3 - 2 * outward) - inward * inward * (3 - 2 * inward)
+    const rate = t < 0.85 ? 6 * outward * (1 - outward) / 0.85
+      : t > 1.2 && t < 2.3 ? -6 * inward * (1 - inward) / 1.1 : 0
     const longitudinal = depth === 'front' ? forward : depth === 'back' ? -forward : 0
     const lateral = side === 'right' ? forward : -forward
-    x = travel * longitudinal * 0.55
-    z = travel * lateral * 0.6
-    vx = rate * longitudinal * 0.55
-    vz = rate * lateral * 0.6
-    player.movement.footworkPoint = `${depth}-${side}` as NonNullable<PlayerState['movement']['footworkPoint']>
-    player.movement.footwork = depth === 'front' ? 'lunge' : depth === 'back' ? 'cross' : 'chasse'
+    x = travel * longitudinal * 1.45
+    z = travel * lateral * 1.25
+    vx = rate * longitudinal * 1.45
+    vz = rate * lateral * 1.25
+    player.movement.footworkPoint = t < 2.3 ? `${depth}-${side}` as NonNullable<PlayerState['movement']['footworkPoint']> : null
+    player.movement.footwork = t < 0.18 ? 'start' : t >= 2.3 ? 'ready' : t >= 1.2 ? 'recover'
+      : depth === 'front' && t >= 0.62 ? 'lunge' : depth === 'back' ? 'cross' : 'chasse'
   }
   player.pos = [origin + x, 0, z]
   player.movement.currentVel = { x: vx, z: vz }
-  player.movement.targetDir = { x: Math.sign(vx), z: Math.sign(vz) }
+  player.movement.targetDir = motion === 'sixPoints' && player.movement.footwork === 'lunge' && Math.hypot(vx, vz) < 0.01
+    ? { x: Math.sign(x), z: Math.sign(z) } : { x: Math.sign(vx), z: Math.sign(vz) }
   if (motion !== 'sixPoints') player.movement.footwork = Math.hypot(vx, vz) < 0.05 ? 'ready'
     : vx * forward < -0.1 ? 'retreat' : Math.abs(vz) > Math.abs(vx) ? 'chasse' : 'cross'
 }
