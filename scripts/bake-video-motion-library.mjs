@@ -35,7 +35,8 @@ try {
     const nodes = []
     model.traverse(node => { if (node.isBone || node.name === 'player-racket') nodes.push(node) })
     const animations = [], proof = []
-    const inspect = ['Hips', 'Spine2', 'RightHand', 'LeftHand', 'RightUpLeg', 'RightLeg', 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
+    const inspect = ['Hips', 'Spine2', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm', 'LeftForeArm', 'LeftHand',
+      'RightHandThumb1', 'player-racket', 'RightUpLeg', 'RightLeg', 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
     for (const motion of manifest.motions) {
       const capture = captures[motion.source]
       const times = [], samples = nodes.map(() => ({ position: [], quaternion: [], scale: [] }))

@@ -94,7 +94,7 @@ export function syncPlayerMocap(group: THREE.Group, motion: Hdm05Motion<string> 
   if (!view) return
   if ('globalPositions' in motion) applyMultiSensePlayerMotion(view.motion, motion, time)
   else applyHdm05PlayerMotion(view.motion, motion, time)
-  view.model?.()
+  view.model?.(undefined, undefined, 'globalPositions' in motion ? motion.grip : undefined)
 }
 
 export function updatePlayerMesh(group: THREE.Group, pos: Vec3, facing: number): void {

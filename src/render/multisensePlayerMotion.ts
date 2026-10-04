@@ -8,6 +8,8 @@ import { SHOULDER_HEIGHT, type Vec3 } from '../character/racketKinematics'
 export interface MultiSenseCapture {
   time: number[]
   globalPositions: Vec3[][]
+  /** Assigned from the demonstration category, not measured finger motion. */
+  grip?: 'forehand' | 'backhand'
 }
 
 function bodyRotation(left: THREE.Vector3, right: THREE.Vector3, up: THREE.Vector3): THREE.Quaternion {

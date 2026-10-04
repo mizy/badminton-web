@@ -40,7 +40,7 @@ const meta: Meta<{ category: string }> = {
       .video-motions footer{display:flex;gap:12px;align-items:center;padding:12px 16px}.video-motions [data-time]{flex:1;min-width:60px;padding:0}
       .video-motions [data-source]{padding:0 16px 14px;font-size:12px;line-height:1.6;color:#b7cad1}.video-motions [data-downloads]{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
       @media(max-width:620px){.video-motions{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);min-height:680px}.video-motions aside{padding:12px;gap:8px;border-right:0;border-bottom:1px solid #35525d}.video-motions aside p{font-size:12px}.video-motions [data-filters]{grid-template-columns:1fr 1fr}.video-motions [data-list]{flex-direction:row;max-height:72px;min-height:60px}.video-motions [data-list] button{flex-shrink:0;min-width:150px;padding:7px}.video-motions header{padding:10px;gap:6px}.video-motions header select{max-width:145px;padding:6px}.video-motions [data-title]{font-size:14px;padding-bottom:5px}.video-motions [data-source]{font-size:11px;padding-bottom:10px}.video-motions footer{padding:8px 12px}}
-    </style><aside><h2>统一角色动作库</h2><p>同一二次元人物 · 25 fps<br>真人视频估计的原地动作</p><div data-filters><select data-category aria-label="动作分类"><option>全部</option></select><input data-search aria-label="搜索动作" placeholder="搜索动作"></div><div data-count>加载目录…</div><div data-list></div></aside><main><header><button data-play>暂停</button><button data-restart>重播</button><select data-rate aria-label="播放速度"><option value="0.25">0.25 倍</option><option value="0.5" selected>0.5 倍</option><option value="1">原片速度</option></select><select data-mode aria-label="显示方式"><option value="character">人物</option><option value="bones">骨架</option><option value="overlay">人物 + 骨架</option></select><select data-view aria-label="观察方向"><option value="front">正面</option><option value="side">侧面</option><option value="orbit">自由观察</option></select><label><input data-loop type="checkbox">循环</label></header><div data-title>加载统一人物…</div><div data-stage></div><footer><span data-clock>0.00 s</span><input data-time type="range" min="0" max="1" step="0.001" value="0" aria-label="动画时间轴"></footer><div data-source><div data-info>位移、脚底锁定和手腕方向尚未实测。</div><div data-downloads><a data-model-download download>统一角色 GLB</a><a data-bvh-download download>当前动作 BVH</a><a data-reference target="_blank" rel="noreferrer">真人参考来源</a></div></div></main>`
+    </style><aside><h2>统一角色动作库</h2><p>同一二次元人物 · 25 fps<br>真人视频估计的原地动作</p><div data-filters><select data-category aria-label="动作分类"><option>全部</option></select><input data-search aria-label="搜索动作" placeholder="搜索动作"></div><div data-count>加载目录…</div><div data-list></div></aside><main><header><button data-play>暂停</button><button data-restart>重播</button><select data-rate aria-label="播放速度"><option value="0.25">0.25 倍</option><option value="0.5" selected>0.5 倍</option><option value="1">原片速度</option></select><select data-mode aria-label="显示方式"><option value="character">人物</option><option value="bones">骨架</option><option value="overlay">人物 + 骨架</option></select><select data-view aria-label="观察方向"><option value="front">正面</option><option value="side">侧面</option><option value="arms">手臂近景</option><option value="orbit">自由观察</option></select><label><input data-loop type="checkbox">循环</label></header><div data-title>加载统一人物…</div><div data-stage></div><footer><span data-clock>0.00 s</span><input data-time type="range" min="0" max="1" step="0.001" value="0" aria-label="动画时间轴"></footer><div data-source><div data-info>位移、脚底锁定和手腕方向尚未实测。</div><div data-downloads><a data-model-download download>统一角色 GLB</a><a data-bvh-download download>当前动作 BVH</a><a data-reference target="_blank" rel="noreferrer">真人参考来源</a></div></div></main>`
 
     const ctx = mountScene(container.querySelector<HTMLElement>('[data-stage]')!)
     ctx.scene.background = new THREE.Color('#132b33')
@@ -76,7 +76,13 @@ const meta: Meta<{ category: string }> = {
 
     function setView(): void {
       orbit.enabled = view.value === 'orbit'
-      if (view.value === 'side') ctx.camera.position.set(3.7, 1.7, 0.8)
+      orbit.target.set(0, view.value === 'arms' ? 1.25 : 1.05, 0)
+      if (view.value === 'arms') {
+        if (model) orbit.target.copy(model.getObjectByName('Spine2')!.getWorldPosition(new THREE.Vector3()))
+          .lerp(model.getObjectByName('RightHand')!.getWorldPosition(new THREE.Vector3()), 0.3)
+        ctx.camera.position.copy(orbit.target).add(new THREE.Vector3(0.3, 0.25, 1.9))
+      }
+      else if (view.value === 'side') ctx.camera.position.set(3.7, 1.7, 0.8)
       else ctx.camera.position.set(0.2, 1.7, 4.1)
       ctx.camera.lookAt(orbit.target)
       orbit.update()
@@ -112,7 +118,7 @@ const meta: Meta<{ category: string }> = {
       timeline.max = String(clip.duration)
       title.textContent = motion.label
       const source = manifest.sources[motion.source]
-      container.querySelector('[data-info]')!.textContent = `${motion.toFrame - motion.fromFrame + 1} 帧 · 同一人物骨架 · 原片 ${(source.start + motion.fromFrame / manifest.fps).toFixed(2)}–${(source.start + motion.toFrame / manifest.fps).toFixed(2)} s · 视频估计试样`
+      container.querySelector('[data-info]')!.textContent = `${motion.toFrame - motion.fromFrame + 1} 帧 · 同一人物骨架 · 原片 ${(source.start + motion.fromFrame / manifest.fps).toFixed(2)}–${(source.start + motion.toFrame / manifest.fps).toFixed(2)} s · 视频估计；手腕旋转与手指握拍为适配姿势`
       container.querySelector<HTMLAnchorElement>('[data-reference]')!.href = source.url
       container.querySelector<HTMLAnchorElement>('[data-bvh-download]')!.href = url(motion.bvh)
       showList()
@@ -123,6 +129,7 @@ const meta: Meta<{ category: string }> = {
       action.paused = false
       mixer.setTime(time)
       model.updateWorldMatrix(true, true)
+      if (view.value === 'arms') setView()
       model.visible = mode.value !== 'bones'
       diagram.visible = mode.value !== 'character'
       if (diagram.visible) {

@@ -81,7 +81,8 @@ for name in dict.fromkeys(motion[3] for motion in MOTIONS):
         frames.append([h, row[1], row[2], row[3], row[4], row[5], row[6], h + (c-h)*.25,
             h + (c-h)*.5, h + (c-h)*.75, c, c, row[10], row[10] + [0, .12, 0],
             row[14], row[15], row[16], row[16], row[11], row[12], row[13]])
-    capture = {'time': [i / 25 for i in range(len(p))], 'globalPositions': np.round(frames, 6).tolist()}
+    capture = {'time': [i / 25 for i in range(len(p))], 'globalPositions': np.round(frames, 6).tolist(),
+        'grip': 'backhand' if name.endswith('-left') else 'forehand'}
     (output / f'{name}.json').write_text(json.dumps(capture, separators=(',', ':')))
     lateral = p[0, 11] - p[0, 14]
     heading = Rotation.from_rotvec([0, np.arctan2(lateral[2], lateral[0]), 0])

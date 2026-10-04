@@ -117,6 +117,10 @@ try {
         await page.select('[data-view]', 'side')
         await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-${mode}.png` })
       }
+      await page.select('[data-view]', 'arms')
+      await page.click('[data-motion="front-backhand"]')
+      await page.$eval('[data-time]', node => { node.value = '1.76'; node.dispatchEvent(new Event('input')) })
+      await page.screenshot({ path: `${output}/${mobile ? 'mobile' : 'desktop'}-arms.png` })
       await page.select('[data-view]', 'orbit')
       await page.select('[data-rate]', '1')
       await page.click('[data-motion="ready-start"]')

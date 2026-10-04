@@ -20,7 +20,7 @@ interface ModelLimb {
 }
 
 /** @entry Captures the skin's rest axes once; returns its per-frame pose consumer. */
-export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips: THREE.AnimationClip[] = []): (player?: PlayerState, elapsed?: number) => void {
+export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips: THREE.AnimationClip[] = []): (player?: PlayerState, elapsed?: number, captureGrip?: PlayerState['grip']) => void {
   const bones = findHumanoidBones(model)
   const required = ['hips', 'spine2', 'rightArm', 'rightForeArm', 'rightHand', 'leftArm', 'leftForeArm', 'leftHand',
     'rightUpLeg', 'rightLeg', 'rightFoot', 'leftUpLeg', 'leftLeg', 'leftFoot'] as const
@@ -99,7 +99,7 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
     shoe.limb.end.node.add(shoe.object)
   }
   const animateLegs = createLegAnimation(rig, clips, legs)
-  return (player, elapsed) => {
+  return (player, elapsed, captureGrip) => {
     rig.group.updateWorldMatrix(true, true)
     const facing = rig.group.getWorldQuaternion(new THREE.Quaternion())
     hips.node.position.copy(hips.node.parent!.worldToLocal(rig.hips.getWorldPosition(new THREE.Vector3())))
@@ -135,26 +135,47 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
       hips.node.position.y += (support - lowest) / hips.node.parent!.getWorldScale(new THREE.Vector3()).y
       hips.node.updateWorldMatrix(false, true)
     }
-    // The torso follows the calibrated shoulder after hip turns and foot planting.
-    // Matching rotations alone leaves the skin's wrist short of the real impact.
-    const chestPosition = chest.node.getWorldPosition(new THREE.Vector3())
-      .add(rig.rightArm.root.getWorldPosition(new THREE.Vector3()))
-      .sub(chest.node.localToWorld(shoulder.clone()))
-    chest.node.position.copy(chest.node.parent!.worldToLocal(chestPosition.clone()))
-    chest.node.updateWorldMatrix(false, true)
-    const handRotation = rig.racket.getWorldQuaternion(new THREE.Quaternion())
-      .multiply(gripRotation).multiply(rightArm.end.rotation)
-    const wrist = rig.rightArm.end.getWorldPosition(new THREE.Vector3()).sub(palm.clone()
-      .multiply(hand.getWorldScale(new THREE.Vector3())).applyQuaternion(handRotation))
-    // A compact avatar reaches by advancing its shoulder, while the calibrated
-    // hand/strings stay at the real contact and authored arm lengths stay fixed.
-    const extension = wrist.clone().sub(rightArm.upper.node.getWorldPosition(new THREE.Vector3()))
-    const distance = extension.length()
-    const reach = rightArm.lengths[0] + rightArm.lengths[1] - 1e-6
-    if (distance > reach) {
-      chestPosition.addScaledVector(extension, (distance - reach) / distance)
+    if (!player) {
+      // A position capture has no racket/contact constraint or measured wrist
+      // twist. Preserve its arm angles and keep each hand neutral to its forearm.
+      for (const limb of [rightArm, leftArm]) {
+        const root = limb.source.root.getWorldPosition(new THREE.Vector3())
+        const elbow = limb.source.joint.getWorldPosition(new THREE.Vector3())
+        const wrist = limb.source.end.getWorldPosition(new THREE.Vector3())
+        aim(limb.upper, elbow.clone().sub(root), facing)
+        aim(limb.lower, wrist.sub(elbow), facing)
+        rotate(limb.end, limb.lower.node.getWorldQuaternion(new THREE.Quaternion())
+          .multiply(limb.lower.rotation.clone().invert()).multiply(limb.end.rotation))
+      }
+    } else {
+      // The torso follows the calibrated shoulder after hip turns and foot planting.
+      // Matching rotations alone leaves the skin's wrist short of the real impact.
+      const chestPosition = chest.node.getWorldPosition(new THREE.Vector3())
+        .add(rig.rightArm.root.getWorldPosition(new THREE.Vector3()))
+        .sub(chest.node.localToWorld(shoulder.clone()))
       chest.node.position.copy(chest.node.parent!.worldToLocal(chestPosition.clone()))
       chest.node.updateWorldMatrix(false, true)
+      const handRotation = rig.racket.getWorldQuaternion(new THREE.Quaternion())
+        .multiply(gripRotation).multiply(rightArm.end.rotation)
+      const wrist = rig.rightArm.end.getWorldPosition(new THREE.Vector3()).sub(palm.clone()
+        .multiply(hand.getWorldScale(new THREE.Vector3())).applyQuaternion(handRotation))
+      // A compact avatar reaches by advancing its shoulder, while the calibrated
+      // hand/strings stay at the real contact and authored arm lengths stay fixed.
+      const extension = wrist.clone().sub(rightArm.upper.node.getWorldPosition(new THREE.Vector3()))
+      const distance = extension.length()
+      const reach = rightArm.lengths[0] + rightArm.lengths[1] - 1e-6
+      if (distance > reach) {
+        chestPosition.addScaledVector(extension, (distance - reach) / distance)
+        chest.node.position.copy(chest.node.parent!.worldToLocal(chestPosition.clone()))
+        chest.node.updateWorldMatrix(false, true)
+      }
+      retargetLimb(rightArm, facing, wrist)
+      rotate(rightArm.end, handRotation)
+      retargetLimb(leftArm, facing)
+      const forearm = leftArm.end.node.getWorldPosition(new THREE.Vector3())
+        .sub(leftArm.lower.node.getWorldPosition(new THREE.Vector3())).normalize().applyQuaternion(facing.clone().invert())
+      rotate(leftArm.end, new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), forearm)
+        .multiply(leftArm.end.rotation).premultiply(facing))
     }
     for (const { object, limb } of shoes) {
       object.position.set(0, 0, 0)
@@ -162,23 +183,17 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
       object.quaternion.copy(limb.end.node.getWorldQuaternion(new THREE.Quaternion()).invert())
         .multiply(limb.source.end.getWorldQuaternion(new THREE.Quaternion()))
     }
-    retargetLimb(rightArm, facing, wrist)
-    rotate(rightArm.end, handRotation)
-    retargetLimb(leftArm, facing)
-    const forearm = leftArm.end.node.getWorldPosition(new THREE.Vector3())
-      .sub(leftArm.lower.node.getWorldPosition(new THREE.Vector3())).normalize().applyQuaternion(facing.clone().invert())
-    rotate(leftArm.end, new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), forearm)
-      .multiply(leftArm.end.rotation).premultiply(facing))
     for (const finger of fingers) {
-      const angle = player?.grip === 'backhand' && finger.thumb ? finger.angle * 0.2 : finger.angle
+      const angle = (player?.grip ?? captureGrip) === 'backhand' && finger.thumb ? finger.angle * 0.2 : finger.angle
       finger.node.quaternion.copy(finger.rotation).multiply(new THREE.Quaternion().setFromAxisAngle(finger.axis, angle))
     }
     racket.position.copy(palm)
     // glTF bones may use centimetres; attached equipment stays in court metres.
     racket.scale.copy(rig.group.getWorldScale(new THREE.Vector3()))
       .divide(bones.rightHand!.getWorldScale(new THREE.Vector3()))
-    racket.quaternion.copy(bones.rightHand!.getWorldQuaternion(new THREE.Quaternion()).invert())
+    if (player) racket.quaternion.copy(hand.getWorldQuaternion(new THREE.Quaternion()).invert())
       .multiply(rig.racket.getWorldQuaternion(new THREE.Quaternion()))
+    else racket.quaternion.copy(rightArm.end.rotation).invert().multiply(gripRotation.clone().invert())
     model.updateWorldMatrix(false, true)
   }
 }

@@ -41,6 +41,43 @@ async function animePlayer() {
 }
 
 describe('glTF player binding', () => {
+  it('keeps captured arm directions and neutral wrists without contact IK pulling the shoulders', async () => {
+    const rig = createPlayerSkeleton()
+    attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
+    const { scene: model } = await animePlayer()
+    const bones = findHumanoidBones(model)
+    const hands = [bones.rightHand!, bones.leftHand!]
+    const neutral = hands.map(hand => hand.quaternion.clone())
+    const chestPosition = bones.spine2!.position.clone()
+    const updateModel = bindHumanoidModel(rig, model)
+    let grip: THREE.Quaternion | undefined
+    let forehandThumb: THREE.Quaternion | undefined
+    for (const source of ['front-right', 'front-left', 'back-right', 'back-left']) {
+      const capture = JSON.parse(readFileSync(new URL(`../../public/mocap/video-poses/${source}.json`, import.meta.url), 'utf8')) as MultiSenseCapture
+      for (const time of capture.time) {
+        applyMultiSensePlayerMotion(rig, capture, Math.min(time, capture.time.at(-1)! - 0.000001))
+        updateModel(undefined, undefined, capture.grip)
+        for (const [i, side] of (['right', 'left'] as const).entries()) {
+          const limb = rig[`${side}Arm`]
+          const sourceUpper = world(limb.joint).sub(world(limb.root))
+          const sourceLower = world(limb.end).sub(world(limb.joint))
+          const skinUpper = world(bones[`${side}ForeArm`]!).sub(world(bones[`${side}Arm`]!))
+          const skinLower = world(hands[i]).sub(world(bones[`${side}ForeArm`]!))
+          expect(skinUpper.angleTo(sourceUpper)).toBeLessThan(0.000001)
+          expect(skinLower.angleTo(sourceLower)).toBeLessThan(0.000001)
+          expect(hands[i].quaternion.angleTo(neutral[i])).toBeLessThan(0.000001)
+        }
+        expect(bones.spine2!.position.distanceTo(chestPosition)).toBeLessThan(1e-8)
+        const racket = model.getObjectByName('player-racket')!
+        grip ??= racket.quaternion.clone()
+        expect(racket.quaternion.angleTo(grip)).toBeLessThan(0.000001)
+        const thumb = model.getObjectByName('RightHandThumb1')!
+        if (capture.grip === 'forehand') forehandThumb = thumb.quaternion.clone()
+        else expect(thumb.quaternion.angleTo(forehandThumb!)).toBeGreaterThan(0.5)
+      }
+    }
+  })
+
   it('preserves captured knee angles on the anime skin despite its different leg proportions', async () => {
     const rig = createPlayerSkeleton()
     attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
