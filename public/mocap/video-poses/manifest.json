@@ -1,0 +1,100 @@
+{
+  "model": "models/anime-motion-library.glb",
+  "fps": 25,
+  "sources": {
+    "front-right": {
+      "url": "https://www.youtube.com/watch?v=JZAS_FgtdSc",
+      "start": 26.0,
+      "capture": "mocap/video-poses/front-right.json"
+    },
+    "front-left": {
+      "url": "https://www.youtube.com/watch?v=jYbiG5d63DQ",
+      "start": 18.6,
+      "capture": "mocap/video-poses/front-left.json"
+    },
+    "back-right": {
+      "url": "https://www.youtube.com/watch?v=ch8Y8fshEEY",
+      "start": 18.76,
+      "capture": "mocap/video-poses/back-right.json"
+    },
+    "back-left": {
+      "url": "https://www.youtube.com/watch?v=fcYWs1wJsMQ",
+      "start": 19.0,
+      "capture": "mocap/video-poses/back-left.json"
+    }
+  },
+  "motions": [
+    {
+      "id": "front-forehand",
+      "label": "正手上网与回位",
+      "category": "前场",
+      "source": "front-right",
+      "fromFrame": 0,
+      "toFrame": 80,
+      "bvh": "mocap/video-poses/front-forehand.bvh"
+    },
+    {
+      "id": "front-backhand",
+      "label": "反手上网与回位",
+      "category": "前场",
+      "source": "front-left",
+      "fromFrame": 0,
+      "toFrame": 81,
+      "bvh": "mocap/video-poses/front-backhand.bvh"
+    },
+    {
+      "id": "rear-forehand",
+      "label": "正手后场移动",
+      "category": "后场",
+      "source": "back-right",
+      "fromFrame": 0,
+      "toFrame": 101,
+      "bvh": "mocap/video-poses/rear-forehand.bvh"
+    },
+    {
+      "id": "rear-backhand",
+      "label": "反手侧转身与回位",
+      "category": "后场",
+      "source": "back-left",
+      "fromFrame": 0,
+      "toFrame": 114,
+      "bvh": "mocap/video-poses/rear-backhand.bvh"
+    },
+    {
+      "id": "ready-start",
+      "label": "启动准备",
+      "category": "启动与交叉步",
+      "source": "front-right",
+      "fromFrame": 0,
+      "toFrame": 12,
+      "bvh": "mocap/video-poses/ready-start.bvh"
+    },
+    {
+      "id": "cross-approach",
+      "label": "交叉上网",
+      "category": "启动与交叉步",
+      "source": "front-right",
+      "fromFrame": 4,
+      "toFrame": 26,
+      "bvh": "mocap/video-poses/cross-approach.bvh"
+    },
+    {
+      "id": "forehand-recover",
+      "label": "正手跨步后回位",
+      "category": "回位",
+      "source": "front-right",
+      "fromFrame": 41,
+      "toFrame": 80,
+      "bvh": "mocap/video-poses/forehand-recover.bvh"
+    },
+    {
+      "id": "backhand-recover",
+      "label": "反手跨步后回位",
+      "category": "回位",
+      "source": "front-left",
+      "fromFrame": 49,
+      "toFrame": 81,
+      "bvh": "mocap/video-poses/backhand-recover.bvh"
+    }
+  ]
+}

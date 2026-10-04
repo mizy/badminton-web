@@ -9,6 +9,7 @@ import { attachPlayerAppearance } from './playerAppearance'
 import { bindHumanoidModel } from './playerModel'
 import { findHumanoidBones } from './humanoidModel'
 import { applyHdm05PlayerMotion } from './hdm05PlayerMotion'
+import { applyMultiSensePlayerMotion, type MultiSenseCapture } from './multisensePlayerMotion'
 import { createHdm05StrikeClip, type Hdm05Motion } from './hdm05BadmintonMocap'
 import { createReachableRacketPose } from '../character/racketKinematics'
 import { idealContactPoint } from '../character/contact'
@@ -40,6 +41,31 @@ async function animePlayer() {
 }
 
 describe('glTF player binding', () => {
+  it('preserves captured knee angles on the anime skin despite its different leg proportions', async () => {
+    const rig = createPlayerSkeleton()
+    attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
+    const { scene: model } = await animePlayer()
+    const updateModel = bindHumanoidModel(rig, model)
+    const bones = findHumanoidBones(model)
+    const capture = JSON.parse(readFileSync(new URL('../../public/mocap/multisense-badminton/expert-backhand-Sub14.json', import.meta.url), 'utf8')) as MultiSenseCapture
+    for (const time of [0, 0.4, 0.8, 1.2]) {
+      applyMultiSensePlayerMotion(rig, capture, time)
+      updateModel()
+      for (const side of ['right', 'left'] as const) {
+        const limb = rig[`${side}Leg`]
+        const sourceAngle = world(limb.root).sub(world(limb.joint)).angleTo(world(limb.end).sub(world(limb.joint)))
+        const root = bones[`${side}UpLeg`]!, joint = bones[`${side}Leg`]!, end = bones[`${side}Foot`]!
+        const skinAngle = world(root).sub(world(joint)).angleTo(world(end).sub(world(joint)))
+        expect(skinAngle).toBeCloseTo(sourceAngle, 5)
+      }
+      expect(Math.min(world(bones.rightFoot!).y, world(bones.leftFoot!).y)).toBeCloseTo(0.09, 5)
+    }
+    rig.body.position.y += 0.35
+    rig.group.updateWorldMatrix(true, true)
+    updateModel()
+    expect(Math.min(world(bones.rightFoot!).y, world(bones.leftFoot!).y)).toBeCloseTo(0.44, 5)
+  })
+
   it('binds the Quaternius athlete with leg clips, a palm grip and court shoes', async () => {
     const rig = createPlayerSkeleton()
     attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })

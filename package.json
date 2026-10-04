@@ -17,7 +17,11 @@
     "verify:pwa": "node scripts/verify-offline.mjs",
     "verify:pwa-update": "node scripts/verify-pwa-update.mjs",
     "verify:player": "node scripts/verify-player-motion.mjs",
-    "verify:footwork": "node scripts/verify-footwork.mjs"
+    "verify:footwork": "node scripts/verify-footwork.mjs",
+    "prepare:motions": "uv run --with numpy --with scipy python scripts/prepare-video-motion-library.py",
+    "export:motions": "node scripts/bake-video-motion-library.mjs",
+    "verify:motions": "node scripts/verify-motion-library.mjs",
+    "verify:storybook-pwa": "node scripts/verify-storybook-pwa.mjs"
   },
   "dependencies": {
     "lil-gui": "^0.21.0",

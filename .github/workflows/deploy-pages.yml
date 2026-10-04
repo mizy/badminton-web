@@ -26,6 +26,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build --base=/badminton-web/
+      - run: pnpm build-storybook --output-dir dist/storybook
+        env:
+          STORYBOOK_VIDEO_MOTIONS_ONLY: '1'
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

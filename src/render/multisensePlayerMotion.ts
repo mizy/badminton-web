@@ -21,7 +21,11 @@ function capturedLimb(limb: Limb, parent: THREE.Bone, points: THREE.Vector3[], i
   const inverse = parent.matrix.clone().invert()
   const [root, joint, end] = indices.map(index => points[index].clone().applyMatrix4(inverse))
   limb.root.position.copy(root)
-  poseLimb(limb, end, joint.sub(root))
+  // Retarget segment directions, not the actor's endpoint distance: a shorter
+  // captured leg must keep its knee angle on the shared, fixed-length skeleton.
+  const upper = joint.clone().sub(root).setLength(limb.lengths[0])
+  const lower = end.sub(joint).setLength(limb.lengths[1])
+  poseLimb(limb, root.clone().add(upper).add(lower), upper)
 }
 
 /** @entry Retarget measured positions; gameplay contact timing remains separate. */
@@ -39,7 +43,7 @@ export function applyMultiSensePlayerMotion(rig: PlayerSkeleton, capture: MultiS
   const origin = new THREE.Vector3(initial[0][0], 0, initial[0][2])
   const points = capture.globalPositions[frame].map((point, index) => new THREE.Vector3(...point)
     .lerp(new THREE.Vector3(...capture.globalPositions[next][index]), alpha).sub(origin).applyQuaternion(facing))
-  rig.body.position.set(0, ANKLE_HEIGHT - Math.min(points[3].y, points[6].y), 0)
+  rig.body.position.set(0, 0, 0)
   rig.body.quaternion.identity()
   rig.hips.position.copy(points[0])
   rig.hips.quaternion.copy(bodyRotation(points[4], points[1], points[7].clone().sub(points[0])))
@@ -52,6 +56,10 @@ export function applyMultiSensePlayerMotion(rig: PlayerSkeleton, capture: MultiS
   capturedLimb(rig.leftLeg, rig.hips, points, [4, 5, 6])
   capturedLimb(rig.rightArm, rig.chest, points, [14, 15, 16])
   capturedLimb(rig.leftArm, rig.chest, points, [18, 19, 20])
+  rig.body.updateWorldMatrix(true, true)
+  const ankles = [rig.rightLeg.end, rig.leftLeg.end].map(ankle =>
+    rig.group.worldToLocal(ankle.getWorldPosition(new THREE.Vector3())).y)
+  rig.body.position.y += ANKLE_HEIGHT - Math.min(...ankles)
   rig.head.position.copy(points[12]).applyMatrix4(rig.chest.matrix.clone().invert())
   rig.head.quaternion.identity()
   // The dataset records the body, not the racket; grip orientation is derived.

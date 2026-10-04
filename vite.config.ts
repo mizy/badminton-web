@@ -61,6 +61,9 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET' || !event.request.url.startsWith(self.registration.scope)) return;
+  const storybook = new URL('storybook/', self.registration.scope).pathname;
+  const path = new URL(event.request.url).pathname;
+  if (path === storybook.slice(0, -1) || path.startsWith(storybook)) return;
   event.respondWith(caches.open(CACHE).then(async cache => {
     const key = event.request.mode === 'navigate' ? new URL('index.html', self.registration.scope).href : event.request;
     return await cache.match(key) || fetch(event.request);

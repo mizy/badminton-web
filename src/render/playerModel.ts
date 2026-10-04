@@ -108,18 +108,33 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
     if (head) rotate(head, rig.head.getWorldQuaternion(new THREE.Quaternion()).multiply(head.rotation))
     // Shorter avatar legs need a lower pelvis to reach the same planted feet.
     // Preserve authored bone lengths instead of stretching the skin or floating.
-    const drop = Math.max(0, ...legs.map(limb => {
-      const root = limb.upper.node.getWorldPosition(new THREE.Vector3())
-      const target = limb.source.end.getWorldPosition(new THREE.Vector3())
-      const horizontal = (root.x - target.x) ** 2 + (root.z - target.z) ** 2
-      const length = limb.lengths[0] + limb.lengths[1] - 1e-6
-      return root.y - target.y - Math.sqrt(Math.max(0, length * length - horizontal))
-    }))
-    hips.node.position.y -= drop / hips.node.parent!.getWorldScale(new THREE.Vector3()).y
-    hips.node.updateWorldMatrix(false, true)
-    // Mixer samples feed this pose writer; IK alone owns the model bones.
-    // Full mocap previews continue to use the same retargeting path.
-    if (!animateLegs?.(player, elapsed)) legs.forEach(limb => retargetLimb(limb, facing))
+    if (player) {
+      const drop = Math.max(0, ...legs.map(limb => {
+        const root = limb.upper.node.getWorldPosition(new THREE.Vector3())
+        const target = limb.source.end.getWorldPosition(new THREE.Vector3())
+        const horizontal = (root.x - target.x) ** 2 + (root.z - target.z) ** 2
+        const length = limb.lengths[0] + limb.lengths[1] - 1e-6
+        return root.y - target.y - Math.sqrt(Math.max(0, length * length - horizontal))
+      }))
+      hips.node.position.y -= drop / hips.node.parent!.getWorldScale(new THREE.Vector3()).y
+      hips.node.updateWorldMatrix(false, true)
+      // Gameplay keeps its planted endpoints and mixer/IK ownership.
+      if (!animateLegs?.(player, elapsed)) legs.forEach(limb => retargetLimb(limb, facing))
+    } else {
+      // Captured poses retain joint angles across skins with different leg lengths.
+      for (const limb of legs) {
+        const root = limb.source.root.getWorldPosition(new THREE.Vector3())
+        const knee = limb.source.joint.getWorldPosition(new THREE.Vector3())
+        const foot = limb.source.end.getWorldPosition(new THREE.Vector3())
+        aim(limb.upper, knee.clone().sub(root), facing)
+        aim(limb.lower, foot.sub(knee), facing)
+        rotate(limb.end, limb.source.end.getWorldQuaternion(new THREE.Quaternion()).multiply(limb.end.rotation))
+      }
+      const lowest = Math.min(...legs.map(limb => rig.group.worldToLocal(limb.end.node.getWorldPosition(new THREE.Vector3())).y))
+      const support = Math.min(...legs.map(limb => rig.group.worldToLocal(limb.source.end.getWorldPosition(new THREE.Vector3())).y))
+      hips.node.position.y += (support - lowest) / hips.node.parent!.getWorldScale(new THREE.Vector3()).y
+      hips.node.updateWorldMatrix(false, true)
+    }
     // The torso follows the calibrated shoulder after hip turns and foot planting.
     // Matching rotations alone leaves the skin's wrist short of the real impact.
     const chestPosition = chest.node.getWorldPosition(new THREE.Vector3())
