@@ -10,7 +10,7 @@ export default defineConfig({
     apply: 'build',
     generateBundle(_, bundle) {
       const publicFiles = ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
-        'models/anime-player.glb']
+        'models/anime-player.glb', 'mocap/video-poses/clips.json']
       const files = ['index.html', ...Object.keys(bundle).filter(file => !file.endsWith('.map') && file !== 'index.html'), ...publicFiles]
       const hash = createHash('sha256')
       for (const file of files) {

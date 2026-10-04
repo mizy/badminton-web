@@ -16,6 +16,8 @@ export interface PlayerMeshOptions extends PlayerAppearanceOptions {
   modelUrl?: string
   /** Optional atlas for models that ship their skin separately. */
   modelTextureUrl?: string
+  /** Bone-only clips for this skin, loaded alongside the model. */
+  animationUrl?: string
 }
 
 interface PlayerView {
@@ -62,7 +64,7 @@ export function createPlayerMesh(colors?: PlayerMeshColors, label = 'P', options
   players.set(skeleton.group, view)
   const modelUrl = options.modelUrl
   if (modelUrl) {
-    void loadPlayerModel(modelUrl, options.modelTextureUrl, colors?.body).then(({ scene: model, animations }) => {
+    void loadPlayerModel(modelUrl, options.modelTextureUrl, colors?.body, options.animationUrl).then(({ scene: model, animations }) => {
       try {
         view.model = bindHumanoidModel(skeleton, model, animations)
         model.traverse(node => {
@@ -114,7 +116,7 @@ interface LoadedPlayerModel {
   scene: THREE.Group
 }
 
-async function loadPlayerModel(modelUrl: string, textureUrl?: string, bodyColor?: number): Promise<LoadedPlayerModel> {
+async function loadPlayerModel(modelUrl: string, textureUrl?: string, bodyColor?: number, animationUrl?: string): Promise<LoadedPlayerModel> {
   const isFbx = /\.fbx(?:$|[?#])/i.test(modelUrl)
   let loaded: LoadedPlayerModel
   if (isFbx) {
@@ -128,6 +130,14 @@ async function loadPlayerModel(modelUrl: string, textureUrl?: string, bodyColor?
   const body = loaded.scene.getObjectByName('SuperHero_Male')
   const hasKit = body instanceof THREE.Mesh && !Array.isArray(body.material) && body.material.name === 'Player_Kit'
   if (textureUrl || hasKit) await applyModelTexture(loaded.scene, textureUrl ?? modelUrl.replace(/\.glb(?:\?.*)?$/, '.png'), bodyColor)
+  if (animationUrl) {
+    try {
+      const response = await fetch(animationUrl)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const clips = await response.json() as Parameters<typeof THREE.AnimationClip.parse>[0][]
+      loaded.animations.push(...clips.map(clip => THREE.AnimationClip.parse(clip)))
+    } catch (error) { console.warn('视频动作加载失败，保留基础比赛动作', error) }
+  }
   return loaded
 }
 

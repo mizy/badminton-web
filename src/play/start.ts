@@ -322,8 +322,9 @@ function createPlayObjects(scene: THREE.Scene): PlayStartObjects {
   const modelOverride = modelParams.get('model')
   const modelUrl = modelOverride ?? `${import.meta.env.BASE_URL}models/anime-player.glb`
   const modelTextureUrl = modelParams.get('texture') ?? undefined
-  const homeMesh = createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '你', { glowScale: 0, labelScale: 0.5, modelUrl, modelTextureUrl })
-  const awayMesh = createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, 'AI', { glowScale: 0, labelScale: 0.45, modelUrl, modelTextureUrl })
+  const animationUrl = modelOverride ? undefined : `${import.meta.env.BASE_URL}mocap/video-poses/clips.json`
+  const homeMesh = createPlayerMesh({ body: 0x2f6fe0, head: 0xf3c9a4, racket: 0xf2f2f2, marker: 0x5ce1ff }, '你', { glowScale: 0, labelScale: 0.5, modelUrl, modelTextureUrl, animationUrl })
+  const awayMesh = createPlayerMesh({ body: 0xe0475f, head: 0xd9a97f, racket: 0xf2f2f2, marker: 0xffa14f }, 'AI', { glowScale: 0, labelScale: 0.45, modelUrl, modelTextureUrl, animationUrl })
   const homeGroundMarker = createGroundMarker(0x5ce1ff)
   const awayGroundMarker = createGroundMarker(0xffa14f)
   const marker = (color: number, inner: number, outer: number, opacity: number) => {

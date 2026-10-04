@@ -66,13 +66,28 @@ try {
       animations.push(new THREE.AnimationClip(motion.id, times.at(-1), tracks).optimize())
       proof.push({ id: motion.id, checkpoints })
     }
+    // Gameplay reuses the original skin. Export its bone tracks separately so it
+    // need not download a second copy of the avatar or bind a posed GLB as rest.
+    const gameClips = animations.map(clip => {
+      const copy = clip.clone()
+      copy.tracks = copy.tracks.filter(track => {
+        const node = nodes.find(node => track.name.startsWith(`${node.uuid}.`))
+        if (!node || !/^(Hips|Spine[12]?|Neck|Head|(?:Left|Right)(?:Shoulder|Arm|ForeArm|Hand|UpLeg|Leg|Foot|ToeBase))$/.test(node.name)) return false
+        const property = track.name.slice(node.uuid.length)
+        if (property !== '.quaternion' && !(node.name === 'Hips' && property === '.position')) return false
+        track.name = node.name + property
+        return true
+      })
+      return THREE.AnimationClip.toJSON(copy)
+    })
     const binary = await new GLTFExporter().parseAsync(model, { binary: true, animations, onlyVisible: true })
     const bytes = new Uint8Array(binary)
     let encoded = ''
     for (let i = 0; i < bytes.length; i += 8192) encoded += String.fromCharCode(...bytes.subarray(i, i + 8192))
-    return { model: manifest.model, glb: btoa(encoded), proof, clips: animations.map(clip => ({ name: clip.name, duration: clip.duration, tracks: clip.tracks.length })) }
+    return { model: manifest.model, glb: btoa(encoded), proof, gameClips, clips: animations.map(clip => ({ name: clip.name, duration: clip.duration, tracks: clip.tracks.length })) }
   })
   await writeFile(`public/${result.model}`, Buffer.from(result.glb, 'base64'))
+  await writeFile('public/mocap/video-poses/clips.json', JSON.stringify(result.gameClips))
   await writeFile(`${output}/export-proof.json`, JSON.stringify(result.proof))
   await writeFile(`${output}/export-clips.json`, JSON.stringify(result.clips, null, 2))
   console.log(result.clips)

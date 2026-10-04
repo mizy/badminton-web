@@ -41,6 +41,65 @@ async function animePlayer() {
 }
 
 describe('glTF player binding', () => {
+  it.each([0, 1] as const)('plays the exported video library in-game and preserves contact on side %s', async side => {
+    const rig = createPlayerSkeleton()
+    attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })
+    const motion = createPlayerMotion(rig)
+    const { scene: model } = await animePlayer()
+    const clips = JSON.parse(readFileSync(new URL('../../public/mocap/video-poses/clips.json', import.meta.url), 'utf8'))
+      .map((clip: Parameters<typeof THREE.AnimationClip.parse>[0]) => THREE.AnimationClip.parse(clip))
+    const updateModel = bindHumanoidModel(rig, model, clips)
+    const bones = findHumanoidBones(model)
+    const player = createPlayer(side)
+    const forward = side === 0 ? 1 : -1
+    let frame = 0
+    for (const point of ['front-right', 'front-left', 'back-right', 'back-left'] as const) {
+      player.movement.currentVel = { x: forward * (point.startsWith('front') ? 2 : -2), z: forward * (point.endsWith('right') ? 1 : -1) }
+      player.movement.footworkPoint = point
+      player.grip = point.endsWith('left') ? 'backhand' : 'forehand'
+      let lift = 0
+      for (let step = 0; step < 120; step++, frame++) {
+        player.pos[0] += player.movement.currentVel.x / 60
+        player.pos[2] += player.movement.currentVel.z / 60
+        player.movement.footwork = step < 10 ? 'start' : step < 90 ? point.startsWith('front') ? 'lunge' : 'cross' : 'recover'
+        updatePlayerMotion(motion, player, frame / 60)
+        updateModel(player, frame / 60)
+        const ankles = [world(bones.rightFoot!).y, world(bones.leftFoot!).y]
+        // Brief split steps can lift both feet; support must return and neither
+        // shoe may pass through the court while switching recordings.
+        expect(Math.min(...ankles)).toBeGreaterThanOrEqual(0.085)
+        expect(Math.min(...ankles)).toBeLessThan(0.18)
+        expect(world(bones.head!).y - Math.min(...ankles)).toBeGreaterThan(0.8)
+        lift = Math.max(lift, ...ankles.map(y => y - 0.09))
+        for (const bone of Object.values(bones)) expect(world(bone!).toArray().every(Number.isFinite)).toBe(true)
+      }
+      expect(lift).toBeGreaterThan(0.04)
+      const contact: [number, number, number] = [player.pos[0] + forward * 0.5, 1.4, player.pos[2] + forward * (point.endsWith('left') ? -0.4 : 0.4)]
+      player.contactPose = createReachableRacketPose({ desiredContact: contact, playerPos: player.pos, playerSide: side, racketFaceDeg: 0 })
+      player.swing = { ...player.swing, phase: 'recovery', shot: 'DRIVE', elapsed: 0.07 }
+      updatePlayerMotion(motion, player, frame / 60)
+      updateModel(player, frame / 60)
+      expect(world(model.getObjectByName('racket-string-center')!).distanceTo(new THREE.Vector3(...contact))).toBeLessThan(0.05)
+      player.swing.phase = 'ready'
+      player.contactPose = null
+      frame++
+    }
+    const fresh = createPlayer(side)
+    fresh.pos[1] = 0.6
+    fresh.body.phase = 'airborne'
+    fresh.body.action = 'jump'
+    fresh.body.elapsed = 0.1
+    updatePlayerMotion(motion, fresh, frame / 60)
+    updateModel(fresh, frame / 60)
+    expect(Math.min(world(bones.rightFoot!).y, world(bones.leftFoot!).y)).toBeGreaterThan(0.4)
+    fresh.pos[1] = 0
+    fresh.body.phase = 'grounded'
+    fresh.body.action = null
+    updatePlayerMotion(motion, fresh, 0)
+    updateModel(fresh, 0)
+    expect(Math.min(world(bones.rightFoot!).y, world(bones.leftFoot!).y)).toBeCloseTo(0.09, 4)
+  })
+
   it('keeps captured arm directions and neutral wrists without contact IK pulling the shoulders', async () => {
     const rig = createPlayerSkeleton()
     attachPlayerAppearance(rig, undefined, '', { labelScale: 0 })

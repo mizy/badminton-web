@@ -50,6 +50,12 @@ try {
     await page.goto(url, { waitUntil: 'networkidle0' })
     await page.setOfflineMode(true)
     await page.reload({ waitUntil: 'networkidle0' })
+    const offlineClips = await page.evaluate(async () => {
+      const response = await fetch(new URL('mocap/video-poses/clips.json', document.baseURI))
+      if (!response.ok) throw new Error(`Offline clips: ${response.status}`)
+      return (await response.json()).length
+    })
+    assert.equal(offlineClips, 8, 'All video clips must be cached for offline gameplay')
     await page.waitForSelector('[data-ui="start-training"]')
     await page.click('[data-ui="start-training"]')
     await page.waitForSelector('[data-task="1"]')
@@ -63,7 +69,7 @@ try {
     await page.waitForFunction(() => document.querySelector('[data-task="1"]').dataset.complete === 'true', { timeout: 7000 })
     await page.setOfflineMode(false)
     assert.deepEqual(errors, [])
-    results.push({ mobile, storybookUnderGameWorker: true, glbDownload: true, gameOfflineServe: true, errors })
+    results.push({ mobile, storybookUnderGameWorker: true, glbDownload: true, gameOfflineServe: true, offlineClips, errors })
     await page.close()
   }
   await writeFile('.workbuddy/motion-library/pwa-acceptance.json', JSON.stringify(results, null, 2))

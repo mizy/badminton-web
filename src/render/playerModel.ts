@@ -4,6 +4,7 @@ import type { PlayerState } from '../character/types'
 import { findHumanoidBones, normalizeHumanoidModel } from './humanoidModel'
 import { ANKLE_HEIGHT, type Limb, type PlayerSkeleton } from './playerSkeleton'
 import { RACKET_IN_RIGHT_HAND } from './skeletalRacket'
+import { createVideoAnimation } from './playerVideoMotion'
 
 interface Joint {
   node: THREE.Object3D
@@ -99,6 +100,7 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
     shoe.limb.end.node.add(shoe.object)
   }
   const animateLegs = createLegAnimation(rig, clips, legs)
+  const animateVideo = createVideoAnimation(rig.group, model, clips)
   return (player, elapsed, captureGrip) => {
     rig.group.updateWorldMatrix(true, true)
     const facing = rig.group.getWorldQuaternion(new THREE.Quaternion())
@@ -135,6 +137,7 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
       hips.node.position.y += (support - lowest) / hips.node.parent!.getWorldScale(new THREE.Vector3()).y
       hips.node.updateWorldMatrix(false, true)
     }
+    const video = player && elapsed !== undefined ? animateVideo?.(player, elapsed) : undefined
     if (!player) {
       // A position capture has no racket/contact constraint or measured wrist
       // twist. Preserve its arm angles and keep each hand neutral to its forearm.
@@ -147,7 +150,7 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
         rotate(limb.end, limb.lower.node.getWorldQuaternion(new THREE.Quaternion())
           .multiply(limb.lower.rotation.clone().invert()).multiply(limb.end.rotation))
       }
-    } else {
+    } else if (!video) {
       // The torso follows the calibrated shoulder after hip turns and foot planting.
       // Matching rotations alone leaves the skin's wrist short of the real impact.
       const chestPosition = chest.node.getWorldPosition(new THREE.Vector3())
@@ -184,14 +187,14 @@ export function bindHumanoidModel(rig: PlayerSkeleton, model: THREE.Group, clips
         .multiply(limb.source.end.getWorldQuaternion(new THREE.Quaternion()))
     }
     for (const finger of fingers) {
-      const angle = (player?.grip ?? captureGrip) === 'backhand' && finger.thumb ? finger.angle * 0.2 : finger.angle
+      const angle = (video ?? player?.grip ?? captureGrip) === 'backhand' && finger.thumb ? finger.angle * 0.2 : finger.angle
       finger.node.quaternion.copy(finger.rotation).multiply(new THREE.Quaternion().setFromAxisAngle(finger.axis, angle))
     }
     racket.position.copy(palm)
     // glTF bones may use centimetres; attached equipment stays in court metres.
     racket.scale.copy(rig.group.getWorldScale(new THREE.Vector3()))
       .divide(bones.rightHand!.getWorldScale(new THREE.Vector3()))
-    if (player) racket.quaternion.copy(hand.getWorldQuaternion(new THREE.Quaternion()).invert())
+    if (player && !video) racket.quaternion.copy(hand.getWorldQuaternion(new THREE.Quaternion()).invert())
       .multiply(rig.racket.getWorldQuaternion(new THREE.Quaternion()))
     else racket.quaternion.copy(rightArm.end.rotation).invert().multiply(gripRotation.clone().invert())
     model.updateWorldMatrix(false, true)
